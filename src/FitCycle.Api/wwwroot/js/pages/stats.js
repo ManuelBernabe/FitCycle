@@ -155,12 +155,20 @@ export async function mount() {
         detailDiv.style.cssText = 'margin-left:16px;margin-bottom:8px;font-size:14px;';
         detailDiv.innerHTML = exLogs.map(log => {
           const logName = log.exerciseName || log.ExerciseName || '';
-          const logSets = log.sets || log.Sets || 0;
-          const logReps = log.reps || log.Reps || 0;
-          const logWeight = log.weight || log.Weight || 0;
           const logMg = log.muscleGroupName || log.MuscleGroupName || '';
-          const weightStr = logWeight > 0 ? ` @ ${logWeight} ${t('WeightKg')}` : '';
-          return `<div>&bull; ${logName} -- ${logSets}x${logReps}${weightStr}${logMg ? ` (${logMg})` : ''}</div>`;
+          let setInfo = '';
+          const rawDetails = log.setDetails || log.SetDetails || '';
+          let details = null;
+          try { if (rawDetails) details = JSON.parse(rawDetails); } catch { /* */ }
+          if (Array.isArray(details) && details.length > 0) {
+            setInfo = details.map((s, i) => `S${i + 1}: ${s.reps}r/${s.weight > 0 ? s.weight + 'kg' : '-'}`).join(' | ');
+          } else {
+            const logSets = log.sets || log.Sets || 0;
+            const logReps = log.reps || log.Reps || 0;
+            const logWeight = log.weight || log.Weight || 0;
+            setInfo = `${logSets}x${logReps}${logWeight > 0 ? ` @ ${logWeight} ${t('WeightKg')}` : ''}`;
+          }
+          return `<div style="margin-bottom:4px;">&bull; <b>${logName}</b> — ${setInfo}${logMg ? ` <span style="font-size:11px;color:#512BD4;">(${logMg})</span>` : ''}</div>`;
         }).join('');
         item.after(detailDiv);
       });

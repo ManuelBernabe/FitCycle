@@ -59,16 +59,37 @@ function renderDays(container) {
       ? groups.map(g => muscleGroup(g.name || g.Name)).join(', ')
       : `<span class="text-muted">${t('NoGroupsAssigned')}</span>`;
 
-    // Compact exercise lines: name (SxR @Wkg) · MuscleGroup
+    // Compact exercise lines with per-set weight details
     const exerciseLines = exercises.map(e => {
       const name = e.exerciseName || e.ExerciseName || e.name || '';
       const sets = e.sets || e.Sets || 0;
       const reps = e.reps || e.Reps || 0;
       const weight = e.weight || e.Weight || 0;
       const mgName = e.muscleGroupName || e.MuscleGroupName || '';
-      const weightStr = weight > 0 ? ` @${weight}kg` : '';
       const mgTag = mgName ? `<span class="exercise-mg-tag">${muscleGroup(mgName)}</span>` : '';
-      return `<div class="exercise-line-compact">${name} <span class="exercise-meta">${sets}x${reps}${weightStr}</span>${mgTag}</div>`;
+
+      // Try to parse setDetails for per-set display
+      let setInfo = '';
+      const rawDetails = e.setDetails || e.SetDetails || '';
+      let details = null;
+      try { if (rawDetails) details = JSON.parse(rawDetails); } catch { /* */ }
+
+      if (Array.isArray(details) && details.length > 0) {
+        const hasVaryingWeight = new Set(details.map(s => s.weight)).size > 1;
+        if (hasVaryingWeight) {
+          // Show per-set weights compactly
+          setInfo = details.map(s => `${s.weight > 0 ? s.weight + 'kg' : '-'}`).join('/');
+          setInfo = `<span class="exercise-meta">${details.length}S ${details[0].reps}r [${setInfo}]</span>`;
+        } else {
+          const w = details[0].weight || weight;
+          setInfo = `<span class="exercise-meta">${details.length}x${details[0].reps}${w > 0 ? ' @' + w + 'kg' : ''}</span>`;
+        }
+      } else {
+        const weightStr = weight > 0 ? ` @${weight}kg` : '';
+        setInfo = `<span class="exercise-meta">${sets}x${reps}${weightStr}</span>`;
+      }
+
+      return `<div class="exercise-line-compact">${name} ${setInfo}${mgTag}</div>`;
     }).join('');
 
     html += `

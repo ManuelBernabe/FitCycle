@@ -1,4 +1,4 @@
-// FitCycle Workout Page — exercise-by-exercise workout with rest timer
+// FitCycle Workout Page — exercise-by-exercise, set-by-set workout with rest timer
 
 import { t, dayName, muscleGroup as mgTranslate } from '../l10n.js';
 import { api } from '../api.js';
@@ -6,6 +6,7 @@ import { api } from '../api.js';
 let dayNum = 0;
 let exercises = [];
 let currentIndex = 0;
+let currentSet = 0;
 let startedAt = null;
 let timerSeconds = 90;
 let timerRunning = false;
@@ -26,10 +27,26 @@ export async function mount(params) {
   dayNum = parseInt(params);
   startedAt = new Date();
   currentIndex = 0;
+  currentSet = 0;
 
   try {
     const dayData = await api.get(`/routines/${dayNum}`);
-    exercises = dayData?.exercises || dayData?.Exercises || [];
+    const rawExercises = dayData?.exercises || dayData?.Exercises || [];
+
+    exercises = rawExercises.map(ex => {
+      const sets = ex.sets || ex.Sets || 3;
+      const reps = ex.reps || ex.Reps || 12;
+      const weight = ex.weight || ex.Weight || 0;
+      let setDetails;
+      try {
+        const raw = ex.setDetails || ex.SetDetails || '';
+        setDetails = raw ? JSON.parse(raw) : null;
+      } catch { setDetails = null; }
+      if (!Array.isArray(setDetails) || setDetails.length === 0) {
+        setDetails = Array.from({ length: sets }, () => ({ reps, weight }));
+      }
+      return { ...ex, setDetails };
+    });
 
     if (exercises.length === 0) {
       document.getElementById('workout-content').innerHTML = `
@@ -61,6 +78,7 @@ export function destroy() {
   stopTimer();
   exercises = [];
   currentIndex = 0;
+  currentSet = 0;
 }
 
 function renderExercise() {
@@ -70,19 +88,21 @@ function renderExercise() {
   const ex = exercises[currentIndex];
   const exName = ex.exerciseName || ex.ExerciseName || ex.name || ex.Name || '';
   const exMuscle = ex.muscleGroupName || ex.MuscleGroupName || '';
-  const exSets = ex.sets || ex.Sets || 3;
-  const exReps = ex.reps || ex.Reps || 12;
-  const exWeight = ex.weight || ex.Weight || 0;
   const exImage = ex.imageUrl || ex.ImageUrl || '';
+  const totalSets = ex.setDetails.length;
+  const currentSetData = ex.setDetails[currentSet] || { reps: 12, weight: 0 };
   const progressPct = ((currentIndex + 1) / exercises.length * 100).toFixed(0);
-  const isLast = currentIndex === exercises.length - 1;
+  const isLastExercise = currentIndex === exercises.length - 1;
+  const isLastSet = currentSet >= totalSets - 1;
 
-  // Build minute options 0-10
+  const setDots = ex.setDetails.map((s, i) => {
+    const cls = i < currentSet ? 'done' : (i === currentSet ? 'current' : '');
+    return `<div class="set-dot ${cls}" title="S${i + 1}: ${s.reps}r / ${s.weight}kg"></div>`;
+  }).join('');
+
   const minOptions = Array.from({ length: 11 }, (_, i) =>
     `<option value="${i}" ${i === 1 ? 'selected' : ''}>${String(i).padStart(2, '0')}</option>`
   ).join('');
-
-  // Build second options 0-59 in steps of 5
   const secOptions = Array.from({ length: 12 }, (_, i) => {
     const val = i * 5;
     return `<option value="${val}" ${val === 30 ? 'selected' : ''}>${String(val).padStart(2, '0')}</option>`;
@@ -90,7 +110,6 @@ function renderExercise() {
 
   container.innerHTML = `
     <div class="page-content">
-      <!-- Progress header -->
       <div class="flex items-center justify-between mb-8">
         <button id="workout-back" class="btn btn-ghost">${t('Back')}</button>
         <div class="status-text">${dayName(dayNum)}</div>
@@ -102,95 +121,104 @@ function renderExercise() {
         <div class="fill" style="width:${progressPct}%"></div>
       </div>
 
-      <!-- Exercise card -->
       <div class="card workout-exercise" style="text-align:center;padding:16px;">
         <div class="workout-exercise-image" style="margin-bottom:10px;">
           ${exImage
-            ? `<img src="${exImage}" alt="${exName}" style="max-height:220px;max-width:100%;object-fit:contain;border-radius:8px;" onerror="this.style.display='none'">`
+            ? `<img src="${exImage}" alt="${exName}" style="max-height:180px;max-width:100%;object-fit:contain;border-radius:8px;" onerror="this.style.display='none'">`
             : `<div style="font-size:64px;opacity:0.3;">&#127947;</div>`
           }
         </div>
         <div class="workout-exercise-name" style="font-size:22px;font-weight:bold;">${exName}</div>
         <div style="font-size:15px;color:gray;margin-top:4px;">${mgTranslate(exMuscle)}</div>
-        <div style="font-size:18px;margin-top:8px;">${t('SetsRepsFormat', exSets, exReps)}${exWeight > 0 ? ` @ ${exWeight} ${t('WeightKg')}` : ''}</div>
 
-        <!-- Rest timer section -->
+        <div class="set-indicator" style="margin:12px 0;">${setDots}</div>
+
+        <div style="background:#f5f5f5;border-radius:12px;padding:12px 16px;margin:8px auto;max-width:300px;">
+          <div style="font-size:13px;color:#512BD4;font-weight:700;margin-bottom:6px;">
+            ${t('SetN', currentSet + 1, totalSets)}
+          </div>
+          <div style="display:flex;align-items:center;justify-content:center;gap:12px;">
+            <div>
+              <div style="font-size:11px;color:gray;">${t('Reps')}</div>
+              <input type="number" id="workout-reps" value="${currentSetData.reps}" min="1" max="100"
+                style="width:60px;font-size:20px;font-weight:bold;text-align:center;border:1px solid #ddd;border-radius:8px;padding:6px;">
+            </div>
+            <div style="font-size:24px;font-weight:bold;color:#ccc;">x</div>
+            <div>
+              <div style="font-size:11px;color:gray;">kg</div>
+              <input type="number" id="workout-weight" value="${currentSetData.weight > 0 ? currentSetData.weight : ''}" placeholder="0" step="0.5" min="0"
+                style="width:70px;font-size:20px;font-weight:bold;text-align:center;border:1px solid #ddd;border-radius:8px;padding:6px;">
+            </div>
+          </div>
+        </div>
+
         <div style="border-top:1px solid #eee;margin-top:16px;padding-top:12px;">
-          <div style="font-size:12px;color:#512BD4;font-weight:bold;letter-spacing:2px;text-align:center;">
-            ${t('Rest')}
+          <div style="font-size:12px;color:#512BD4;font-weight:bold;letter-spacing:2px;">${t('Rest')}</div>
+          <div style="background:#f5f5f5;border-radius:16px;padding:8px 16px;display:inline-block;margin:6px 0;">
+            <div id="timer-display" style="font-size:40px;font-weight:bold;color:#333;">01:30</div>
           </div>
-
-          <!-- Timer display -->
-          <div style="background:#f5f5f5;border-radius:16px;padding:12px 20px;display:inline-block;margin:8px 0;">
-            <div id="timer-display" style="font-size:48px;font-weight:bold;color:#333;">01:30</div>
-          </div>
-
-          <!-- Minute/Second pickers -->
-          <div id="timer-picker-row" class="flex items-center justify-center gap-8" style="margin:8px 0;">
+          <div id="timer-picker-row" class="flex items-center justify-center gap-8" style="margin:6px 0;">
             <span style="font-size:13px;color:gray;">${t('Min')}</span>
-            <select id="timer-min" class="picker-select" style="width:70px;font-size:14px;">${minOptions}</select>
+            <select id="timer-min" class="picker-select" style="width:65px;font-size:14px;">${minOptions}</select>
             <span style="font-size:13px;color:gray;">${t('Sec')}</span>
-            <select id="timer-sec" class="picker-select" style="width:70px;font-size:14px;">${secOptions}</select>
+            <select id="timer-sec" class="picker-select" style="width:65px;font-size:14px;">${secOptions}</select>
           </div>
-
-          <!-- Timer buttons -->
-          <div class="flex items-center justify-center gap-10" style="margin-top:8px;">
-            <button id="timer-start" class="btn btn-sm" style="background:#512BD4;color:#fff;padding:8px 20px;border-radius:8px;">
-              ${t('Start')}
-            </button>
-            <button id="timer-reset" class="btn btn-sm" style="background:#6c757d;color:#fff;padding:8px 20px;border-radius:8px;">
-              ${t('Reset')}
-            </button>
+          <div class="flex items-center justify-center gap-10" style="margin-top:6px;">
+            <button id="timer-start" class="btn btn-sm" style="background:#512BD4;color:#fff;padding:6px 16px;border-radius:8px;">${t('Start')}</button>
+            <button id="timer-reset" class="btn btn-sm" style="background:#6c757d;color:#fff;padding:6px 16px;border-radius:8px;">${t('Reset')}</button>
           </div>
         </div>
       </div>
 
-      <!-- Navigation buttons -->
-      <div class="workout-nav" style="display:grid;grid-template-columns:1fr 1fr ${isLast ? '1fr' : '1fr'};gap:10px;margin-top:12px;">
-        <button id="workout-prev" class="btn btn-outline" ${currentIndex === 0 ? 'disabled' : ''}>${t('Previous')}</button>
-        ${isLast
-          ? `<button id="workout-finish" class="btn btn-success" style="grid-column:span 2;">${t('Finish')}</button>`
-          : `<button id="workout-next" class="btn btn-primary" style="grid-column:span 2;">${t('Next')}</button>`
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;">
+        <button id="workout-prev" class="btn btn-outline" ${currentIndex === 0 && currentSet === 0 ? 'disabled' : ''}>
+          ${currentSet > 0 ? t('PrevSet') : t('Previous')}
+        </button>
+        ${isLastExercise && isLastSet
+          ? `<button id="workout-finish" class="btn btn-success">${t('Finish')}</button>`
+          : `<button id="workout-next" class="btn btn-primary">${isLastSet ? t('Next') : t('NextSet')}</button>`
         }
       </div>
     </div>
   `;
 
-  // Bind navigation
-  document.getElementById('workout-back')?.addEventListener('click', () => {
-    stopTimer();
-    location.hash = '#routines';
-  });
+  document.getElementById('workout-back')?.addEventListener('click', () => { stopTimer(); location.hash = '#routines'; });
 
   document.getElementById('workout-prev')?.addEventListener('click', () => {
-    if (currentIndex > 0) {
-      stopTimer();
-      currentIndex--;
-      renderExercise();
-    }
+    saveCurrentSetValues();
+    stopTimer();
+    if (currentSet > 0) { currentSet--; }
+    else if (currentIndex > 0) { currentIndex--; currentSet = exercises[currentIndex].setDetails.length - 1; }
+    renderExercise();
   });
 
   document.getElementById('workout-next')?.addEventListener('click', () => {
-    if (currentIndex < exercises.length - 1) {
-      stopTimer();
-      currentIndex++;
-      renderExercise();
-    }
+    saveCurrentSetValues();
+    stopTimer();
+    const ex2 = exercises[currentIndex];
+    if (currentSet < ex2.setDetails.length - 1) { currentSet++; }
+    else if (currentIndex < exercises.length - 1) { currentIndex++; currentSet = 0; }
+    renderExercise();
   });
 
-  document.getElementById('workout-finish')?.addEventListener('click', finishWorkout);
+  document.getElementById('workout-finish')?.addEventListener('click', () => { saveCurrentSetValues(); finishWorkout(); });
 
-  // Bind timer controls
   document.getElementById('timer-start')?.addEventListener('click', onTimerStartClicked);
   document.getElementById('timer-reset')?.addEventListener('click', onTimerResetClicked);
-
-  // Picker change updates display when not running
   document.getElementById('timer-min')?.addEventListener('change', onTimePickerChanged);
   document.getElementById('timer-sec')?.addEventListener('change', onTimePickerChanged);
 
-  // Initialize timer display
   stopTimer();
   resetTimerDisplay();
+}
+
+function saveCurrentSetValues() {
+  const ex = exercises[currentIndex];
+  if (!ex) return;
+  const repsEl = document.getElementById('workout-reps');
+  const weightEl = document.getElementById('workout-weight');
+  if (repsEl) ex.setDetails[currentSet].reps = parseInt(repsEl.value) || 12;
+  if (weightEl) ex.setDetails[currentSet].weight = parseFloat(weightEl.value) || 0;
 }
 
 // ── Timer ──
@@ -198,16 +226,11 @@ function renderExercise() {
 function getPickerTotalSeconds() {
   const minEl = document.getElementById('timer-min');
   const secEl = document.getElementById('timer-sec');
-  const mins = minEl ? parseInt(minEl.value) || 0 : 1;
-  const secs = secEl ? parseInt(secEl.value) || 0 : 30;
-  return mins * 60 + secs;
+  return (minEl ? parseInt(minEl.value) || 0 : 1) * 60 + (secEl ? parseInt(secEl.value) || 0 : 30);
 }
 
 function onTimePickerChanged() {
-  if (!timerRunning) {
-    timerSeconds = getPickerTotalSeconds();
-    updateTimerDisplay();
-  }
+  if (!timerRunning) { timerSeconds = getPickerTotalSeconds(); updateTimerDisplay(); }
 }
 
 function onTimerStartClicked() {
@@ -215,61 +238,37 @@ function onTimerStartClicked() {
   const pickerRow = document.getElementById('timer-picker-row');
 
   if (timerRunning) {
-    // Pause
     stopTimer();
-    if (startBtn) {
-      startBtn.textContent = t('Start');
-      startBtn.style.background = '#512BD4';
-    }
+    if (startBtn) { startBtn.textContent = t('Start'); startBtn.style.background = '#512BD4'; }
     if (pickerRow) pickerRow.style.display = '';
     return;
   }
 
   timerSeconds = getPickerTotalSeconds();
   if (timerSeconds <= 0) return;
-
   timerRunning = true;
-  if (startBtn) {
-    startBtn.textContent = t('Pause');
-    startBtn.style.background = '#e67e22';
-  }
+  if (startBtn) { startBtn.textContent = t('Pause'); startBtn.style.background = '#e67e22'; }
   if (pickerRow) pickerRow.style.display = 'none';
 
   timerInterval = setInterval(() => {
     timerSeconds--;
     updateTimerDisplay();
-
     if (timerSeconds <= 0) {
       stopTimer();
-      if (startBtn) {
-        startBtn.textContent = t('Start');
-        startBtn.style.background = '#512BD4';
-      }
+      if (startBtn) { startBtn.textContent = t('Start'); startBtn.style.background = '#512BD4'; }
       if (pickerRow) pickerRow.style.display = '';
-
-      // Change color to green to indicate completion
       const display = document.getElementById('timer-display');
       if (display) display.style.color = '#28a745';
-
-      // Try vibration/sound
-      try {
-        if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-      } catch (e) { /* ignore */ }
+      try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch { /* */ }
     }
   }, 1000);
 }
 
-function onTimerResetClicked() {
-  stopTimer();
-  resetTimerDisplay();
-}
+function onTimerResetClicked() { stopTimer(); resetTimerDisplay(); }
 
 function stopTimer() {
   timerRunning = false;
-  if (timerInterval) {
-    clearInterval(timerInterval);
-    timerInterval = null;
-  }
+  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
 }
 
 function resetTimerDisplay() {
@@ -277,11 +276,7 @@ function resetTimerDisplay() {
   const startBtn = document.getElementById('timer-start');
   const pickerRow = document.getElementById('timer-picker-row');
   const display = document.getElementById('timer-display');
-
-  if (startBtn) {
-    startBtn.textContent = t('Start');
-    startBtn.style.background = '#512BD4';
-  }
+  if (startBtn) { startBtn.textContent = t('Start'); startBtn.style.background = '#512BD4'; }
   if (pickerRow) pickerRow.style.display = '';
   if (display) display.style.color = '#333';
   updateTimerDisplay();
@@ -295,7 +290,7 @@ function updateTimerDisplay() {
   display.textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
 }
 
-// ── Finish Workout ──
+// ── Finish ──
 
 async function finishWorkout() {
   stopTimer();
@@ -304,10 +299,11 @@ async function finishWorkout() {
   const exerciseLogs = exercises.map(ex => ({
     exerciseId: ex.exerciseId || ex.ExerciseId || ex.id || ex.Id,
     exerciseName: ex.exerciseName || ex.ExerciseName || ex.name || ex.Name || '',
-    sets: ex.sets || ex.Sets || 3,
-    reps: ex.reps || ex.Reps || 12,
-    weight: ex.weight || ex.Weight || 0,
+    sets: ex.setDetails.length,
+    reps: ex.setDetails.length > 0 ? ex.setDetails[0].reps : 12,
+    weight: Math.max(...ex.setDetails.map(s => s.weight), 0),
     muscleGroupName: ex.muscleGroupName || ex.MuscleGroupName || '',
+    setDetails: JSON.stringify(ex.setDetails),
   }));
 
   try {
@@ -317,11 +313,8 @@ async function finishWorkout() {
       completedAt: completedAt.toISOString(),
       exercises: exerciseLogs,
     });
-  } catch (e) {
-    /* Don't block finish if save fails */
-  }
+  } catch { /* Don't block finish */ }
 
-  // Store summary data for the summary page
   sessionStorage.setItem('workout_summary', JSON.stringify({
     day: dayNum,
     startedAt: startedAt.toISOString(),

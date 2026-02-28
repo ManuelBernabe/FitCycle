@@ -11,5 +11,6 @@ public class DayExerciseEntity
     public int Sets { get; set; }
     public int Reps { get; set; }
     public decimal Weight { get; set; }
+    public string SetDetails { get; set; } = string.Empty;
     public Exercise? Exercise { get; set; }
 }

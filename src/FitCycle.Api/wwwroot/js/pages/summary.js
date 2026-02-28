@@ -60,13 +60,21 @@ export function render() {
         <div class="card">
           <div class="card-title mb-8">${t('ExercisesDone')}</div>
           ${data.exercises.map(ex => {
-            const weightStr = (ex.weight || 0) > 0 ? ` @ ${ex.weight} ${t('WeightKg')}` : '';
+            let setInfo = '';
+            let details = null;
+            try { if (ex.setDetails) details = typeof ex.setDetails === 'string' ? JSON.parse(ex.setDetails) : ex.setDetails; } catch { /* */ }
+            if (Array.isArray(details) && details.length > 0) {
+              setInfo = details.map((s, i) => `S${i + 1}: ${s.reps}r x ${s.weight > 0 ? s.weight + 'kg' : '-'}`).join(' | ');
+            } else {
+              const weightStr = (ex.weight || 0) > 0 ? ` @ ${ex.weight} ${t('WeightKg')}` : '';
+              setInfo = `${t('SetsRepsFormat', ex.sets, ex.reps)}${weightStr}`;
+            }
             return `
             <div class="exercise-row">
               <div class="exercise-img">&#127947;</div>
               <div class="exercise-info">
-                <div class="exercise-name">${ex.exerciseName}</div>
-                <div class="exercise-detail">${t('SetsRepsFormat', ex.sets, ex.reps)}${weightStr}${ex.muscleGroupName ? ` (${ex.muscleGroupName})` : ''}</div>
+                <div class="exercise-name">${ex.exerciseName}${ex.muscleGroupName ? ` <span style="font-size:11px;color:#512BD4;">(${ex.muscleGroupName})</span>` : ''}</div>
+                <div class="exercise-detail">${setInfo}</div>
               </div>
             </div>
           `;

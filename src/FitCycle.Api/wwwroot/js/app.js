@@ -140,3 +140,74 @@ window.addEventListener('app-rerender', navigate);
 
 // Initial render
 navigate();
+
+// ─── Auto-update detection ──────────────────────────────────────────
+let updatePending = false;
+
+function showUpdatePopup() {
+  if (document.getElementById('update-overlay')) return;
+  updatePending = true;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'update-overlay';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:999;display:flex;align-items:center;justify-content:center;animation:fadeIn 0.2s ease;';
+
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:16px;padding:24px;max-width:320px;width:90%;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,0.2);">
+      <div style="font-size:36px;margin-bottom:8px;">&#128640;</div>
+      <div style="font-size:18px;font-weight:700;margin-bottom:8px;">${t('AppUpdated')}</div>
+      <div style="font-size:14px;color:#666;margin-bottom:16px;">${t('AppUpdatedMsg')}</div>
+      <div style="display:flex;gap:10px;">
+        <button id="update-later" style="flex:1;padding:10px;border:1px solid #ddd;border-radius:8px;background:#fff;color:#333;font-size:14px;cursor:pointer;">${t('Later')}</button>
+        <button id="update-now" style="flex:1;padding:10px;border:none;border-radius:8px;background:#512BD4;color:#fff;font-size:14px;font-weight:600;cursor:pointer;">${t('UpdateNow')}</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  document.getElementById('update-now')?.addEventListener('click', () => {
+    window.location.reload();
+  });
+
+  document.getElementById('update-later')?.addEventListener('click', () => {
+    overlay.remove();
+    // Will reload when user finishes current action (on next navigation)
+  });
+}
+
+// Listen for new service worker activation
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    showUpdatePopup();
+  });
+
+  // Also check on registration for waiting worker
+  navigator.serviceWorker.getRegistration().then(reg => {
+    if (!reg) return;
+
+    // If there's already a waiting worker
+    if (reg.waiting) {
+      showUpdatePopup();
+      return;
+    }
+
+    // Listen for new installing worker
+    reg.addEventListener('updatefound', () => {
+      const newWorker = reg.installing;
+      if (!newWorker) return;
+      newWorker.addEventListener('statechange', () => {
+        if (newWorker.state === 'activated') {
+          showUpdatePopup();
+        }
+      });
+    });
+  });
+}
+
+// Auto-reload on navigation if update is pending
+window.addEventListener('hashchange', () => {
+  if (updatePending && !document.getElementById('update-overlay')) {
+    window.location.reload();
+  }
+});

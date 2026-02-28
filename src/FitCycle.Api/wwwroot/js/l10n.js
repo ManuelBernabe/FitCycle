@@ -93,6 +93,11 @@ const Strings = {
   SetsRepsFormat:    { es: '{0} series x {1} repeticiones',             en: '{0} sets x {1} reps',                    fr: '{0} séries x {1} répétitions' },
   NoExercisesDay:    { es: 'No hay ejercicios configurados para este día.', en: 'No exercises configured for this day.', fr: 'Aucun exercice configuré pour ce jour.' },
   NoImage:           { es: 'Sin imagen',                                en: 'No image',                               fr: "Pas d'image" },
+  SetN:              { es: 'Serie {0} de {1}',                          en: 'Set {0} of {1}',                          fr: 'Série {0} sur {1}' },
+  AddSet:            { es: 'Añadir serie',                              en: 'Add set',                                 fr: 'Ajouter série' },
+  PrevSet:           { es: 'Serie ant.',                                en: 'Prev set',                                fr: 'Série préc.' },
+  NextSet:           { es: 'Sig. serie',                                en: 'Next set',                                fr: 'Série suiv.' },
+  NextExercise:      { es: 'Sig. ejercicio',                            en: 'Next exercise',                           fr: 'Exercice suiv.' },
 
   // === Summary ===
   Summary:           { es: 'Resumen',                                   en: 'Summary',                                fr: 'Résumé' },
@@ -147,6 +152,12 @@ const Strings = {
   PasswordKey:         { es: 'Clave',                                     en: 'Key',                                     fr: 'Clé' },
   DeleteUserBtn:       { es: 'Eliminar',                                  en: 'Delete',                                  fr: 'Supprimer' },
   BackToRoutinesBtn:   { es: '← Volver a Rutinas',                       en: '← Back to Routines',                     fr: '← Retour aux routines' },
+
+  // === Auto-update ===
+  AppUpdated:    { es: 'Aplicación actualizada',                                  en: 'App Updated',                                            fr: 'Application mise à jour' },
+  AppUpdatedMsg: { es: 'Hay una nueva versión disponible. ¿Reiniciar ahora?',     en: 'A new version is available. Restart now?',                fr: 'Une nouvelle version est disponible. Redémarrer maintenant ?' },
+  UpdateNow:     { es: 'Reiniciar',                                               en: 'Restart',                                                fr: 'Redémarrer' },
+  Later:         { es: 'Más tarde',                                               en: 'Later',                                                  fr: 'Plus tard' },
 
   // === Language ===
   Language:       { es: 'Idioma',              en: 'Language',          fr: 'Langue' },

@@ -328,7 +328,8 @@ app.MapPost("/workouts", (SaveWorkoutRequest request, FitCycleDbContext db, Clai
             Sets = e.Sets,
             Reps = e.Reps,
             Weight = e.Weight,
-            MuscleGroupName = e.MuscleGroupName
+            MuscleGroupName = e.MuscleGroupName,
+            SetDetails = e.SetDetails ?? string.Empty
         }).ToList()
     };
 
@@ -456,5 +457,5 @@ app.Run();
 record CreateExerciseRequest(string Name, int MuscleGroupId);
 record ExerciseInput(int ExerciseId, int Sets, int Reps);
 record UpdateDayRoutineRequest(List<int> MuscleGroupIds, List<RoutineExerciseInput>? Exercises);
-record SaveWorkoutExerciseInput(int ExerciseId, string ExerciseName, int Sets, int Reps, decimal Weight, string MuscleGroupName);
+record SaveWorkoutExerciseInput(int ExerciseId, string ExerciseName, int Sets, int Reps, decimal Weight, string MuscleGroupName, string SetDetails = "");
 record SaveWorkoutRequest(DayOfWeek Day, DateTime StartedAt, DateTime CompletedAt, List<SaveWorkoutExerciseInput> Exercises);

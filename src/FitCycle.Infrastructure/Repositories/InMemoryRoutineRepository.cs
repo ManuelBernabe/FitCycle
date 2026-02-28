@@ -145,6 +145,8 @@ public class InMemoryRoutineRepository : IRoutineRepository
                     ExerciseName = ex.Name,
                     Sets = e.Sets,
                     Reps = e.Reps,
+                    Weight = e.Weight,
+                    SetDetails = e.SetDetails ?? string.Empty,
                     ImageUrl = ex.ImageUrl,
                     MuscleGroupName = mg?.Name ?? string.Empty
                 };

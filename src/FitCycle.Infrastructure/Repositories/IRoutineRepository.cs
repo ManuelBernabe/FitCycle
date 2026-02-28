@@ -12,4 +12,4 @@ public interface IRoutineRepository
     DayRoutine SetDayRoutine(DayOfWeek day, List<int> muscleGroupIds, List<RoutineExerciseInput> exercises, int userId);
 }
 
-public record RoutineExerciseInput(int ExerciseId, int Sets, int Reps, decimal Weight);
+public record RoutineExerciseInput(int ExerciseId, int Sets, int Reps, decimal Weight, string SetDetails = "");
