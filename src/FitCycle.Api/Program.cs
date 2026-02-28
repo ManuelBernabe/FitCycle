@@ -270,7 +270,7 @@ app.MapPost("/exercises", (CreateExerciseRequest request, IRoutineRepository rep
 })
 .WithName("CreateExercise")
 .WithOpenApi()
-.RequireAuthorization("AdminOrAbove");
+.RequireAuthorization();
 
 // -- Rutina semanal --
 app.MapGet("/routines", (IRoutineRepository repo, ClaimsPrincipal user) =>
@@ -309,7 +309,7 @@ app.MapPut("/routines/{day}", (DayOfWeek day, UpdateDayRoutineRequest request, I
 })
 .WithName("UpdateDayRoutine")
 .WithOpenApi()
-.RequireAuthorization("AdminOrAbove");
+.RequireAuthorization();
 
 // -- Historial de entrenamientos --
 app.MapPost("/workouts", (SaveWorkoutRequest request, FitCycleDbContext db, ClaimsPrincipal user) =>

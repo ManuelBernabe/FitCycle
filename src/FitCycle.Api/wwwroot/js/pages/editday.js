@@ -133,6 +133,10 @@ function buildUI() {
     `;
   });
 
+  html += `
+    <button id="editday-save" class="btn btn-primary btn-block btn-lg mt-16">${t('Save')}</button>
+  `;
+
   container.innerHTML = html;
   attachEvents(container);
 }
@@ -250,6 +254,9 @@ function attachEvents(container) {
       onAddExercise(groups[gi]);
     });
   });
+
+  // Global save button
+  document.getElementById('editday-save')?.addEventListener('click', () => doSave());
 }
 
 // ── Save Routine ──
