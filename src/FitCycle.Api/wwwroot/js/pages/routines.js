@@ -59,24 +59,26 @@ function renderDays(container) {
       ? groups.map(g => muscleGroup(g.name || g.Name)).join(', ')
       : `<span class="text-muted">${t('NoGroupsAssigned')}</span>`;
 
-    // Exercise detail lines matching MAUI format: bullet + name (SetsxReps)
+    // Compact exercise lines: name (SxR @Wkg) · MuscleGroup
     const exerciseLines = exercises.map(e => {
       const name = e.exerciseName || e.ExerciseName || e.name || '';
       const sets = e.sets || e.Sets || 0;
       const reps = e.reps || e.Reps || 0;
       const weight = e.weight || e.Weight || 0;
-      const weightStr = weight > 0 ? ` @ ${weight}${t('WeightKg')}` : '';
-      return `<div class="exercise-line">&bull; ${name} (${sets}x${reps}${weightStr})</div>`;
+      const mgName = e.muscleGroupName || e.MuscleGroupName || '';
+      const weightStr = weight > 0 ? ` @${weight}kg` : '';
+      const mgTag = mgName ? `<span class="exercise-mg-tag">${muscleGroup(mgName)}</span>` : '';
+      return `<div class="exercise-line-compact">${name} <span class="exercise-meta">${sets}x${reps}${weightStr}</span>${mgTag}</div>`;
     }).join('');
 
     html += `
-      <div class="day-card" data-day="${dayNum}">
-        <div class="day-card-info">
+      <div class="day-card day-card-vertical" data-day="${dayNum}">
+        <div class="day-card-header">
           <div class="day-card-name">${dayName(dayNum)}</div>
           <div class="day-card-groups">${groupNames}</div>
-          ${hasExercises ? `<div class="day-card-exercises">${exerciseLines}</div>` : ''}
         </div>
-        <div class="day-card-actions">
+        ${hasExercises ? `<div class="day-card-exercises-compact">${exerciseLines}</div>` : ''}
+        <div class="day-card-actions-bottom">
           ${!hasRoutine ? `
             <button class="btn btn-sm btn-outline" data-action="edit" data-day="${dayNum}">${t('Create')}</button>
           ` : `
