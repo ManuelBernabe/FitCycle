@@ -1,0 +1,36 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## NuGet
+*.nupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+
+## Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+
+## VS / Rider
+.vs/
+.idea/
+*.rsuser
+*.DotSettings.user
+
+## MAUI
+*.ipa
+*.apk
+*.aab
+
+## OS
+.DS_Store
+Thumbs.db
+
+## Claude Code
+.claude/

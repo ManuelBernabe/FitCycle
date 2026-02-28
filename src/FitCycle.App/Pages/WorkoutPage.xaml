@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="FitCycle.App.Pages.WorkoutPage"
+             Title="Entrenamiento">
+
+    <Grid RowDefinitions="Auto,*,Auto" Padding="16">
+
+        <!-- Progress header -->
+        <VerticalStackLayout Grid.Row="0" Spacing="6" Margin="0,0,0,8">
+            <Label x:Name="DayTitle" Style="{StaticResource SubHeadline}" />
+            <Label x:Name="ProgressLabel" HorizontalOptions="Center" FontSize="15" TextColor="Gray" />
+            <ProgressBar x:Name="ProgressBar" />
+        </VerticalStackLayout>
+
+        <!-- Scrollable exercise card -->
+        <ScrollView Grid.Row="1">
+            <Frame x:Name="CardFrame" Padding="16" CornerRadius="12">
+                <VerticalStackLayout Spacing="10" x:Name="CardContent">
+                    <Image x:Name="ExerciseImage"
+                           HeightRequest="220"
+                           WidthRequest="400"
+                           Aspect="AspectFit"
+                           HorizontalOptions="Center" />
+                    <Label x:Name="ImageDebugLabel"
+                           TextColor="Red"
+                           FontSize="11"
+                           HorizontalTextAlignment="Center" />
+                    <Label x:Name="ExerciseName"
+                           FontSize="22"
+                           FontAttributes="Bold"
+                           HorizontalTextAlignment="Center" />
+                    <Label x:Name="MuscleGroupLabel"
+                           FontSize="15"
+                           TextColor="Gray"
+                           HorizontalTextAlignment="Center" />
+                    <Label x:Name="SetsRepsLabel"
+                           FontSize="18"
+                           HorizontalTextAlignment="Center" />
+
+                    <!-- Rest timer -->
+                    <BoxView HeightRequest="1" Color="LightGray" Margin="0,4" />
+                    <Label Text="Descanso" FontSize="14" TextColor="Gray" HorizontalTextAlignment="Center" />
+                    <Label x:Name="TimerLabel"
+                           Text="00:30"
+                           FontSize="36"
+                           FontAttributes="Bold"
+                           HorizontalTextAlignment="Center" />
+                    <Slider x:Name="TimerSlider"
+                            Minimum="0"
+                            Maximum="60"
+                            Value="30"
+                            ValueChanged="OnTimerSliderChanged" />
+                    <Label x:Name="TimerSliderLabel"
+                           Text="30 seg"
+                           FontSize="13"
+                           TextColor="Gray"
+                           HorizontalTextAlignment="Center" />
+                    <HorizontalStackLayout HorizontalOptions="Center" Spacing="10">
+                        <Button x:Name="TimerStartBtn"
+                                Text="Iniciar"
+                                FontSize="13"
+                                Padding="16,6"
+                                Clicked="OnTimerStartClicked" />
+                        <Button x:Name="TimerResetBtn"
+                                Text="Reiniciar"
+                                FontSize="13"
+                                Padding="16,6"
+                                Clicked="OnTimerResetClicked" />
+                    </HorizontalStackLayout>
+                </VerticalStackLayout>
+            </Frame>
+        </ScrollView>
+
+        <!-- Status label (loading/error) -->
+        <Label x:Name="StatusLbl" Grid.Row="1"
+               TextColor="Gray"
+               HorizontalOptions="Center"
+               VerticalOptions="Center" />
+
+        <!-- Navigation buttons -->
+        <Grid Grid.Row="2" ColumnDefinitions="*,*,*" ColumnSpacing="10" Margin="0,8,0,0">
+            <Button x:Name="PrevBtn"
+                    Grid.Column="0"
+                    Text="Anterior"
+                    Clicked="OnPreviousClicked" />
+            <Button x:Name="FinishBtn"
+                    Grid.Column="1"
+                    Text="Finalizar"
+                    BackgroundColor="#28a745"
+                    TextColor="White"
+                    IsVisible="False"
+                    Clicked="OnFinishClicked" />
+            <Button x:Name="NextBtn"
+                    Grid.Column="2"
+                    Text="Siguiente"
+                    Clicked="OnNextClicked" />
+        </Grid>
+
+    </Grid>
+
+</ContentPage>

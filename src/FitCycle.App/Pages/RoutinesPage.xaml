@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="FitCycle.App.Pages.RoutinesPage"
+             Title="Rutinas">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="16" Spacing="12">
+            <Label Text="Mi Rutina Semanal" Style="{StaticResource Headline}" />
+            <Label Text="Configura y entrena tu rutina semanal" TextColor="Gray" FontSize="14" />
+            <CollectionView x:Name="DaysList" SelectionMode="None">
+                <CollectionView.ItemTemplate>
+                    <DataTemplate>
+                        <Frame Margin="0,4" Padding="12">
+                            <VerticalStackLayout Spacing="4">
+                                <Label Text="{Binding DayName}" FontAttributes="Bold" FontSize="18" />
+                                <Label Text="{Binding MuscleGroupNames}" TextColor="Gray" FontSize="13" />
+                                <Label Text="{Binding ExerciseDetails}" FontSize="14"
+                                       IsVisible="{Binding HasExercises}" />
+                                <HorizontalStackLayout Spacing="8" Margin="0,6,0,0">
+                                    <Button Text="Editar"
+                                            FontSize="13"
+                                            Padding="12,6"
+                                            Clicked="OnEditClicked"
+                                            CommandParameter="{Binding DayValue}" />
+                                    <Button Text="Empezar"
+                                            FontSize="13"
+                                            Padding="12,6"
+                                            BackgroundColor="#28a745"
+                                            TextColor="White"
+                                            Clicked="OnStartClicked"
+                                            CommandParameter="{Binding DayValue}"
+                                            IsVisible="{Binding HasExercises}" />
+                                </HorizontalStackLayout>
+                            </VerticalStackLayout>
+                        </Frame>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+            <Label x:Name="StatusLbl" TextColor="Gray" />
+        </VerticalStackLayout>
+    </ScrollView>
+
+</ContentPage>
