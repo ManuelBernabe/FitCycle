@@ -41,7 +41,7 @@ public class FitCycleDbContext : DbContext
         modelBuilder.Entity<DayMuscleGroupEntity>(e =>
         {
             e.HasKey(d => d.Id);
-            e.HasIndex(d => new { d.Day, d.MuscleGroupId }).IsUnique();
+            e.HasIndex(d => new { d.UserId, d.Day, d.MuscleGroupId }).IsUnique();
             e.HasOne(d => d.MuscleGroup).WithMany().HasForeignKey(d => d.MuscleGroupId);
         });
 
@@ -49,7 +49,7 @@ public class FitCycleDbContext : DbContext
         modelBuilder.Entity<DayExerciseEntity>(e =>
         {
             e.HasKey(d => d.Id);
-            e.HasIndex(d => new { d.Day, d.ExerciseId });
+            e.HasIndex(d => new { d.UserId, d.Day, d.ExerciseId });
             e.HasOne(d => d.Exercise).WithMany().HasForeignKey(d => d.ExerciseId);
         });
 

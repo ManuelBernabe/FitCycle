@@ -176,7 +176,7 @@ public class SqliteRoutineRepository : IRoutineRepository
         return exercise;
     }
 
-    public WeekRoutine GetWeekRoutine()
+    public WeekRoutine GetWeekRoutine(int userId)
     {
         var validDays = new[]
         {
@@ -184,22 +184,22 @@ public class SqliteRoutineRepository : IRoutineRepository
             DayOfWeek.Thursday, DayOfWeek.Friday
         };
 
-        var days = validDays.Select(BuildDayRoutine).OrderBy(d => d.Day).ToList();
+        var days = validDays.Select(d => BuildDayRoutine(d, userId)).OrderBy(d => d.Day).ToList();
         return new WeekRoutine { Days = days };
     }
 
-    public DayRoutine GetDayRoutine(DayOfWeek day) => BuildDayRoutine(day);
+    public DayRoutine GetDayRoutine(DayOfWeek day, int userId) => BuildDayRoutine(day, userId);
 
-    public DayRoutine SetDayRoutine(DayOfWeek day, List<int> muscleGroupIds, List<RoutineExerciseInput> exercises)
+    public DayRoutine SetDayRoutine(DayOfWeek day, List<int> muscleGroupIds, List<RoutineExerciseInput> exercises, int userId)
     {
         if (day is DayOfWeek.Saturday or DayOfWeek.Sunday)
             throw new ArgumentException("Solo se permiten días de lunes a viernes.");
 
         // Remove existing assignments
-        var existingMg = _db.DayMuscleGroups.Where(d => d.Day == day);
+        var existingMg = _db.DayMuscleGroups.Where(d => d.Day == day && d.UserId == userId);
         _db.DayMuscleGroups.RemoveRange(existingMg);
 
-        var existingEx = _db.DayExercises.Where(d => d.Day == day);
+        var existingEx = _db.DayExercises.Where(d => d.Day == day && d.UserId == userId);
         _db.DayExercises.RemoveRange(existingEx);
 
         // Add muscle groups
@@ -210,7 +210,7 @@ public class SqliteRoutineRepository : IRoutineRepository
 
         foreach (var mgId in validMgIds)
         {
-            _db.DayMuscleGroups.Add(new DayMuscleGroupEntity { Day = day, MuscleGroupId = mgId });
+            _db.DayMuscleGroups.Add(new DayMuscleGroupEntity { Day = day, MuscleGroupId = mgId, UserId = userId });
         }
 
         // Add exercises
@@ -224,19 +224,20 @@ public class SqliteRoutineRepository : IRoutineRepository
                     ExerciseId = input.ExerciseId,
                     Sets = input.Sets,
                     Reps = input.Reps,
-                    Weight = input.Weight
+                    Weight = input.Weight,
+                    UserId = userId
                 });
             }
         }
 
         _db.SaveChanges();
-        return BuildDayRoutine(day);
+        return BuildDayRoutine(day, userId);
     }
 
-    private DayRoutine BuildDayRoutine(DayOfWeek day)
+    private DayRoutine BuildDayRoutine(DayOfWeek day, int userId)
     {
         var muscleGroupIds = _db.DayMuscleGroups
-            .Where(d => d.Day == day)
+            .Where(d => d.Day == day && d.UserId == userId)
             .Select(d => d.MuscleGroupId)
             .ToList();
 
@@ -245,7 +246,7 @@ public class SqliteRoutineRepository : IRoutineRepository
             .ToList();
 
         var dayExercises = _db.DayExercises
-            .Where(d => d.Day == day)
+            .Where(d => d.Day == day && d.UserId == userId)
             .Include(d => d.Exercise)
             .ToList();
 

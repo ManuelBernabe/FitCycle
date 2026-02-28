@@ -109,7 +109,7 @@ public class InMemoryRoutineRepository : IRoutineRepository
         return exercise;
     }
 
-    public WeekRoutine GetWeekRoutine()
+    public WeekRoutine GetWeekRoutine(int userId)
     {
         var days = _muscleGroupRoutines
             .Select(kvp => BuildDayRoutine(kvp.Key))
@@ -119,9 +119,9 @@ public class InMemoryRoutineRepository : IRoutineRepository
         return new WeekRoutine { Days = days };
     }
 
-    public DayRoutine GetDayRoutine(DayOfWeek day) => BuildDayRoutine(day);
+    public DayRoutine GetDayRoutine(DayOfWeek day, int userId) => BuildDayRoutine(day);
 
-    public DayRoutine SetDayRoutine(DayOfWeek day, List<int> muscleGroupIds, List<RoutineExerciseInput> exercises)
+    public DayRoutine SetDayRoutine(DayOfWeek day, List<int> muscleGroupIds, List<RoutineExerciseInput> exercises, int userId)
     {
         if (day is DayOfWeek.Saturday or DayOfWeek.Sunday)
             throw new ArgumentException("Solo se permiten días de lunes a viernes.");

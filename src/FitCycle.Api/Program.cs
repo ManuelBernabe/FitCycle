@@ -273,30 +273,33 @@ app.MapPost("/exercises", (CreateExerciseRequest request, IRoutineRepository rep
 .RequireAuthorization("AdminOrAbove");
 
 // -- Rutina semanal --
-app.MapGet("/routines", (IRoutineRepository repo) =>
+app.MapGet("/routines", (IRoutineRepository repo, ClaimsPrincipal user) =>
 {
-    return Results.Ok(repo.GetWeekRoutine());
+    var userId = int.Parse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+    return Results.Ok(repo.GetWeekRoutine(userId));
 })
 .WithName("GetWeekRoutine")
 .WithOpenApi()
 .RequireAuthorization();
 
 // -- Rutina de un día --
-app.MapGet("/routines/{day}", (DayOfWeek day, IRoutineRepository repo) =>
+app.MapGet("/routines/{day}", (DayOfWeek day, IRoutineRepository repo, ClaimsPrincipal user) =>
 {
-    return Results.Ok(repo.GetDayRoutine(day));
+    var userId = int.Parse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+    return Results.Ok(repo.GetDayRoutine(day, userId));
 })
 .WithName("GetDayRoutine")
 .WithOpenApi()
 .RequireAuthorization();
 
 // -- Actualizar rutina de un día --
-app.MapPut("/routines/{day}", (DayOfWeek day, UpdateDayRoutineRequest request, IRoutineRepository repo) =>
+app.MapPut("/routines/{day}", (DayOfWeek day, UpdateDayRoutineRequest request, IRoutineRepository repo, ClaimsPrincipal user) =>
 {
     try
     {
+        var userId = int.Parse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
         var exercises = request.Exercises ?? [];
-        var result = repo.SetDayRoutine(day, request.MuscleGroupIds, exercises);
+        var result = repo.SetDayRoutine(day, request.MuscleGroupIds, exercises, userId);
         return Results.Ok(result);
     }
     catch (ArgumentException ex)
@@ -309,10 +312,12 @@ app.MapPut("/routines/{day}", (DayOfWeek day, UpdateDayRoutineRequest request, I
 .RequireAuthorization("AdminOrAbove");
 
 // -- Historial de entrenamientos --
-app.MapPost("/workouts", (SaveWorkoutRequest request, FitCycleDbContext db) =>
+app.MapPost("/workouts", (SaveWorkoutRequest request, FitCycleDbContext db, ClaimsPrincipal user) =>
 {
+    var userId = int.Parse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
     var session = new WorkoutSession
     {
+        UserId = userId,
         Day = request.Day,
         StartedAt = request.StartedAt,
         CompletedAt = request.CompletedAt,
@@ -335,9 +340,11 @@ app.MapPost("/workouts", (SaveWorkoutRequest request, FitCycleDbContext db) =>
 .WithOpenApi()
 .RequireAuthorization();
 
-app.MapGet("/workouts", (FitCycleDbContext db) =>
+app.MapGet("/workouts", (FitCycleDbContext db, ClaimsPrincipal user) =>
 {
+    var userId = int.Parse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
     var sessions = db.WorkoutSessions
+        .Where(w => w.UserId == userId)
         .Include(s => s.ExerciseLogs)
         .OrderByDescending(s => s.CompletedAt)
         .Take(50)
@@ -348,9 +355,11 @@ app.MapGet("/workouts", (FitCycleDbContext db) =>
 .WithOpenApi()
 .RequireAuthorization();
 
-app.MapGet("/workouts/stats", (FitCycleDbContext db) =>
+app.MapGet("/workouts/stats", (FitCycleDbContext db, ClaimsPrincipal user) =>
 {
+    var userId = int.Parse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
     var sessions = db.WorkoutSessions
+        .Where(w => w.UserId == userId)
         .Include(s => s.ExerciseLogs)
         .OrderByDescending(s => s.CompletedAt)
         .ToList();
@@ -425,11 +434,12 @@ app.MapGet("/workouts/stats", (FitCycleDbContext db) =>
 .WithOpenApi()
 .RequireAuthorization();
 
-app.MapGet("/workouts/exercise/{exerciseId}/progress", (int exerciseId, FitCycleDbContext db) =>
+app.MapGet("/workouts/exercise/{exerciseId}/progress", (int exerciseId, FitCycleDbContext db, ClaimsPrincipal user) =>
 {
+    var userId = int.Parse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
     var logs = db.WorkoutExerciseLogs
         .Include(l => l.WorkoutSession)
-        .Where(l => l.ExerciseId == exerciseId && l.Weight > 0)
+        .Where(l => l.ExerciseId == exerciseId && l.Weight > 0 && l.WorkoutSession!.UserId == userId)
         .OrderBy(l => l.WorkoutSession!.CompletedAt)
         .Select(l => new { date = l.WorkoutSession!.CompletedAt, weight = l.Weight, sets = l.Sets, reps = l.Reps })
         .ToList();
