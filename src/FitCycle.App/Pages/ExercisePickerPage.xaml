@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="FitCycle.App.Pages.ExercisePickerPage"
+             Shell.NavBarIsVisible="False"
+             BackgroundColor="#80000000">
+
+    <Frame Margin="16,60" Padding="0" CornerRadius="16"
+           VerticalOptions="FillAndExpand"
+           BackgroundColor="White">
+        <Grid RowDefinitions="Auto,*,Auto" Padding="0">
+
+            <!-- Header -->
+            <VerticalStackLayout Grid.Row="0" Padding="16,16,16,8" Spacing="4"
+                                 BackgroundColor="#512BD4">
+                <Label x:Name="TitleLabel"
+                       FontSize="18" FontAttributes="Bold"
+                       TextColor="White" />
+                <Label x:Name="SubtitleLabel"
+                       FontSize="13" TextColor="#E0D0FF" />
+            </VerticalStackLayout>
+
+            <!-- Exercise list -->
+            <CollectionView x:Name="ExerciseList" Grid.Row="1"
+                            SelectionMode="Single"
+                            SelectionChanged="OnSelectionChanged">
+                <CollectionView.ItemTemplate>
+                    <DataTemplate>
+                        <Frame Margin="8,4" Padding="10" CornerRadius="10"
+                               BorderColor="#E0E0E0" HasShadow="False">
+                            <HorizontalStackLayout Spacing="10">
+                                <Image Source="{Binding ImageUrl}"
+                                       HeightRequest="48" WidthRequest="48"
+                                       Aspect="AspectFit"
+                                       VerticalOptions="Center" />
+                                <Label Text="{Binding Name}"
+                                       FontSize="15"
+                                       VerticalOptions="Center"
+                                       LineBreakMode="TailTruncation" />
+                            </HorizontalStackLayout>
+                        </Frame>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+
+            <!-- Bottom buttons -->
+            <VerticalStackLayout Grid.Row="2" Padding="12" Spacing="8">
+                <Button x:Name="CustomBtn"
+                        FontSize="14" Padding="12,8"
+                        BackgroundColor="Transparent"
+                        TextColor="#512BD4"
+                        Clicked="OnCustomClicked" />
+                <Button x:Name="CancelBtn"
+                        FontSize="14" Padding="12,8"
+                        BackgroundColor="#f0f0f0"
+                        TextColor="#666"
+                        CornerRadius="8"
+                        Clicked="OnCancelClicked" />
+            </VerticalStackLayout>
+        </Grid>
+    </Frame>
+</ContentPage>

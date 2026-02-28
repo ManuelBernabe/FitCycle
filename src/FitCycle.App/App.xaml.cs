@@ -1,4 +1,4 @@
-﻿namespace FitCycle.App;
+namespace FitCycle.App;
 
 public partial class App : Application
 {
@@ -6,6 +6,10 @@ public partial class App : Application
 	{
 		InitializeComponent();
 
-		MainPage = new AppShell();
+		var token = SecureStorage.GetAsync("auth_access_token").GetAwaiter().GetResult();
+
+		MainPage = string.IsNullOrEmpty(token)
+			? new NavigationPage(new Pages.LoginPage())
+			: new AppShell();
 	}
 }

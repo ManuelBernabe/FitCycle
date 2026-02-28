@@ -21,7 +21,7 @@
 		<Nullable>enable</Nullable>
 
 		<!-- Display name -->
-		<ApplicationTitle>FitCycle.App</ApplicationTitle>
+		<ApplicationTitle>FitCycle</ApplicationTitle>
 
 		<!-- App Identifier -->
 		<ApplicationId>com.companyname.fitcycle.app</ApplicationId>

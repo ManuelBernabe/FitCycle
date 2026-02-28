@@ -25,6 +25,8 @@ public partial class EditDayPage : ContentPage
     protected override void OnAppearing()
     {
         base.OnAppearing();
+        Title = L10n.T("EditDay");
+        SubtitleLbl.Text = L10n.T("SelectGroupsExercises");
         Dispatcher.Dispatch(async () => await LoadAsync());
     }
 
@@ -38,16 +40,16 @@ public partial class EditDayPage : ContentPage
     {
         try
         {
-            StatusLbl.Text = "Cargando...";
+            StatusLbl.Text = L10n.T("Loading");
             _svc = GetService();
             if (_svc is null)
             {
-                StatusLbl.Text = "Servicio no disponible";
+                StatusLbl.Text = L10n.T("ServiceUnavailable");
                 return;
             }
 
             var day = (DayOfWeek)_dayValue;
-            DayTitle.Text = DayNameInSpanish(day);
+            DayTitle.Text = L10n.DayName(day);
 
             var allGroups = await _svc.GetMuscleGroupsAsync();
             var allExercises = await _svc.GetExercisesAsync();
@@ -69,9 +71,11 @@ public partial class EditDayPage : ContentPage
                         {
                             ExerciseId = e.Id,
                             Name = e.Name,
+                            ImageUrl = e.ImageUrl,
                             IsSelected = existing != null,
                             Sets = existing?.Sets ?? 3,
-                            Reps = existing?.Reps ?? 12
+                            Reps = existing?.Reps ?? 12,
+                            Weight = existing?.Weight ?? 0
                         };
                     }).ToList();
 
@@ -89,7 +93,7 @@ public partial class EditDayPage : ContentPage
         }
         catch (Exception ex)
         {
-            StatusLbl.Text = $"Error: {ex.Message}";
+            StatusLbl.Text = L10n.T("ErrorFmt", ex.Message);
         }
     }
 
@@ -112,13 +116,13 @@ public partial class EditDayPage : ContentPage
             var groupCheck = new CheckBox { IsChecked = group.IsSelected };
             var groupLabel = new Label
             {
-                Text = group.Name,
+                Text = L10n.MuscleGroup(group.Name),
                 FontAttributes = FontAttributes.Bold,
                 FontSize = 17,
                 VerticalOptions = LayoutOptions.Center
             };
 
-            // Exercise container (shown/hidden based on group selection)
+            // Exercise container
             var exerciseStack = new VerticalStackLayout
             {
                 Spacing = 4,
@@ -126,86 +130,15 @@ public partial class EditDayPage : ContentPage
                 IsVisible = group.IsSelected
             };
 
-            // Build exercise rows
             foreach (var exercise in group.Exercises)
             {
-                var exRow = new Grid
-                {
-                    ColumnDefinitions =
-                    {
-                        new ColumnDefinition(new GridLength(1, GridUnitType.Auto)),
-                        new ColumnDefinition(new GridLength(1, GridUnitType.Star)),
-                        new ColumnDefinition(new GridLength(50)),
-                        new ColumnDefinition(new GridLength(1, GridUnitType.Auto)),
-                        new ColumnDefinition(new GridLength(50))
-                    },
-                    ColumnSpacing = 4
-                };
-
-                var exCheck = new CheckBox { IsChecked = exercise.IsSelected };
-                var capturedEx = exercise;
-                exCheck.CheckedChanged += (s, e) => capturedEx.IsSelected = e.Value;
-
-                var exLabel = new Label
-                {
-                    Text = exercise.Name,
-                    VerticalOptions = LayoutOptions.Center,
-                    FontSize = 14
-                };
-
-                var setsEntry = new Entry
-                {
-                    Text = exercise.Sets.ToString(),
-                    Keyboard = Keyboard.Numeric,
-                    WidthRequest = 45,
-                    FontSize = 13,
-                    HorizontalTextAlignment = TextAlignment.Center
-                };
-                setsEntry.TextChanged += (s, e) =>
-                {
-                    if (int.TryParse(e.NewTextValue, out var v)) capturedEx.Sets = v;
-                };
-
-                var xLabel = new Label
-                {
-                    Text = "x",
-                    VerticalOptions = LayoutOptions.Center,
-                    HorizontalOptions = LayoutOptions.Center,
-                    FontSize = 14
-                };
-
-                var repsEntry = new Entry
-                {
-                    Text = exercise.Reps.ToString(),
-                    Keyboard = Keyboard.Numeric,
-                    WidthRequest = 45,
-                    FontSize = 13,
-                    HorizontalTextAlignment = TextAlignment.Center
-                };
-                repsEntry.TextChanged += (s, e) =>
-                {
-                    if (int.TryParse(e.NewTextValue, out var v)) capturedEx.Reps = v;
-                };
-
-                Grid.SetColumn(exCheck, 0);
-                Grid.SetColumn(exLabel, 1);
-                Grid.SetColumn(setsEntry, 2);
-                Grid.SetColumn(xLabel, 3);
-                Grid.SetColumn(repsEntry, 4);
-
-                exRow.Children.Add(exCheck);
-                exRow.Children.Add(exLabel);
-                exRow.Children.Add(setsEntry);
-                exRow.Children.Add(xLabel);
-                exRow.Children.Add(repsEntry);
-
-                exerciseStack.Children.Add(exRow);
+                BuildExerciseRow(exercise, group, exerciseStack);
             }
 
-            // Add custom exercise button
+            // Add exercise button
             var addBtn = new Button
             {
-                Text = "+ Agregar ejercicio",
+                Text = L10n.T("AddExercise"),
                 FontSize = 12,
                 Padding = new Thickness(8, 2),
                 HeightRequest = 32,
@@ -213,10 +146,10 @@ public partial class EditDayPage : ContentPage
                 TextColor = Color.FromArgb("#512BD4")
             };
             var capturedGroup = group;
-            addBtn.Clicked += async (s, e) => await OnAddExercise(capturedGroup, exerciseStack);
+            addBtn.Clicked += async (s, e) => await OnAddExercise(capturedGroup);
             exerciseStack.Children.Add(addBtn);
 
-            // Toggle exercise visibility when group is checked/unchecked
+            // Toggle exercise visibility
             var capturedGroupForCheck = group;
             groupCheck.CheckedChanged += (s, e) =>
             {
@@ -233,47 +166,262 @@ public partial class EditDayPage : ContentPage
         }
     }
 
-    private async Task OnAddExercise(MuscleGroupViewModel group, VerticalStackLayout exerciseStack)
+    private void BuildExerciseRow(ExerciseViewModel exercise, MuscleGroupViewModel group, VerticalStackLayout exerciseStack)
     {
-        var name = await DisplayPromptAsync("Nuevo ejercicio", $"Nombre del ejercicio para {group.Name}:", "Agregar", "Cancelar");
-        if (string.IsNullOrWhiteSpace(name) || _svc is null) return;
+        var exContainer = new VerticalStackLayout { Spacing = 2 };
+        var capturedEx = exercise;
+        var capturedGroup = group;
+
+        // Row 1: Checkbox + Image + Name + Save + Delete
+        var topRow = new HorizontalStackLayout { Spacing = 6 };
+        var exCheck = new CheckBox { IsChecked = exercise.IsSelected };
+        exCheck.CheckedChanged += (s, e) => capturedEx.IsSelected = e.Value;
+
+        var exImage = new Image
+        {
+            Source = exercise.ImageUrl,
+            HeightRequest = 32,
+            WidthRequest = 32,
+            Aspect = Aspect.AspectFit,
+            VerticalOptions = LayoutOptions.Center
+        };
+
+        var exLabel = new Label
+        {
+            Text = exercise.Name,
+            VerticalOptions = LayoutOptions.Center,
+            FontSize = 13,
+            LineBreakMode = LineBreakMode.TailTruncation,
+            HorizontalOptions = LayoutOptions.Fill
+        };
+
+        // Save button per exercise
+        var saveBtn = new Button
+        {
+            Text = "\u2713",
+            FontSize = 14,
+            Padding = new Thickness(6, 2),
+            HeightRequest = 30,
+            MinimumWidthRequest = 34,
+            BackgroundColor = Color.FromArgb("#28a745"),
+            TextColor = Colors.White,
+            CornerRadius = 6
+        };
+        saveBtn.Clicked += async (s, e) => await DoSave();
+
+        // Delete button per exercise
+        var deleteBtn = new Button
+        {
+            Text = "\u2715",
+            FontSize = 14,
+            Padding = new Thickness(6, 2),
+            HeightRequest = 30,
+            MinimumWidthRequest = 34,
+            BackgroundColor = Color.FromArgb("#dc3545"),
+            TextColor = Colors.White,
+            CornerRadius = 6
+        };
+        deleteBtn.Clicked += async (s, e) => await OnDeleteExercise(capturedEx, capturedGroup);
+
+        topRow.Children.Add(exCheck);
+        topRow.Children.Add(exImage);
+        topRow.Children.Add(exLabel);
+        topRow.Children.Add(saveBtn);
+        topRow.Children.Add(deleteBtn);
+
+        // Row 2: Sets picker + "x" + Reps picker
+        var bottomRow = new HorizontalStackLayout
+        {
+            Spacing = 6,
+            Margin = new Thickness(36, 0, 0, 0)
+        };
+
+        var setsLabel = new Label
+        {
+            Text = L10n.T("Sets"),
+            FontSize = 12,
+            TextColor = Colors.Gray,
+            VerticalOptions = LayoutOptions.Center
+        };
+
+        var setsItems = Enumerable.Range(1, 25).Select(i => i.ToString()).ToList();
+        var setsPicker = new Picker
+        {
+            ItemsSource = setsItems,
+            FontSize = 13,
+            WidthRequest = 70
+        };
+        setsPicker.SelectedIndex = Math.Clamp(exercise.Sets - 1, 0, 24);
+        setsPicker.SelectedIndexChanged += (s, e) =>
+        {
+            if (setsPicker.SelectedIndex >= 0)
+                capturedEx.Sets = setsPicker.SelectedIndex + 1;
+        };
+
+        var xLabel = new Label
+        {
+            Text = "x",
+            VerticalOptions = LayoutOptions.Center,
+            FontSize = 13,
+            FontAttributes = FontAttributes.Bold
+        };
+
+        var repsLabel = new Label
+        {
+            Text = L10n.T("Reps"),
+            FontSize = 12,
+            TextColor = Colors.Gray,
+            VerticalOptions = LayoutOptions.Center
+        };
+
+        var repsItems = Enumerable.Range(1, 25).Select(i => i.ToString()).ToList();
+        var repsPicker = new Picker
+        {
+            ItemsSource = repsItems,
+            FontSize = 13,
+            WidthRequest = 70
+        };
+        repsPicker.SelectedIndex = Math.Clamp(exercise.Reps - 1, 0, 24);
+        repsPicker.SelectedIndexChanged += (s, e) =>
+        {
+            if (repsPicker.SelectedIndex >= 0)
+                capturedEx.Reps = repsPicker.SelectedIndex + 1;
+        };
+
+        var weightLabel = new Label { Text = L10n.T("WeightKg"), FontSize = 12, TextColor = Colors.Gray, VerticalOptions = LayoutOptions.Center };
+        var weightEntry = new Entry
+        {
+            Text = exercise.Weight > 0 ? exercise.Weight.ToString("0.#") : "",
+            Placeholder = "0",
+            Keyboard = Keyboard.Numeric,
+            WidthRequest = 70,
+            FontSize = 13
+        };
+        weightEntry.TextChanged += (s, e) =>
+        {
+            if (decimal.TryParse(weightEntry.Text, out var w))
+                capturedEx.Weight = w;
+        };
+
+        bottomRow.Children.Add(setsLabel);
+        bottomRow.Children.Add(setsPicker);
+        bottomRow.Children.Add(xLabel);
+        bottomRow.Children.Add(repsLabel);
+        bottomRow.Children.Add(repsPicker);
+        bottomRow.Children.Add(weightLabel);
+        bottomRow.Children.Add(weightEntry);
+
+        exContainer.Children.Add(topRow);
+        exContainer.Children.Add(bottomRow);
+        exerciseStack.Children.Add(exContainer);
+    }
+
+    private async Task OnAddExercise(MuscleGroupViewModel group)
+    {
+        if (_svc is null) return;
+
+        var existingNames = group.Exercises.Select(e => e.Name.ToLowerInvariant()).ToHashSet();
+        var allSuggestions = ExerciseData.GetSuggestions(group.Name);
+        var suggestions = allSuggestions
+            .Where(s => !existingNames.Contains(s.Name.ToLowerInvariant()))
+            .ToList();
+
+        ExercisePickerResult? result;
+
+        if (suggestions.Count > 0)
+        {
+            var tcs = new TaskCompletionSource<ExercisePickerResult?>();
+            var displayName = L10n.MuscleGroup(group.Name);
+            var pickerPage = new ExercisePickerPage(group.Name, displayName, suggestions, tcs);
+            await Navigation.PushModalAsync(pickerPage, false);
+            result = await tcs.Task;
+        }
+        else
+        {
+            var name = await DisplayPromptAsync(
+                L10n.T("NewExercise"),
+                L10n.T("ExerciseNameFor", L10n.MuscleGroup(group.Name)),
+                L10n.T("Add"),
+                L10n.T("Cancel"));
+            if (string.IsNullOrWhiteSpace(name)) return;
+            var imageUrl = await SearchExerciseImageAsync(name.Trim());
+            result = new ExercisePickerResult(name.Trim(), imageUrl);
+        }
+
+        if (result is null) return;
 
         try
         {
-            var newEx = await _svc.CreateExerciseAsync(name.Trim(), group.Id);
+            var newEx = await _svc.CreateExerciseAsync(result.Name, group.Id);
             var vm = new ExerciseViewModel
             {
                 ExerciseId = newEx.Id,
                 Name = newEx.Name,
+                ImageUrl = result.ImageUrl ?? newEx.ImageUrl,
                 IsSelected = true,
                 Sets = 3,
                 Reps = 12
             };
             group.Exercises.Add(vm);
-
-            // Rebuild UI to show new exercise
             BuildUI();
         }
         catch (Exception ex)
         {
-            StatusLbl.Text = $"Error: {ex.Message}";
+            StatusLbl.Text = L10n.T("ErrorFmt", ex.Message);
         }
     }
 
-    private async void OnSaveClicked(object? sender, EventArgs e)
+    private async Task OnDeleteExercise(ExerciseViewModel exercise, MuscleGroupViewModel group)
+    {
+        bool confirm = await DisplayAlert(
+            L10n.T("Confirm"),
+            L10n.T("ConfirmDeleteExercise", exercise.Name),
+            L10n.T("Yes"),
+            L10n.T("No"));
+        if (!confirm) return;
+
+        group.Exercises.Remove(exercise);
+        BuildUI();
+    }
+
+    private async Task<string?> SearchExerciseImageAsync(string exerciseName)
+    {
+        try
+        {
+            using var http = new HttpClient();
+            var encoded = Uri.EscapeDataString(exerciseName);
+            var resp = await http.GetAsync($"https://wger.de/api/v2/exercise/search/?term={encoded}&language=2&format=json");
+            if (!resp.IsSuccessStatusCode) return null;
+            var json = await resp.Content.ReadAsStringAsync();
+            var doc = System.Text.Json.JsonDocument.Parse(json);
+            var suggestions = doc.RootElement.GetProperty("suggestions");
+            foreach (var s in suggestions.EnumerateArray())
+            {
+                if (s.TryGetProperty("data", out var data) && data.TryGetProperty("image_thumbnail", out var img))
+                {
+                    var url = img.GetString();
+                    if (!string.IsNullOrEmpty(url))
+                        return url.StartsWith("http") ? url : $"https://wger.de{url}";
+                }
+            }
+            return null;
+        }
+        catch { return null; }
+    }
+
+    private async Task DoSave()
     {
         if (_svc is null) return;
         try
         {
-            StatusLbl.Text = "Guardando...";
+            StatusLbl.Text = L10n.T("Saving");
 
             var selectedMgIds = _groups.Where(g => g.IsSelected).Select(g => g.Id).ToList();
-
             var selectedExercises = _groups
                 .Where(g => g.IsSelected)
                 .SelectMany(g => g.Exercises)
                 .Where(ex => ex.IsSelected)
-                .Select(ex => new ExerciseInputDto(ex.ExerciseId, ex.Sets, ex.Reps))
+                .Select(ex => new ExerciseInputDto(ex.ExerciseId, ex.Sets, ex.Reps, ex.Weight))
                 .ToList();
 
             await _svc.UpdateDayRoutineAsync((DayOfWeek)_dayValue, selectedMgIds, selectedExercises);
@@ -281,19 +429,9 @@ public partial class EditDayPage : ContentPage
         }
         catch (Exception ex)
         {
-            StatusLbl.Text = $"Error: {ex.Message}";
+            StatusLbl.Text = L10n.T("ErrorFmt", ex.Message);
         }
     }
-
-    private static string DayNameInSpanish(DayOfWeek day) => day switch
-    {
-        DayOfWeek.Monday => "Lunes",
-        DayOfWeek.Tuesday => "Martes",
-        DayOfWeek.Wednesday => "Miércoles",
-        DayOfWeek.Thursday => "Jueves",
-        DayOfWeek.Friday => "Viernes",
-        _ => day.ToString()
-    };
 }
 
 public class MuscleGroupViewModel
@@ -308,7 +446,9 @@ public class ExerciseViewModel
 {
     public int ExerciseId { get; set; }
     public string Name { get; set; } = string.Empty;
+    public string ImageUrl { get; set; } = string.Empty;
     public bool IsSelected { get; set; }
     public int Sets { get; set; } = 3;
     public int Reps { get; set; } = 12;
+    public decimal Weight { get; set; }
 }

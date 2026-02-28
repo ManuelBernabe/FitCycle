@@ -23,11 +23,17 @@ public static class MauiProgram
 
 		// Configurar HttpClient con URL base específica por plataforma (desarrollo)
 		var baseApiUrl = GetBaseApiUrl();
-		builder.Services.AddSingleton(new HttpClient
+		builder.Services.AddSingleton<AuthenticatedHttpMessageHandler>();
+		builder.Services.AddSingleton(sp =>
 		{
-			BaseAddress = new Uri(baseApiUrl)
+			var handler = sp.GetRequiredService<AuthenticatedHttpMessageHandler>();
+			return new HttpClient(handler)
+			{
+				BaseAddress = new Uri(baseApiUrl)
+			};
 		});
 
+		builder.Services.AddSingleton<IAuthService, AuthService>();
 		builder.Services.AddSingleton<IRoutineService, RoutineService>();
 
 		return builder.Build();

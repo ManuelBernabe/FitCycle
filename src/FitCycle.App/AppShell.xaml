@@ -7,9 +7,47 @@
     Shell.FlyoutBehavior="Disabled"
     Title="FitCycle">
 
-    <ShellContent
-        Title="Rutinas"
-        ContentTemplate="{DataTemplate pages:RoutinesPage}"
-        Route="RoutinesPage" />
+    <Shell.TitleView>
+        <Grid ColumnDefinitions="Auto,Auto,*,Auto" Padding="8,0" ColumnSpacing="8">
+            <Label Text="&#x1F3CB;" FontSize="22" VerticalTextAlignment="Center" Grid.Column="0" />
+            <Label Text="FitCycle" FontSize="18" FontAttributes="Bold"
+                   VerticalTextAlignment="Center" TextColor="White" Grid.Column="1" />
+            <HorizontalStackLayout Grid.Column="3" Spacing="8" VerticalOptions="Center">
+                <Frame BackgroundColor="White" CornerRadius="8" Padding="4,0"
+                       HasShadow="False" VerticalOptions="Center">
+                    <Picker x:Name="LangPicker" WidthRequest="120" FontSize="14"
+                            TextColor="#512BD4" VerticalOptions="Center"
+                            SelectedIndexChanged="OnLanguageChanged" />
+                </Frame>
+                <HorizontalStackLayout Spacing="4" VerticalOptions="Center">
+                    <HorizontalStackLayout.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="OnAccountClicked" />
+                    </HorizontalStackLayout.GestureRecognizers>
+                    <Frame BackgroundColor="White" CornerRadius="14" WidthRequest="28" HeightRequest="28"
+                           Padding="0" HasShadow="False" VerticalOptions="Center">
+                        <Label x:Name="AvatarInitial" FontSize="14" FontAttributes="Bold"
+                               TextColor="#512BD4" HorizontalTextAlignment="Center"
+                               VerticalTextAlignment="Center" />
+                    </Frame>
+                    <Label x:Name="UserInfoLabel" FontSize="13" TextColor="White"
+                           VerticalTextAlignment="Center" />
+                </HorizontalStackLayout>
+            </HorizontalStackLayout>
+        </Grid>
+    </Shell.TitleView>
+
+    <TabBar>
+        <ShellContent
+            x:Name="RoutinesTab"
+            Title="Rutinas"
+            ContentTemplate="{DataTemplate pages:RoutinesPage}"
+            Route="RoutinesPage" />
+
+        <ShellContent
+            x:Name="StatsTab"
+            Title="Estadísticas"
+            ContentTemplate="{DataTemplate pages:StatsPage}"
+            Route="StatsPage" />
+    </TabBar>
 
 </Shell>

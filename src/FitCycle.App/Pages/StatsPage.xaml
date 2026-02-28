@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="FitCycle.App.Pages.StatsPage"
+             Title="Estadísticas">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="16" Spacing="16" MaximumWidthRequest="500" HorizontalOptions="Center">
+
+            <Label x:Name="ProgressTitle" Text="Tu Progreso" Style="{StaticResource Headline}" />
+
+            <!-- Summary stats -->
+            <Frame Padding="16" CornerRadius="12">
+                <Grid ColumnDefinitions="*,*,*" RowDefinitions="Auto,Auto" ColumnSpacing="8" RowSpacing="4">
+                    <Label x:Name="WorkoutsTitle" Text="Entrenamientos" FontSize="11" TextColor="Gray" HorizontalTextAlignment="Center" Grid.Column="0" />
+                    <Label x:Name="TotalSetsTitle" Text="Series totales" FontSize="11" TextColor="Gray" HorizontalTextAlignment="Center" Grid.Column="1" />
+                    <Label x:Name="TotalRepsTitle" Text="Reps totales" FontSize="11" TextColor="Gray" HorizontalTextAlignment="Center" Grid.Column="2" />
+                    <Label x:Name="TotalWorkoutsLabel" Text="-" FontSize="28" FontAttributes="Bold" HorizontalTextAlignment="Center" TextColor="#512BD4" Grid.Column="0" Grid.Row="1" />
+                    <Label x:Name="TotalSetsLabel" Text="-" FontSize="28" FontAttributes="Bold" HorizontalTextAlignment="Center" TextColor="#512BD4" Grid.Column="1" Grid.Row="1" />
+                    <Label x:Name="TotalRepsLabel" Text="-" FontSize="28" FontAttributes="Bold" HorizontalTextAlignment="Center" TextColor="#512BD4" Grid.Column="2" Grid.Row="1" />
+                </Grid>
+            </Frame>
+
+            <!-- Weekly chart -->
+            <Frame Padding="16" CornerRadius="12">
+                <VerticalStackLayout Spacing="10">
+                    <Label x:Name="WeeklyChartTitle" Text="Entrenamientos por semana" FontSize="16" FontAttributes="Bold" />
+                    <VerticalStackLayout x:Name="WeeklyChart" Spacing="8" />
+                </VerticalStackLayout>
+            </Frame>
+
+            <!-- Top exercises -->
+            <Frame Padding="16" CornerRadius="12">
+                <VerticalStackLayout Spacing="10">
+                    <Label x:Name="TopExTitle" Text="Ejercicios más frecuentes" FontSize="16" FontAttributes="Bold" />
+                    <VerticalStackLayout x:Name="TopExercisesList" Spacing="6" />
+                </VerticalStackLayout>
+            </Frame>
+
+            <!-- Recent history -->
+            <Frame Padding="16" CornerRadius="12">
+                <VerticalStackLayout Spacing="10">
+                    <Label x:Name="HistoryTitle" Text="Historial reciente" FontSize="16" FontAttributes="Bold" />
+                    <VerticalStackLayout x:Name="HistoryList" Spacing="8" />
+                </VerticalStackLayout>
+            </Frame>
+
+            <Label x:Name="StatusLbl" TextColor="Gray" HorizontalTextAlignment="Center" />
+
+        </VerticalStackLayout>
+    </ScrollView>
+
+</ContentPage>

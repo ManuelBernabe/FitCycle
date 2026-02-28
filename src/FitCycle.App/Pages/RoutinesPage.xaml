@@ -6,8 +6,8 @@
 
     <ScrollView>
         <VerticalStackLayout Padding="16" Spacing="12">
-            <Label Text="Mi Rutina Semanal" Style="{StaticResource Headline}" />
-            <Label Text="Configura y entrena tu rutina semanal" TextColor="Gray" FontSize="14" />
+            <Label x:Name="TitleLabel" Text="Mi Rutina Semanal" Style="{StaticResource Headline}" />
+            <Label x:Name="SubtitleLabel" Text="Configura y entrena tu rutina semanal" TextColor="Gray" FontSize="14" />
             <CollectionView x:Name="DaysList" SelectionMode="None">
                 <CollectionView.ItemTemplate>
                     <DataTemplate>
@@ -17,21 +17,42 @@
                                 <Label Text="{Binding MuscleGroupNames}" TextColor="Gray" FontSize="13" />
                                 <Label Text="{Binding ExerciseDetails}" FontSize="14"
                                        IsVisible="{Binding HasExercises}" />
-                                <HorizontalStackLayout Spacing="8" Margin="0,6,0,0">
-                                    <Button Text="Editar"
-                                            FontSize="13"
-                                            Padding="12,6"
+                                <FlexLayout Wrap="Wrap" Direction="Row"
+                                            AlignItems="Center" JustifyContent="Start"
+                                            Margin="0,6,0,0">
+                                    <Button Text="{Binding CreateText}"
+                                            FontSize="12"
+                                            Padding="10,5"
+                                            Margin="0,0,6,4"
                                             Clicked="OnEditClicked"
-                                            CommandParameter="{Binding DayValue}" />
-                                    <Button Text="Empezar"
-                                            FontSize="13"
-                                            Padding="12,6"
+                                            CommandParameter="{Binding DayValue}"
+                                            IsVisible="{Binding HasNoRoutine}" />
+                                    <Button Text="{Binding EditText}"
+                                            FontSize="12"
+                                            Padding="10,5"
+                                            Margin="0,0,6,4"
+                                            Clicked="OnEditClicked"
+                                            CommandParameter="{Binding DayValue}"
+                                            IsVisible="{Binding HasRoutine}" />
+                                    <Button Text="{Binding DeleteText}"
+                                            FontSize="12"
+                                            Padding="10,5"
+                                            Margin="0,0,6,4"
+                                            BackgroundColor="#dc3545"
+                                            TextColor="White"
+                                            Clicked="OnDeleteClicked"
+                                            CommandParameter="{Binding DayValue}"
+                                            IsVisible="{Binding HasRoutine}" />
+                                    <Button Text="{Binding StartText}"
+                                            FontSize="12"
+                                            Padding="10,5"
+                                            Margin="0,0,6,4"
                                             BackgroundColor="#28a745"
                                             TextColor="White"
                                             Clicked="OnStartClicked"
                                             CommandParameter="{Binding DayValue}"
                                             IsVisible="{Binding HasExercises}" />
-                                </HorizontalStackLayout>
+                                </FlexLayout>
                             </VerticalStackLayout>
                         </Frame>
                     </DataTemplate>

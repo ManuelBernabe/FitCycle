@@ -13,6 +13,7 @@ public partial class WorkoutPage : ContentPage
     private IDispatcherTimer? _timer;
     private int _timerSeconds;
     private bool _timerRunning;
+    private DateTime _startedAt;
 
     public string DayValue
     {
@@ -27,11 +28,35 @@ public partial class WorkoutPage : ContentPage
     public WorkoutPage()
     {
         InitializeComponent();
+        InitTimerPickers();
+    }
+
+    private void InitTimerPickers()
+    {
+        // Minutes: 0-59
+        MinutesPicker.ItemsSource = Enumerable.Range(0, 60).Select(i => i.ToString("D2")).ToList();
+        // Seconds: 0-59 in steps of 5
+        SecondsPicker.ItemsSource = Enumerable.Range(0, 12).Select(i => (i * 5).ToString("D2")).ToList();
+
+        // Default: 1 min 30 sec
+        MinutesPicker.SelectedIndex = 1;  // "01"
+        SecondsPicker.SelectedIndex = 6;  // "30"
+        _timerSeconds = 90;
+        UpdateTimerLabel();
     }
 
     protected override void OnAppearing()
     {
         base.OnAppearing();
+        Title = L10n.T("Workout");
+        RestLabel.Text = L10n.T("Rest");
+        MinLabel.Text = L10n.T("Min");
+        SecLabel.Text = L10n.T("Sec");
+        TimerStartBtn.Text = L10n.T("Start");
+        TimerResetBtn.Text = L10n.T("Reset");
+        PrevBtn.Text = L10n.T("Previous");
+        FinishBtn.Text = L10n.T("Finish");
+        NextBtn.Text = L10n.T("Next");
         Dispatcher.Dispatch(async () => await LoadAsync());
     }
 
@@ -51,36 +76,37 @@ public partial class WorkoutPage : ContentPage
     {
         try
         {
-            StatusLbl.Text = "Cargando...";
+            StatusLbl.Text = L10n.T("Loading");
             CardFrame.IsVisible = false;
 
             var svc = GetService();
             if (svc is null)
             {
-                StatusLbl.Text = "Servicio no disponible";
+                StatusLbl.Text = L10n.T("ServiceUnavailable");
                 return;
             }
 
             var day = (DayOfWeek)_dayValue;
-            DayTitle.Text = DayNameInSpanish(day);
+            DayTitle.Text = L10n.DayName(day);
 
             var dayRoutine = await svc.GetDayRoutineAsync(day);
             _exercises = dayRoutine.Exercises;
 
             if (_exercises.Count == 0)
             {
-                StatusLbl.Text = "No hay ejercicios configurados para este día.";
+                StatusLbl.Text = L10n.T("NoExercisesDay");
                 return;
             }
 
             _currentIndex = 0;
+            _startedAt = DateTime.UtcNow;
             StatusLbl.Text = string.Empty;
             CardFrame.IsVisible = true;
             ShowCurrentExercise();
         }
         catch (Exception ex)
         {
-            StatusLbl.Text = $"Error: {ex.Message}";
+            StatusLbl.Text = L10n.T("ErrorFmt", ex.Message);
         }
     }
 
@@ -90,12 +116,14 @@ public partial class WorkoutPage : ContentPage
 
         var exercise = _exercises[_currentIndex];
 
-        ProgressLabel.Text = $"Ejercicio {_currentIndex + 1} de {_exercises.Count}";
+        ProgressLabel.Text = L10n.T("ExerciseProgress", _currentIndex + 1, _exercises.Count);
         ProgressBar.Progress = (double)(_currentIndex + 1) / _exercises.Count;
 
         ExerciseName.Text = exercise.ExerciseName;
         MuscleGroupLabel.Text = exercise.MuscleGroupName;
-        SetsRepsLabel.Text = $"{exercise.Sets} series x {exercise.Reps} repeticiones";
+        SetsRepsLabel.Text = exercise.Weight > 0
+            ? L10n.T("SetsRepsFormat", exercise.Sets, exercise.Reps) + $" @ {exercise.Weight:0.#} {L10n.T("WeightKg")}"
+            : L10n.T("SetsRepsFormat", exercise.Sets, exercise.Reps);
 
         // Load image
         LoadImage(exercise.ImageUrl);
@@ -115,7 +143,7 @@ public partial class WorkoutPage : ContentPage
         if (string.IsNullOrEmpty(url))
         {
             ExerciseImage.IsVisible = false;
-            ImageDebugLabel.Text = "Sin imagen";
+            ImageDebugLabel.Text = L10n.T("NoImage");
             return;
         }
 
@@ -138,13 +166,18 @@ public partial class WorkoutPage : ContentPage
 
     #region Timer
 
-    private void OnTimerSliderChanged(object? sender, ValueChangedEventArgs e)
+    private int GetPickerTotalSeconds()
     {
-        var seconds = (int)e.NewValue;
-        TimerSliderLabel.Text = $"{seconds} seg";
+        var mins = MinutesPicker.SelectedIndex >= 0 ? MinutesPicker.SelectedIndex : 1;
+        var secsIdx = SecondsPicker.SelectedIndex >= 0 ? SecondsPicker.SelectedIndex : 6;
+        return mins * 60 + secsIdx * 5;
+    }
+
+    private void OnTimePickerChanged(object? sender, EventArgs e)
+    {
         if (!_timerRunning)
         {
-            _timerSeconds = seconds;
+            _timerSeconds = GetPickerTotalSeconds();
             UpdateTimerLabel();
         }
     }
@@ -154,16 +187,18 @@ public partial class WorkoutPage : ContentPage
         if (_timerRunning)
         {
             StopTimer();
-            TimerStartBtn.Text = "Iniciar";
+            TimerStartBtn.Text = L10n.T("Start");
+            TimerStartBtn.BackgroundColor = Color.FromArgb("#512BD4");
             return;
         }
 
-        _timerSeconds = (int)TimerSlider.Value;
+        _timerSeconds = GetPickerTotalSeconds();
         if (_timerSeconds <= 0) return;
 
         _timerRunning = true;
-        TimerStartBtn.Text = "Pausar";
-        TimerSlider.IsEnabled = false;
+        TimerStartBtn.Text = L10n.T("Pause");
+        TimerStartBtn.BackgroundColor = Color.FromArgb("#e67e22");
+        TimerPickerRow.IsVisible = false;
 
         _timer = Dispatcher.CreateTimer();
         _timer.Interval = TimeSpan.FromSeconds(1);
@@ -179,8 +214,9 @@ public partial class WorkoutPage : ContentPage
         if (_timerSeconds <= 0)
         {
             StopTimer();
-            TimerStartBtn.Text = "Iniciar";
-            TimerLabel.TextColor = Colors.Green;
+            TimerStartBtn.Text = L10n.T("Start");
+            TimerStartBtn.BackgroundColor = Color.FromArgb("#512BD4");
+            TimerLabel.TextColor = Color.FromArgb("#28a745");
         }
     }
 
@@ -195,14 +231,15 @@ public partial class WorkoutPage : ContentPage
         _timerRunning = false;
         _timer?.Stop();
         _timer = null;
-        TimerSlider.IsEnabled = true;
+        TimerPickerRow.IsVisible = true;
     }
 
     private void ResetTimerDisplay()
     {
-        _timerSeconds = (int)TimerSlider.Value;
-        TimerStartBtn.Text = "Iniciar";
-        TimerLabel.TextColor = Colors.Black;
+        _timerSeconds = GetPickerTotalSeconds();
+        TimerStartBtn.Text = L10n.T("Start");
+        TimerStartBtn.BackgroundColor = Color.FromArgb("#512BD4");
+        TimerLabel.TextColor = Color.FromArgb("#333");
         UpdateTimerLabel();
     }
 
@@ -236,17 +273,34 @@ public partial class WorkoutPage : ContentPage
     private async void OnFinishClicked(object? sender, EventArgs e)
     {
         StopTimer();
-        await DisplayAlert("¡Buen trabajo!", "Has completado todos los ejercicios del día.", "Volver a Rutinas");
-        await Shell.Current.GoToAsync("..");
+
+        // Save workout session
+        try
+        {
+            var svc = GetService();
+            if (svc != null)
+            {
+                var session = new WorkoutSession
+                {
+                    Day = (DayOfWeek)_dayValue,
+                    StartedAt = _startedAt,
+                    CompletedAt = DateTime.UtcNow,
+                    ExerciseLogs = _exercises.Select(ex => new WorkoutExerciseLog
+                    {
+                        ExerciseId = ex.ExerciseId,
+                        ExerciseName = ex.ExerciseName,
+                        Sets = ex.Sets,
+                        Reps = ex.Reps,
+                        Weight = ex.Weight,
+                        MuscleGroupName = ex.MuscleGroupName
+                    }).ToList()
+                };
+                await svc.SaveWorkoutAsync(session);
+            }
+        }
+        catch { /* Don't block finish if save fails */ }
+
+        await Shell.Current.GoToAsync($"workoutsummary?day={_dayValue}&started={_startedAt:O}&completed={DateTime.UtcNow:O}&count={_exercises.Count}");
     }
 
-    private static string DayNameInSpanish(DayOfWeek day) => day switch
-    {
-        DayOfWeek.Monday => "Lunes",
-        DayOfWeek.Tuesday => "Martes",
-        DayOfWeek.Wednesday => "Miércoles",
-        DayOfWeek.Thursday => "Jueves",
-        DayOfWeek.Friday => "Viernes",
-        _ => day.ToString()
-    };
 }

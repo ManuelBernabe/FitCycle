@@ -13,6 +13,9 @@ public partial class RoutinesPage : ContentPage
     protected override void OnAppearing()
     {
         base.OnAppearing();
+        Title = L10n.T("TabRoutines");
+        TitleLabel.Text = L10n.T("MyWeeklyRoutine");
+        SubtitleLabel.Text = L10n.T("ConfigureWeekly");
         Dispatcher.Dispatch(async () => await LoadAsync());
     }
 
@@ -26,31 +29,36 @@ public partial class RoutinesPage : ContentPage
     {
         try
         {
-            StatusLbl.Text = "Cargando...";
+            StatusLbl.Text = L10n.T("Loading");
             var svc = GetService();
             if (svc is null)
             {
-                StatusLbl.Text = "Servicio no disponible";
+                StatusLbl.Text = L10n.T("ServiceUnavailable");
                 return;
             }
             var week = await svc.GetWeekRoutineAsync();
             var items = week.Days.Select(d =>
             {
                 var mgNames = d.MuscleGroups.Count == 0
-                    ? "Sin grupos asignados"
-                    : string.Join(", ", d.MuscleGroups.Select(mg => mg.Name));
+                    ? L10n.T("NoGroupsAssigned")
+                    : string.Join(", ", d.MuscleGroups.Select(mg => L10n.MuscleGroup(mg.Name)));
 
                 var exerciseLines = d.Exercises.Count == 0
                     ? string.Empty
-                    : string.Join("\n", d.Exercises.Select(e => $"  • {e.ExerciseName} ({e.Sets}x{e.Reps})"));
+                    : string.Join("\n", d.Exercises.Select(e => $"  \u2022 {e.ExerciseName} ({e.Sets}x{e.Reps})"));
 
                 return new DayViewModel
                 {
                     DayValue = (int)d.Day,
-                    DayName = DayNameInSpanish(d.Day),
+                    DayName = L10n.DayName(d.Day),
                     MuscleGroupNames = mgNames,
                     ExerciseDetails = exerciseLines,
-                    HasExercises = d.Exercises.Count > 0
+                    HasExercises = d.Exercises.Count > 0,
+                    HasRoutine = d.MuscleGroups.Count > 0,
+                    CreateText = L10n.T("Create"),
+                    EditText = L10n.T("Edit"),
+                    DeleteText = L10n.T("Delete"),
+                    StartText = L10n.T("StartWorkout")
                 };
             }).ToList();
 
@@ -59,7 +67,7 @@ public partial class RoutinesPage : ContentPage
         }
         catch (Exception ex)
         {
-            StatusLbl.Text = $"Error: {ex.Message}";
+            StatusLbl.Text = L10n.T("ErrorFmt", ex.Message);
         }
     }
 
@@ -86,15 +94,27 @@ public partial class RoutinesPage : ContentPage
             await Shell.Current.GoToAsync($"workout?day={day.Value}");
     }
 
-    private static string DayNameInSpanish(DayOfWeek day) => day switch
+    private async void OnDeleteClicked(object? sender, EventArgs e)
     {
-        DayOfWeek.Monday => "Lunes",
-        DayOfWeek.Tuesday => "Martes",
-        DayOfWeek.Wednesday => "Miércoles",
-        DayOfWeek.Thursday => "Jueves",
-        DayOfWeek.Friday => "Viernes",
-        _ => day.ToString()
-    };
+        var day = GetDayFromButton(sender);
+        if (!day.HasValue) return;
+
+        bool confirm = await DisplayAlert(L10n.T("Confirm"), L10n.T("DeleteRoutineMsg"), L10n.T("Yes"), L10n.T("No"));
+        if (!confirm) return;
+
+        var svc = GetService();
+        if (svc is null) return;
+
+        try
+        {
+            await svc.UpdateDayRoutineAsync((DayOfWeek)day.Value, new List<int>(), new List<Services.ExerciseInputDto>());
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            StatusLbl.Text = L10n.T("ErrorFmt", ex.Message);
+        }
+    }
 }
 
 public class DayViewModel
@@ -104,4 +124,10 @@ public class DayViewModel
     public string MuscleGroupNames { get; set; } = string.Empty;
     public string ExerciseDetails { get; set; } = string.Empty;
     public bool HasExercises { get; set; }
+    public bool HasRoutine { get; set; }
+    public bool HasNoRoutine => !HasRoutine;
+    public string CreateText { get; set; } = string.Empty;
+    public string EditText { get; set; } = string.Empty;
+    public string DeleteText { get; set; } = string.Empty;
+    public string StartText { get; set; } = string.Empty;
 }
