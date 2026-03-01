@@ -167,78 +167,68 @@ function buildUI() {
 }
 
 function buildExerciseRows(group, gi) {
-  try { return group.exercises.map((ex, ei) => {
+  return group.exercises.map((ex, ei) => {
     const checkedAttr = ex.isSelected ? 'checked' : '';
     const imgHtml = ex.imageUrl
-      ? `<img src="${ex.imageUrl}" alt="" style="width:40px;height:40px;object-fit:cover;border-radius:4px;" onerror="this.onerror=null;this.parentElement.innerHTML='&#127947;&#65039;'">`
-      : `<div style="width:40px;height:40px;background:#eee;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:18px;">&#127947;</div>`;
+      ? `<img src="${ex.imageUrl}" alt="" style="width:32px;height:32px;object-fit:cover;border-radius:4px;" onerror="this.onerror=null;this.src=''">`
+      : '';
 
-    const summaryText = ex.setDetails.map((s, i) => `S${i + 1}: ${s.reps}r/${s.weight > 0 ? s.weight + 'kg' : '-'}`).join(' | ');
+    const summaryParts = ex.setDetails.map((s, i) => `S${i + 1}:${s.reps}r/${s.weight > 0 ? s.weight + 'kg' : '-'}`);
+    const summaryText = summaryParts.join(' · ');
 
     const setRows = ex.setDetails.map((s, si) => `
-      <div class="set-detail-row" style="display:flex;align-items:center;gap:4px;margin:3px 0;padding:3px 0;border-bottom:1px solid #f0f0f0;flex-wrap:wrap;">
-        <span style="font-size:12px;color:#512BD4;font-weight:600;width:28px;">S${si + 1}</span>
-        <select class="picker-select set-reps-picker" data-gi="${gi}" data-ei="${ei}" data-si="${si}" style="width:50px;font-size:12px;padding:3px;">
+      <div style="display:flex;align-items:center;gap:4px;margin:2px 0;flex-wrap:wrap;">
+        <span style="font-size:11px;color:#512BD4;font-weight:600;min-width:24px;">S${si + 1}</span>
+        <select class="picker-select set-reps-picker" data-gi="${gi}" data-ei="${ei}" data-si="${si}" style="width:48px;font-size:12px;padding:2px;">
           ${buildPickerOptions(1, 30, s.reps)}
-        </select>
-        <span style="font-size:10px;color:gray;">r</span>
-        <span style="font-size:10px;color:#999;">×</span>
+        </select><span style="font-size:10px;color:gray;">r ×</span>
         <input type="number" class="set-weight-input" data-gi="${gi}" data-ei="${ei}" data-si="${si}"
           value="${s.weight > 0 ? s.weight : ''}" placeholder="0" step="0.5" min="0"
-          style="width:55px;font-size:12px;padding:3px 4px;border:1px solid #ccc;border-radius:4px;">
+          style="width:52px;font-size:12px;padding:2px 4px;border:1px solid #ccc;border-radius:4px;">
         <span style="font-size:10px;color:gray;">kg</span>
         ${ex.setDetails.length > 1 ? `<button class="btn-remove-set" data-gi="${gi}" data-ei="${ei}" data-si="${si}"
-          style="background:none;border:none;color:#dc3545;font-size:14px;cursor:pointer;padding:1px 4px;" title="${t('Delete')}">&#10005;</button>` : ''}
+          style="background:none;border:none;color:#dc3545;font-size:13px;cursor:pointer;padding:0 4px;">&#10005;</button>` : ''}
       </div>
     `).join('');
 
-    // Superset indicator
+    // Superset
     const isInSuperset = ex.supersetGroup > 0;
-    const supersetBorder = isInSuperset ? 'border-left:3px solid #e67e22;' : '';
-    // Find partner name for superset label
-    let supersetLabel = '';
+    let partnerName = '';
     if (isInSuperset) {
-      let partnerName = '';
-      groups.forEach(g => g.exercises.forEach(e => {
-        if (e.supersetGroup === ex.supersetGroup && e.exerciseId !== ex.exerciseId) partnerName = e.name;
-      }));
-      supersetLabel = `<div style="font-size:10px;color:#e67e22;font-weight:600;margin-left:52px;">&#8644; ${partnerName || t('Superset')}</div>`;
-    }
-
-    // Superset button
-    let supersetBtn = '';
-    if (ex.isSelected) {
-      if (isInSuperset) {
-        supersetBtn = `<button class="btn-unlink-superset" data-gi="${gi}" data-ei="${ei}" style="background:none;border:1px solid #e67e22;color:#e67e22;border-radius:6px;padding:2px 6px;font-size:10px;cursor:pointer;" title="${t('UnlinkSuperset')}">&#8644;</button>`;
-      } else {
-        supersetBtn = `<button class="btn-link-superset" data-gi="${gi}" data-ei="${ei}" style="background:none;border:1px solid #ccc;color:#999;border-radius:6px;padding:2px 6px;font-size:10px;cursor:pointer;" title="${t('LinkSuperset')}">&#8644;</button>`;
+      for (const g of groups) for (const e of g.exercises) {
+        if (e.supersetGroup === ex.supersetGroup && e.exerciseId !== ex.exerciseId) { partnerName = e.name; break; }
       }
     }
 
+    let supersetBtn = '';
+    if (ex.isSelected) {
+      supersetBtn = isInSuperset
+        ? `<button class="btn-unlink-superset" data-gi="${gi}" data-ei="${ei}" style="background:none;border:1px solid #e67e22;color:#e67e22;border-radius:6px;padding:1px 5px;font-size:10px;cursor:pointer;">&#8644;</button>`
+        : `<button class="btn-link-superset" data-gi="${gi}" data-ei="${ei}" style="background:none;border:1px solid #ccc;color:#999;border-radius:6px;padding:1px 5px;font-size:10px;cursor:pointer;">&#8644;</button>`;
+    }
+
     return `
-      <div class="exercise-row" style="margin-bottom:10px;border:1px solid #eee;border-radius:8px;padding:8px;overflow:hidden;${supersetBorder}">
-        <div style="display:flex;align-items:center;gap:6px;">
+      <div style="margin-bottom:8px;border:1px solid ${isInSuperset ? '#e67e22' : '#eee'};border-radius:8px;padding:6px;">
+        <div style="display:flex;align-items:center;gap:4px;">
           <input type="checkbox" class="ex-check" data-gi="${gi}" data-ei="${ei}" ${checkedAttr}>
-          <div class="exercise-img">${imgHtml}</div>
-          <span style="font-size:13px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${ex.name}</span>
+          ${imgHtml ? `<div style="flex-shrink:0;">${imgHtml}</div>` : ''}
+          <span style="font-size:13px;font-weight:600;flex:1;min-width:0;word-break:break-word;">${ex.name}</span>
+          ${supersetBtn}
+          <button class="btn-delete-ex" data-gi="${gi}" data-ei="${ei}" style="background:#dc3545;color:#fff;border:none;border-radius:6px;padding:2px 6px;font-size:12px;cursor:pointer;flex-shrink:0;">&#10005;</button>
         </div>
-        ${supersetLabel}
-        <div style="margin-top:4px;margin-left:52px;">
-          <div style="font-size:11px;color:#666;line-height:1.4;overflow-wrap:break-word;word-break:break-word;">${summaryText}</div>
-          <div style="display:flex;align-items:center;gap:4px;margin-top:4px;">
-            <button class="btn-toggle-sets" data-gi="${gi}" data-ei="${ei}"
-              style="background:${ex.expanded ? '#512BD4' : '#e0e0e0'};color:${ex.expanded ? '#fff' : '#333'};border:none;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;">
-              ${ex.setDetails.length}S
-            </button>
-            ${supersetBtn}
-            <button class="btn btn-xs btn-delete-ex" data-gi="${gi}" data-ei="${ei}" style="background:#dc3545;color:#fff;border:none;border-radius:6px;padding:2px 8px;font-size:14px;cursor:pointer;margin-left:auto;" title="${t('Delete')}">&#10005;</button>
-          </div>
+        ${isInSuperset ? `<div style="font-size:10px;color:#e67e22;font-weight:600;margin:2px 0 0 24px;">&#8644; ${partnerName || t('Superset')}</div>` : ''}
+        <div style="margin:4px 0 0 24px;">
+          <div style="font-size:10px;color:#666;word-break:break-word;">${summaryText}</div>
+          <button class="btn-toggle-sets" data-gi="${gi}" data-ei="${ei}"
+            style="background:${ex.expanded ? '#512BD4' : '#e9e9e9'};color:${ex.expanded ? '#fff' : '#333'};border:none;border-radius:6px;padding:2px 8px;font-size:11px;cursor:pointer;margin-top:3px;">
+            ${ex.expanded ? 'Ocultar series' : 'Ver series'}
+          </button>
         </div>
         ${ex.expanded ? `
-          <div style="margin-top:6px;padding:0 4px;">
+          <div style="margin:6px 0 0 4px;padding:4px;background:#fafafa;border-radius:6px;">
             ${setRows}
             <button class="btn-add-set" data-gi="${gi}" data-ei="${ei}"
-              style="background:none;border:1px dashed #512BD4;color:#512BD4;border-radius:6px;padding:4px 12px;font-size:12px;cursor:pointer;margin-top:4px;width:100%;">
+              style="background:none;border:1px dashed #512BD4;color:#512BD4;border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer;margin-top:4px;width:100%;">
               + ${t('AddSet')}
             </button>
           </div>
@@ -246,7 +236,6 @@ function buildExerciseRows(group, gi) {
       </div>
     `;
   }).join('');
-  } catch (err) { console.error('buildExerciseRows error:', err); return ''; }
 }
 
 function showSupersetModal(sourceGi, sourceEi) {
