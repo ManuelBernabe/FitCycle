@@ -15,12 +15,20 @@
   <div id="app">
     <div id="app-loading" style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;">
       <div style="font-size:32px;font-weight:bold;color:#512BD4;">FC</div>
-      <div style="margin-top:8px;color:#999;">Cargando...</div>
+      <div id="app-status" style="margin-top:8px;color:#999;">Cargando...</div>
     </div>
   </div>
   <script>
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
   </script>
-  <script type="module" src="/js/app.js" onerror="document.getElementById('app').innerHTML='<p style=padding:40px;text-align:center;color:red>Error loading app</p>'"></script>
+  <script type="module">
+    import('/js/app.js').catch(function(err) {
+      var el = document.getElementById('app-status');
+      if (el) {
+        el.style.color = '#dc3545';
+        el.textContent = 'Error: ' + (err.message || err);
+      }
+    });
+  </script>
 </body>
 </html>
