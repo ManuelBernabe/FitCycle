@@ -157,7 +157,8 @@ const Strings = {
   Superset:       { es: 'Superserie',                       en: 'Superset',                  fr: 'Superserie' },
   LinkSuperset:   { es: 'Vincular superserie',              en: 'Link superset',             fr: 'Lier superserie' },
   UnlinkSuperset: { es: 'Desvincular',                      en: 'Unlink',                    fr: 'Délier' },
-  SelectPair:     { es: 'Selecciona el ejercicio pareja',   en: 'Select pair exercise',      fr: "Sélectionner l'exercice partenaire" },
+  SelectPair:          { es: 'Selecciona el ejercicio pareja',   en: 'Select pair exercise',      fr: "Sélectionner l'exercice partenaire" },
+  NoExercisesAvailable: { es: 'No hay ejercicios disponibles', en: 'No exercises available',    fr: "Aucun exercice disponible" },
 
   // === Password ===
   PwdMinLength:  { es: 'Mínimo 8 caracteres',             en: 'At least 8 characters',           fr: 'Au moins 8 caractères' },
