@@ -62,12 +62,12 @@ export function render() {
           ${data.exercises.map(ex => {
             let setInfo = '';
             let details = null;
-            try { if (ex.setDetails) details = typeof ex.setDetails === 'string' ? JSON.parse(ex.setDetails) : ex.setDetails; } catch { /* */ }
+            try { if (ex.setDetails) details = typeof ex.setDetails === 'string' ? JSON.parse(ex.setDetails) : ex.setDetails; } catch (e) { /* */ }
             if (Array.isArray(details) && details.length > 0) {
-              setInfo = details.map((s, i) => `S${i + 1}: ${s.reps}r x ${s.weight > 0 ? s.weight + 'kg' : '-'}`).join(' | ');
+              setInfo = details.map((s, i) => `S${i + 1}: ${s.reps}r x ${s.weight > 0 ? '<span style="color:#28a745;font-weight:600">' + s.weight + 'kg</span>' : '-'}`).join(' | ');
             } else {
               const weightStr = (ex.weight || 0) > 0 ? ` @ ${ex.weight} ${t('WeightKg')}` : '';
-              setInfo = `${t('SetsRepsFormat', ex.sets, ex.reps)}${weightStr}`;
+              setInfo = `${t('SetsRepsFormat', ex.sets, ex.reps)}${(ex.weight || 0) > 0 ? ' @ <span style="color:#28a745;font-weight:600">' + ex.weight + ' ' + t('WeightKg') + '</span>' : ''}`;
             }
             return `
             <div class="exercise-row">

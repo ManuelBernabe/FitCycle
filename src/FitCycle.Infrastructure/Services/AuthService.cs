@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using FitCycle.Core.Models;
 using FitCycle.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -26,8 +27,7 @@ public class AuthService : IAuthService
             throw new ArgumentException("El nombre de usuario debe tener al menos 3 caracteres.");
         if (string.IsNullOrWhiteSpace(request.Email) || !request.Email.Contains('@'))
             throw new ArgumentException("El email no es válido.");
-        if (string.IsNullOrWhiteSpace(request.Password) || request.Password.Length < 6)
-            throw new ArgumentException("La contraseña debe tener al menos 6 caracteres.");
+        ValidatePasswordStrength(request.Password);
 
         if (await _db.Users.AnyAsync(u => u.Username == request.Username))
             throw new ArgumentException("El nombre de usuario ya está en uso.");
@@ -91,8 +91,7 @@ public class AuthService : IAuthService
             throw new ArgumentException("El nombre de usuario debe tener al menos 3 caracteres.");
         if (string.IsNullOrWhiteSpace(request.Email) || !request.Email.Contains('@'))
             throw new ArgumentException("El email no es válido.");
-        if (string.IsNullOrWhiteSpace(request.Password) || request.Password.Length < 6)
-            throw new ArgumentException("La contraseña debe tener al menos 6 caracteres.");
+        ValidatePasswordStrength(request.Password);
 
         if (await _db.Users.AnyAsync(u => u.Username == request.Username))
             throw new ArgumentException("El nombre de usuario ya está en uso.");
@@ -169,8 +168,7 @@ public class AuthService : IAuthService
 
     public async Task ResetPasswordAsync(int id, string newPassword)
     {
-        if (string.IsNullOrWhiteSpace(newPassword) || newPassword.Length < 6)
-            throw new ArgumentException("La contraseña debe tener al menos 6 caracteres.");
+        ValidatePasswordStrength(newPassword);
 
         var user = await _db.Users.FindAsync(id);
         if (user is null)
@@ -178,6 +176,20 @@ public class AuthService : IAuthService
 
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword);
         await _db.SaveChangesAsync();
+    }
+
+    private static void ValidatePasswordStrength(string password)
+    {
+        if (string.IsNullOrWhiteSpace(password) || password.Length < 8)
+            throw new ArgumentException("La contraseña debe tener al menos 8 caracteres.");
+        if (!Regex.IsMatch(password, @"[A-Z]"))
+            throw new ArgumentException("La contraseña debe contener al menos una letra mayúscula.");
+        if (!Regex.IsMatch(password, @"[a-z]"))
+            throw new ArgumentException("La contraseña debe contener al menos una letra minúscula.");
+        if (!Regex.IsMatch(password, @"\d"))
+            throw new ArgumentException("La contraseña debe contener al menos un dígito.");
+        if (!Regex.IsMatch(password, @"[^a-zA-Z0-9]"))
+            throw new ArgumentException("La contraseña debe contener al menos un carácter especial.");
     }
 
     private AuthResponse GenerateTokens(User user)

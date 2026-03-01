@@ -36,7 +36,7 @@ async function request(method, path, body, isRetry = false) {
     let errorData;
     try {
       errorData = await res.json();
-    } catch {
+    } catch (e) {
       errorData = { error: res.statusText };
     }
     const err = new Error(errorData.error || errorData.message || `HTTP ${res.status}`);
@@ -67,7 +67,7 @@ async function tryRefresh() {
     const data = await res.json();
     auth.store(data);
     return true;
-  } catch {
+  } catch (e) {
     return false;
   }
 }

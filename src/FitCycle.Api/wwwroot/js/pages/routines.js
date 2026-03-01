@@ -72,24 +72,26 @@ function renderDays(container) {
       let setInfo = '';
       const rawDetails = e.setDetails || e.SetDetails || '';
       let details = null;
-      try { if (rawDetails) details = JSON.parse(rawDetails); } catch { /* */ }
+      try { if (rawDetails) details = JSON.parse(rawDetails); } catch (e) { /* */ }
 
       if (Array.isArray(details) && details.length > 0) {
         const hasVaryingWeight = new Set(details.map(s => s.weight)).size > 1;
         if (hasVaryingWeight) {
           // Show per-set weights compactly
-          setInfo = details.map(s => `${s.weight > 0 ? s.weight + 'kg' : '-'}`).join('/');
+          setInfo = details.map(s => `${s.weight > 0 ? '<span style="color:#28a745;font-weight:600">' + s.weight + 'kg</span>' : '-'}`).join('/');
           setInfo = `<span class="exercise-meta">${details.length}S ${details[0].reps}r [${setInfo}]</span>`;
         } else {
           const w = details[0].weight || weight;
-          setInfo = `<span class="exercise-meta">${details.length}x${details[0].reps}${w > 0 ? ' @' + w + 'kg' : ''}</span>`;
+          setInfo = `<span class="exercise-meta">${details.length}x${details[0].reps}${w > 0 ? ' @<span style="color:#28a745;font-weight:600">' + w + 'kg</span>' : ''}</span>`;
         }
       } else {
         const weightStr = weight > 0 ? ` @${weight}kg` : '';
-        setInfo = `<span class="exercise-meta">${sets}x${reps}${weightStr}</span>`;
+        setInfo = `<span class="exercise-meta">${sets}x${reps}${weight > 0 ? ' @<span style="color:#28a745;font-weight:600">' + weight + 'kg</span>' : ''}</span>`;
       }
 
-      return `<div class="exercise-line-compact">${name} ${setInfo}${mgTag}</div>`;
+      const ssGroup = e.supersetGroup || e.SupersetGroup || 0;
+      const ssIcon = ssGroup > 0 ? `<span style="color:#e67e22;font-weight:bold;font-size:10px;" title="Superset #${ssGroup}">&#8644;</span> ` : '';
+      return `<div class="exercise-line-compact">${ssIcon}${name} ${setInfo}${mgTag}</div>`;
     }).join('');
 
     html += `

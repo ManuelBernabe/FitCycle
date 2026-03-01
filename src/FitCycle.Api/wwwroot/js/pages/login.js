@@ -24,6 +24,15 @@ export function render() {
         <input id="login-username" class="form-input" type="text" placeholder="${t('Username')}" autocomplete="username">
         ${isRegister ? `<input id="login-email" class="form-input" type="email" placeholder="${t('Email')}" autocomplete="email">` : ''}
         <input id="login-password" class="form-input" type="password" placeholder="${t('Password')}" autocomplete="${isRegister ? 'new-password' : 'current-password'}">
+        ${isRegister ? `
+        <div id="pwd-requirements" style="font-size:12px;margin:-4px 0 8px;padding:6px 10px;background:#f9f9f9;border-radius:8px;">
+          <div id="pwd-len" style="color:#999;">&#9675; ${t('PwdMinLength')}</div>
+          <div id="pwd-upper" style="color:#999;">&#9675; ${t('PwdUppercase')}</div>
+          <div id="pwd-lower" style="color:#999;">&#9675; ${t('PwdLowercase')}</div>
+          <div id="pwd-digit" style="color:#999;">&#9675; ${t('PwdDigit')}</div>
+          <div id="pwd-special" style="color:#999;">&#9675; ${t('PwdSpecial')}</div>
+        </div>
+        ` : ''}
         <button id="login-submit" class="btn btn-primary btn-block btn-lg">${isRegister ? t('Register') : t('SignIn')}</button>
         <div id="login-loading" class="login-loading hidden">
           <div class="spinner"></div>
@@ -60,6 +69,23 @@ export function mount() {
     setLanguage(e.target.value);
     window.dispatchEvent(new Event('app-rerender'));
   });
+
+  // Live password strength feedback during registration
+  const pwdInput = document.getElementById('login-password');
+  if (pwdInput && sessionStorage.getItem('login_mode') === 'register') {
+    pwdInput.addEventListener('input', () => {
+      const v = pwdInput.value;
+      const check = (id, ok) => {
+        const el = document.getElementById(id);
+        if (el) { el.style.color = ok ? '#28a745' : '#999'; el.innerHTML = (ok ? '&#9679; ' : '&#9675; ') + el.textContent.replace(/^[●○]\s*/, ''); }
+      };
+      check('pwd-len', v.length >= 8);
+      check('pwd-upper', /[A-Z]/.test(v));
+      check('pwd-lower', /[a-z]/.test(v));
+      check('pwd-digit', /\d/.test(v));
+      check('pwd-special', /[^a-zA-Z0-9]/.test(v));
+    });
+  }
 }
 
 async function handleSubmit() {
@@ -72,6 +98,14 @@ async function handleSubmit() {
   const isRegister = (sessionStorage.getItem('login_mode') === 'register');
 
   if (!username || !password) return;
+
+  if (isRegister) {
+    if (password.length < 8 || !/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/\d/.test(password) || !/[^a-zA-Z0-9]/.test(password)) {
+      errorEl.textContent = t('PwdMinLength') + ', ' + t('PwdUppercase').toLowerCase() + ', ' + t('PwdLowercase').toLowerCase() + ', ' + t('PwdDigit').toLowerCase() + ', ' + t('PwdSpecial').toLowerCase();
+      errorEl.classList.remove('hidden');
+      return;
+    }
+  }
 
   errorEl?.classList.add('hidden');
   submitBtn.disabled = true;

@@ -3,6 +3,7 @@ using System;
 using FitCycle.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,74 +11,14 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace FitCycle.Infrastructure.Migrations
 {
     [DbContext(typeof(FitCycleDbContext))]
-    partial class FitCycleDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260301100256_AddSupersetGroup")]
+    partial class AddSupersetGroup
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "8.0.11");
-
-            modelBuilder.Entity("FitCycle.Core.Models.BodyMeasurement", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<decimal?>("BicepLeft")
-                        .HasColumnType("TEXT");
-
-                    b.Property<decimal?>("BicepRight")
-                        .HasColumnType("TEXT");
-
-                    b.Property<decimal?>("BodyFat")
-                        .HasColumnType("TEXT");
-
-                    b.Property<decimal?>("CalfLeft")
-                        .HasColumnType("TEXT");
-
-                    b.Property<decimal?>("CalfRight")
-                        .HasColumnType("TEXT");
-
-                    b.Property<decimal?>("Chest")
-                        .HasColumnType("TEXT");
-
-                    b.Property<decimal?>("Height")
-                        .HasColumnType("TEXT");
-
-                    b.Property<decimal?>("Hips")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("MeasuredAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<decimal?>("Neck")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Notes")
-                        .HasMaxLength(500)
-                        .HasColumnType("TEXT");
-
-                    b.Property<decimal?>("ThighLeft")
-                        .HasColumnType("TEXT");
-
-                    b.Property<decimal?>("ThighRight")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("UserId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<decimal?>("Waist")
-                        .HasColumnType("TEXT");
-
-                    b.Property<decimal?>("Weight")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId", "MeasuredAt");
-
-                    b.ToTable("BodyMeasurements");
-                });
 
             modelBuilder.Entity("FitCycle.Core.Models.Exercise", b =>
                 {

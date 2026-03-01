@@ -21,14 +21,6 @@
   <script>
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
   </script>
-  <script type="module">
-    import('/js/app.js').catch(function(err) {
-      var el = document.getElementById('app-status');
-      if (el) {
-        el.style.color = '#dc3545';
-        el.textContent = 'Error: ' + (err.message || err);
-      }
-    });
-  </script>
+  <script type="module" src="/js/app.js"></script>
 </body>
 </html>

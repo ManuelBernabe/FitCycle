@@ -14,4 +14,8 @@ public class RoutineExercise
     /// When empty, all sets use the same Reps/Weight values.
     /// </summary>
     public string SetDetails { get; set; } = string.Empty;
+    /// <summary>
+    /// Superset group number. Exercises with the same non-zero SupersetGroup are done back-to-back.
+    /// </summary>
+    public int SupersetGroup { get; set; }
 }

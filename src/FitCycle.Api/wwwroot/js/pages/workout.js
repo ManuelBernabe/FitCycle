@@ -41,11 +41,12 @@ export async function mount(params) {
       try {
         const raw = ex.setDetails || ex.SetDetails || '';
         setDetails = raw ? JSON.parse(raw) : null;
-      } catch { setDetails = null; }
+      } catch (e) { setDetails = null; }
       if (!Array.isArray(setDetails) || setDetails.length === 0) {
         setDetails = Array.from({ length: sets }, () => ({ reps, weight }));
       }
-      return { ...ex, setDetails };
+      const supersetGroup = ex.supersetGroup || ex.SupersetGroup || 0;
+      return { ...ex, setDetails, supersetGroup };
     });
 
     if (exercises.length === 0) {
@@ -95,6 +96,11 @@ function renderExercise() {
   const isLastExercise = currentIndex === exercises.length - 1;
   const isLastSet = currentSet >= totalSets - 1;
 
+  // Superset partner info
+  const ssGroup = ex.supersetGroup || 0;
+  const ssPartner = ssGroup > 0 ? exercises.find((e, i) => i !== currentIndex && (e.supersetGroup || 0) === ssGroup) : null;
+  const ssPartnerName = ssPartner ? (ssPartner.exerciseName || ssPartner.ExerciseName || ssPartner.name || '') : '';
+
   const setDots = ex.setDetails.map((s, i) => {
     const cls = i < currentSet ? 'done' : (i === currentSet ? 'current' : '');
     return `<div class="set-dot ${cls}" title="S${i + 1}: ${s.reps}r / ${s.weight}kg"></div>`;
@@ -124,12 +130,13 @@ function renderExercise() {
       <div class="card workout-exercise" style="text-align:center;padding:16px;">
         <div class="workout-exercise-image" style="margin-bottom:10px;">
           ${exImage
-            ? `<img src="${exImage}" alt="${exName}" style="max-height:180px;max-width:100%;object-fit:contain;border-radius:8px;" onerror="this.style.display='none'">`
+            ? `<img src="${exImage}" alt="${exName}" style="max-height:180px;max-width:100%;object-fit:contain;border-radius:8px;" onerror="this.onerror=null;this.parentElement.innerHTML='<div style=&quot;font-size:64px;opacity:0.3;&quot;>&#127947;</div>'">`
             : `<div style="font-size:64px;opacity:0.3;">&#127947;</div>`
           }
         </div>
         <div class="workout-exercise-name" style="font-size:22px;font-weight:bold;">${exName}</div>
         <div style="font-size:15px;color:gray;margin-top:4px;">${mgTranslate(exMuscle)}</div>
+        ${ssPartnerName ? `<div style="margin-top:6px;padding:4px 12px;background:#fff3e0;border-radius:8px;font-size:13px;color:#e67e22;font-weight:600;">&#8644; ${t('Superset')}: ${ssPartnerName}</div>` : ''}
 
         <div class="set-indicator" style="margin:12px 0;">${setDots}</div>
 
@@ -196,6 +203,36 @@ function renderExercise() {
     saveCurrentSetValues();
     stopTimer();
     const ex2 = exercises[currentIndex];
+    const ssGrp = ex2.supersetGroup || 0;
+
+    if (ssGrp > 0) {
+      // Superset logic: alternate between paired exercises
+      const partnerIdx = exercises.findIndex((e, i) => i !== currentIndex && (e.supersetGroup || 0) === ssGrp);
+      if (partnerIdx >= 0) {
+        const isFirstInPair = currentIndex < partnerIdx;
+        if (isFirstInPair) {
+          // After A's set → go to B's same set (no rest)
+          currentIndex = partnerIdx;
+          // currentSet stays the same
+          if (currentSet >= exercises[partnerIdx].setDetails.length) currentSet = exercises[partnerIdx].setDetails.length - 1;
+        } else {
+          // After B's set → go to A's next set (rest here)
+          currentIndex = partnerIdx;
+          currentSet++;
+          if (currentSet >= exercises[partnerIdx].setDetails.length) {
+            // All sets done for superset pair → move past both
+            const maxIdx = Math.max(currentIndex, partnerIdx);
+            currentIndex = maxIdx + 1;
+            currentSet = 0;
+            if (currentIndex < exercises.length) { renderExercise(); return; }
+          }
+        }
+        renderExercise();
+        return;
+      }
+    }
+
+    // Normal flow
     if (currentSet < ex2.setDetails.length - 1) { currentSet++; }
     else if (currentIndex < exercises.length - 1) { currentIndex++; currentSet = 0; }
     renderExercise();
@@ -259,7 +296,7 @@ function onTimerStartClicked() {
       if (pickerRow) pickerRow.style.display = '';
       const display = document.getElementById('timer-display');
       if (display) display.style.color = '#28a745';
-      try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch { /* */ }
+      try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch (e) { /* */ }
     }
   }, 1000);
 }
@@ -313,7 +350,7 @@ async function finishWorkout() {
       completedAt: completedAt.toISOString(),
       exercises: exerciseLogs,
     });
-  } catch { /* Don't block finish */ }
+  } catch (e) { /* Don't block finish */ }
 
   sessionStorage.setItem('workout_summary', JSON.stringify({
     day: dayNum,

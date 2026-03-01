@@ -159,14 +159,14 @@ export async function mount() {
           let setInfo = '';
           const rawDetails = log.setDetails || log.SetDetails || '';
           let details = null;
-          try { if (rawDetails) details = JSON.parse(rawDetails); } catch { /* */ }
+          try { if (rawDetails) details = JSON.parse(rawDetails); } catch (e) { /* */ }
           if (Array.isArray(details) && details.length > 0) {
-            setInfo = details.map((s, i) => `S${i + 1}: ${s.reps}r/${s.weight > 0 ? s.weight + 'kg' : '-'}`).join(' | ');
+            setInfo = details.map((s, i) => `S${i + 1}: ${s.reps}r/${s.weight > 0 ? '<span style="color:#28a745;font-weight:600">' + s.weight + 'kg</span>' : '-'}`).join(' | ');
           } else {
             const logSets = log.sets || log.Sets || 0;
             const logReps = log.reps || log.Reps || 0;
             const logWeight = log.weight || log.Weight || 0;
-            setInfo = `${logSets}x${logReps}${logWeight > 0 ? ` @ ${logWeight} ${t('WeightKg')}` : ''}`;
+            setInfo = `${logSets}x${logReps}${logWeight > 0 ? ' @ <span style="color:#28a745;font-weight:600">' + logWeight + ' ' + t('WeightKg') + '</span>' : ''}`;
           }
           return `<div style="margin-bottom:4px;">&bull; <b>${logName}</b> — ${setInfo}${logMg ? ` <span style="font-size:11px;color:#512BD4;">(${logMg})</span>` : ''}</div>`;
         }).join('');

@@ -9,7 +9,8 @@ let dayNum = 0;
 let allMuscleGroups = [];
 let allExercises = [];
 let groups = [];
-// Each exercise: { exerciseId, name, imageUrl, isSelected, sets, reps, weight, setDetails: [{reps, weight},...] }
+let supersetLinkMode = null; // { gi, ei } of the exercise waiting for a pair
+// Each exercise: { exerciseId, name, imageUrl, isSelected, sets, reps, weight, setDetails, supersetGroup, expanded }
 
 export function render(params) {
   dayNum = parseInt(params);
@@ -51,7 +52,7 @@ function parseSetDetails(raw) {
   try {
     const arr = typeof raw === 'string' ? JSON.parse(raw) : raw;
     if (Array.isArray(arr) && arr.length > 0) return arr;
-  } catch { /* ignore */ }
+  } catch (e) { /* ignore */ }
   return null;
 }
 
@@ -105,6 +106,7 @@ async function loadData() {
           const rawDetails = existing ? (existing.setDetails || existing.SetDetails || '') : '';
           const setDetails = parseSetDetails(rawDetails) || buildDefaultSets(sets, reps, weight);
 
+          const supersetGroup = existing ? (existing.supersetGroup || existing.SupersetGroup || 0) : 0;
           return {
             exerciseId: eId,
             name: e.name || e.Name,
@@ -114,7 +116,8 @@ async function loadData() {
             reps,
             weight,
             setDetails,
-            expanded: false, // UI toggle for multi-set view
+            supersetGroup,
+            expanded: false,
           };
         });
 
@@ -168,13 +171,11 @@ function buildExerciseRows(group, gi) {
   return group.exercises.map((ex, ei) => {
     const checkedAttr = ex.isSelected ? 'checked' : '';
     const imgHtml = ex.imageUrl
-      ? `<img src="${ex.imageUrl}" alt="" style="width:40px;height:40px;object-fit:cover;border-radius:4px;" onerror="this.style.display='none'">`
+      ? `<img src="${ex.imageUrl}" alt="" style="width:40px;height:40px;object-fit:cover;border-radius:4px;" onerror="this.onerror=null;this.parentElement.innerHTML='&#127947;&#65039;'">`
       : `<div style="width:40px;height:40px;background:#eee;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:18px;">&#127947;</div>`;
 
-    // Summary line for collapsed view
     const summaryText = ex.setDetails.map((s, i) => `S${i + 1}: ${s.reps}r/${s.weight > 0 ? s.weight + 'kg' : '-'}`).join(' | ');
 
-    // Per-set rows for expanded view
     const setRows = ex.setDetails.map((s, si) => `
       <div class="set-detail-row" style="display:flex;align-items:center;gap:6px;margin:3px 0;padding:3px 0;border-bottom:1px solid #f0f0f0;">
         <span style="font-size:12px;color:#512BD4;font-weight:600;min-width:36px;">S${si + 1}</span>
@@ -191,12 +192,32 @@ function buildExerciseRows(group, gi) {
       </div>
     `).join('');
 
+    // Superset indicator
+    const isInSuperset = ex.supersetGroup > 0;
+    const isLinkSource = supersetLinkMode && supersetLinkMode.gi === gi && supersetLinkMode.ei === ei;
+    const isLinkTarget = supersetLinkMode && !(supersetLinkMode.gi === gi && supersetLinkMode.ei === ei) && ex.isSelected;
+    const supersetBorder = isInSuperset ? 'border-left:3px solid #e67e22;' : '';
+    const supersetLabel = isInSuperset ? `<div style="font-size:10px;color:#e67e22;font-weight:600;margin-left:52px;">&#8644; ${t('Superset')} #${ex.supersetGroup}</div>` : '';
+
+    // Superset button
+    let supersetBtn = '';
+    if (ex.isSelected && !isLinkSource) {
+      if (isInSuperset) {
+        supersetBtn = `<button class="btn-unlink-superset" data-gi="${gi}" data-ei="${ei}" style="background:none;border:1px solid #e67e22;color:#e67e22;border-radius:6px;padding:2px 6px;font-size:10px;cursor:pointer;" title="${t('UnlinkSuperset')}">&#8644;</button>`;
+      } else if (isLinkTarget) {
+        supersetBtn = `<button class="btn-link-target" data-gi="${gi}" data-ei="${ei}" style="background:#e67e22;color:#fff;border:none;border-radius:6px;padding:2px 6px;font-size:10px;cursor:pointer;animation:pulse 1s infinite;">${t('LinkSuperset')}</button>`;
+      } else {
+        supersetBtn = `<button class="btn-link-superset" data-gi="${gi}" data-ei="${ei}" style="background:none;border:1px solid #ccc;color:#999;border-radius:6px;padding:2px 6px;font-size:10px;cursor:pointer;" title="${t('LinkSuperset')}">&#8644;</button>`;
+      }
+    }
+
     return `
-      <div class="exercise-row" style="margin-bottom:10px;border:1px solid #eee;border-radius:8px;padding:8px;">
+      <div class="exercise-row" style="margin-bottom:10px;border:1px solid ${isLinkTarget ? '#e67e22' : '#eee'};border-radius:8px;padding:8px;${supersetBorder}">
         <div style="display:flex;align-items:center;gap:6px;">
           <input type="checkbox" class="ex-check" data-gi="${gi}" data-ei="${ei}" ${checkedAttr}>
           <div class="exercise-img">${imgHtml}</div>
           <span class="ex-name" style="font-size:13px;flex:1;min-width:60px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${ex.name}</span>
+          ${supersetBtn}
           <button class="btn-toggle-sets" data-gi="${gi}" data-ei="${ei}"
             style="background:${ex.expanded ? '#512BD4' : '#e0e0e0'};color:${ex.expanded ? '#fff' : '#333'};border:none;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;white-space:nowrap;">
             ${ex.setDetails.length}S
@@ -204,6 +225,7 @@ function buildExerciseRows(group, gi) {
           <button class="btn btn-xs btn-save-ex" data-gi="${gi}" data-ei="${ei}" style="background:#28a745;color:#fff;border:none;border-radius:6px;padding:2px 8px;font-size:14px;cursor:pointer;min-width:34px;" title="${t('Save')}">&#10003;</button>
           <button class="btn btn-xs btn-delete-ex" data-gi="${gi}" data-ei="${ei}" style="background:#dc3545;color:#fff;border:none;border-radius:6px;padding:2px 8px;font-size:14px;cursor:pointer;min-width:34px;" title="${t('Delete')}">&#10005;</button>
         </div>
+        ${supersetLabel}
         ${!ex.expanded ? `
           <div style="margin-left:52px;margin-top:4px;font-size:12px;color:#666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
             ${summaryText}
@@ -306,6 +328,55 @@ function attachEvents(container) {
     });
   });
 
+  // Superset link: initiate
+  container.querySelectorAll('.btn-link-superset').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const gi = parseInt(btn.dataset.gi);
+      const ei = parseInt(btn.dataset.ei);
+      supersetLinkMode = { gi, ei };
+      buildUI();
+    });
+  });
+
+  // Superset link: select target
+  container.querySelectorAll('.btn-link-target').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (!supersetLinkMode) return;
+      const gi2 = parseInt(btn.dataset.gi);
+      const ei2 = parseInt(btn.dataset.ei);
+      const sourceEx = groups[supersetLinkMode.gi].exercises[supersetLinkMode.ei];
+      const targetEx = groups[gi2].exercises[ei2];
+      // Find next available superset group number
+      let maxGroup = 0;
+      groups.forEach(g => g.exercises.forEach(e => { if (e.supersetGroup > maxGroup) maxGroup = e.supersetGroup; }));
+      const newGroup = maxGroup + 1;
+      sourceEx.supersetGroup = newGroup;
+      targetEx.supersetGroup = newGroup;
+      supersetLinkMode = null;
+      buildUI();
+    });
+  });
+
+  // Superset unlink
+  container.querySelectorAll('.btn-unlink-superset').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const gi = parseInt(btn.dataset.gi);
+      const ei = parseInt(btn.dataset.ei);
+      const ex = groups[gi].exercises[ei];
+      const oldGroup = ex.supersetGroup;
+      ex.supersetGroup = 0;
+      // If the pair is now alone, unlink it too
+      groups.forEach(g => g.exercises.forEach(e => {
+        if (e.supersetGroup === oldGroup) {
+          const count = groups.reduce((acc, g2) => acc + g2.exercises.filter(e2 => e2.supersetGroup === oldGroup).length, 0);
+          if (count <= 1) e.supersetGroup = 0;
+        }
+      }));
+      supersetLinkMode = null;
+      buildUI();
+    });
+  });
+
   // Save buttons (per exercise)
   container.querySelectorAll('.btn-save-ex').forEach(btn => {
     btn.addEventListener('click', () => doSave());
@@ -371,6 +442,7 @@ async function doSave() {
         reps: ex.setDetails.length > 0 ? ex.setDetails[0].reps : ex.reps,
         weight: Math.max(...ex.setDetails.map(s => s.weight), 0),
         setDetails: JSON.stringify(ex.setDetails),
+        supersetGroup: ex.supersetGroup || 0,
       }));
 
     await api.put(`/routines/${dayNum}`, {
@@ -406,7 +478,7 @@ function showSuggestionModal(group, displayName, suggestions) {
   const suggestionItems = suggestions.map((s, i) => `
     <div class="exercise-row" style="cursor:pointer;padding:8px;" data-idx="${i}">
       <div class="exercise-img">
-        ${s.imageUrl ? `<img src="${s.imageUrl}" alt="" style="width:40px;height:40px;object-fit:cover;border-radius:4px;" onerror="this.style.display='none'">` : '&#127947;'}
+        ${s.imageUrl ? `<img src="${s.imageUrl}" alt="" style="width:40px;height:40px;object-fit:cover;border-radius:4px;" onerror="this.onerror=null;this.parentElement.innerHTML='&#127947;&#65039;'">` : '&#127947;'}
       </div>
       <div class="exercise-info">
         <div class="exercise-name">${s.name}</div>
@@ -488,6 +560,7 @@ async function createAndAddExercise(group, name, imageUrl) {
       reps: 12,
       weight: 0,
       setDetails: buildDefaultSets(3, 12, 0),
+      supersetGroup: 0,
       expanded: false,
     });
 

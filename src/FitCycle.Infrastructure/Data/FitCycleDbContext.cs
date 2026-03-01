@@ -15,6 +15,7 @@ public class FitCycleDbContext : DbContext
     public DbSet<User> Users => Set<User>();
     public DbSet<WorkoutSession> WorkoutSessions => Set<WorkoutSession>();
     public DbSet<WorkoutExerciseLog> WorkoutExerciseLogs => Set<WorkoutExerciseLog>();
+    public DbSet<BodyMeasurement> BodyMeasurements => Set<BodyMeasurement>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -66,6 +67,14 @@ public class FitCycleDbContext : DbContext
             e.HasKey(l => l.Id);
             e.Property(l => l.ExerciseName).HasMaxLength(200);
             e.Property(l => l.MuscleGroupName).HasMaxLength(100);
+        });
+
+        // BodyMeasurement
+        modelBuilder.Entity<BodyMeasurement>(e =>
+        {
+            e.HasKey(b => b.Id);
+            e.HasIndex(b => new { b.UserId, b.MeasuredAt });
+            e.Property(b => b.Notes).HasMaxLength(500);
         });
 
         // User

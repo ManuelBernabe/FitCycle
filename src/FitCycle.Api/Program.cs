@@ -26,6 +26,11 @@ var jwtSettings = builder.Configuration.GetSection("Jwt").Get<JwtSettings>() ?? 
 builder.Services.AddSingleton(jwtSettings);
 builder.Services.AddScoped<IAuthService, AuthService>();
 
+// Email
+var emailSettings = builder.Configuration.GetSection("Email").Get<EmailSettings>() ?? new EmailSettings();
+builder.Services.AddSingleton(emailSettings);
+builder.Services.AddScoped<IEmailService, EmailService>();
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -100,11 +105,19 @@ app.MapGet("/version", () =>
 .AllowAnonymous();
 
 // -- Autenticación --
-app.MapPost("/auth/register", async (RegisterRequest request, IAuthService auth) =>
+app.MapPost("/auth/register", async (RegisterRequest request, IAuthService auth, IEmailService emailService, ILogger<Program> logger) =>
 {
     try
     {
         var result = await auth.RegisterAsync(request);
+
+        // Fire-and-forget welcome email
+        _ = Task.Run(async () =>
+        {
+            try { await emailService.SendWelcomeEmailAsync(request.Email, request.Username); }
+            catch (Exception ex) { logger.LogError(ex, "Failed to send welcome email to {Email}", request.Email); }
+        });
+
         return Results.Ok(result);
     }
     catch (ArgumentException ex)
@@ -451,6 +464,64 @@ app.MapGet("/workouts/exercise/{exerciseId}/progress", (int exerciseId, FitCycle
 .WithOpenApi()
 .RequireAuthorization();
 
+// -- Medidas corporales --
+app.MapGet("/measurements", (FitCycleDbContext db, ClaimsPrincipal user) =>
+{
+    var userId = int.Parse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+    var measurements = db.BodyMeasurements
+        .Where(m => m.UserId == userId)
+        .OrderByDescending(m => m.MeasuredAt)
+        .Take(50)
+        .ToList();
+    return Results.Ok(measurements);
+})
+.WithName("GetMeasurements")
+.WithOpenApi()
+.RequireAuthorization();
+
+app.MapPost("/measurements", (SaveMeasurementRequest request, FitCycleDbContext db, ClaimsPrincipal user) =>
+{
+    var userId = int.Parse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+    var measurement = new BodyMeasurement
+    {
+        UserId = userId,
+        MeasuredAt = request.MeasuredAt ?? DateTime.UtcNow,
+        Weight = request.Weight,
+        Height = request.Height,
+        Chest = request.Chest,
+        Waist = request.Waist,
+        Hips = request.Hips,
+        BicepLeft = request.BicepLeft,
+        BicepRight = request.BicepRight,
+        ThighLeft = request.ThighLeft,
+        ThighRight = request.ThighRight,
+        CalfLeft = request.CalfLeft,
+        CalfRight = request.CalfRight,
+        Neck = request.Neck,
+        BodyFat = request.BodyFat,
+        Notes = request.Notes
+    };
+    db.BodyMeasurements.Add(measurement);
+    db.SaveChanges();
+    return Results.Created($"/measurements/{measurement.Id}", measurement);
+})
+.WithName("SaveMeasurement")
+.WithOpenApi()
+.RequireAuthorization();
+
+app.MapDelete("/measurements/{id}", (int id, FitCycleDbContext db, ClaimsPrincipal user) =>
+{
+    var userId = int.Parse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+    var measurement = db.BodyMeasurements.FirstOrDefault(m => m.Id == id && m.UserId == userId);
+    if (measurement is null) return Results.NotFound();
+    db.BodyMeasurements.Remove(measurement);
+    db.SaveChanges();
+    return Results.Ok(new { message = "Medida eliminada." });
+})
+.WithName("DeleteMeasurement")
+.WithOpenApi()
+.RequireAuthorization();
+
 app.MapFallbackToFile("index.html");
 
 app.Run();
@@ -460,3 +531,11 @@ record ExerciseInput(int ExerciseId, int Sets, int Reps);
 record UpdateDayRoutineRequest(List<int> MuscleGroupIds, List<RoutineExerciseInput>? Exercises);
 record SaveWorkoutExerciseInput(int ExerciseId, string ExerciseName, int Sets, int Reps, decimal Weight, string MuscleGroupName, string SetDetails = "");
 record SaveWorkoutRequest(DayOfWeek Day, DateTime StartedAt, DateTime CompletedAt, List<SaveWorkoutExerciseInput> Exercises);
+record SaveMeasurementRequest(
+    DateTime? MeasuredAt = null,
+    decimal? Weight = null, decimal? Height = null,
+    decimal? Chest = null, decimal? Waist = null, decimal? Hips = null,
+    decimal? BicepLeft = null, decimal? BicepRight = null,
+    decimal? ThighLeft = null, decimal? ThighRight = null,
+    decimal? CalfLeft = null, decimal? CalfRight = null,
+    decimal? Neck = null, decimal? BodyFat = null, string? Notes = null);

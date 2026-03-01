@@ -11,6 +11,7 @@ import * as workoutPage from './pages/workout.js';
 import * as summaryPage from './pages/summary.js';
 import * as statsPage from './pages/stats.js';
 import * as accountPage from './pages/account.js';
+import * as measurementsPage from './pages/measurements.js';
 
 // ─── Init ───────────────────────────────────────────────────────────
 l10nInit();
@@ -25,7 +26,8 @@ const routes = {
   editday:  { mod: editdayPage,  header: true,  tabs: false },
   workout:  { mod: workoutPage,  header: true,  tabs: false },
   summary:  { mod: summaryPage,  header: true,  tabs: false },
-  account:  { mod: accountPage,  header: true,  tabs: false },
+  account:      { mod: accountPage,      header: true,  tabs: false },
+  measurements: { mod: measurementsPage, header: true,  tabs: true },
 };
 
 // ─── Router ─────────────────────────────────────────────────────────
@@ -87,6 +89,7 @@ function renderShell(route, routeName, params) {
   if (route.tabs) {
     const isRoutines = routeName === 'routines';
     const isStats = routeName === 'stats';
+    const isMeas = routeName === 'measurements';
 
     html += `
       <div class="tab-bar">
@@ -97,6 +100,10 @@ function renderShell(route, routeName, params) {
         <button class="tab ${isStats ? 'active' : ''}" data-tab="stats">
           <span class="tab-icon">&#128200;</span>
           <span>${t('TabStats')}</span>
+        </button>
+        <button class="tab ${isMeas ? 'active' : ''}" data-tab="measurements">
+          <span class="tab-icon">&#128207;</span>
+          <span>${t('TabMeasurements')}</span>
         </button>
       </div>
     `;

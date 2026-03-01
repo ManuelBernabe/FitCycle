@@ -153,6 +153,42 @@ const Strings = {
   DeleteUserBtn:       { es: 'Eliminar',                                  en: 'Delete',                                  fr: 'Supprimer' },
   BackToRoutinesBtn:   { es: '← Volver a Rutinas',                       en: '← Back to Routines',                     fr: '← Retour aux routines' },
 
+  // === Superset ===
+  Superset:       { es: 'Superserie',                       en: 'Superset',                  fr: 'Superserie' },
+  LinkSuperset:   { es: 'Vincular superserie',              en: 'Link superset',             fr: 'Lier superserie' },
+  UnlinkSuperset: { es: 'Desvincular',                      en: 'Unlink',                    fr: 'Délier' },
+  SelectPair:     { es: 'Selecciona el ejercicio pareja',   en: 'Select pair exercise',      fr: "Sélectionner l'exercice partenaire" },
+
+  // === Password ===
+  PwdMinLength:  { es: 'Mínimo 8 caracteres',             en: 'At least 8 characters',           fr: 'Au moins 8 caractères' },
+  PwdUppercase:  { es: 'Una letra mayúscula',              en: 'One uppercase letter',            fr: 'Une lettre majuscule' },
+  PwdLowercase:  { es: 'Una letra minúscula',              en: 'One lowercase letter',            fr: 'Une lettre minuscule' },
+  PwdDigit:      { es: 'Un dígito',                        en: 'One digit',                       fr: 'Un chiffre' },
+  PwdSpecial:    { es: 'Un carácter especial',             en: 'One special character',           fr: 'Un caractère spécial' },
+
+  // === Measurements ===
+  TabMeasurements:  { es: 'Medidas',                    en: 'Measurements',       fr: 'Mesures' },
+  MyMeasurements:   { es: 'Mis Medidas',                en: 'My Measurements',    fr: 'Mes Mesures' },
+  AddMeasurement:   { es: 'Registrar medida',           en: 'Add measurement',    fr: 'Ajouter mesure' },
+  MeasWeight:       { es: 'Peso (kg)',                   en: 'Weight (kg)',         fr: 'Poids (kg)' },
+  MeasHeight:       { es: 'Altura (cm)',                 en: 'Height (cm)',         fr: 'Taille (cm)' },
+  MeasChest:        { es: 'Pecho (cm)',                  en: 'Chest (cm)',          fr: 'Poitrine (cm)' },
+  MeasWaist:        { es: 'Cintura (cm)',                en: 'Waist (cm)',          fr: 'Taille (cm)' },
+  MeasHips:         { es: 'Cadera (cm)',                 en: 'Hips (cm)',           fr: 'Hanches (cm)' },
+  MeasBicepL:       { es: 'Bíceps izq (cm)',             en: 'Bicep L (cm)',        fr: 'Biceps G (cm)' },
+  MeasBicepR:       { es: 'Bíceps der (cm)',             en: 'Bicep R (cm)',        fr: 'Biceps D (cm)' },
+  MeasThighL:       { es: 'Muslo izq (cm)',              en: 'Thigh L (cm)',        fr: 'Cuisse G (cm)' },
+  MeasThighR:       { es: 'Muslo der (cm)',              en: 'Thigh R (cm)',        fr: 'Cuisse D (cm)' },
+  MeasCalfL:        { es: 'Gemelo izq (cm)',             en: 'Calf L (cm)',         fr: 'Mollet G (cm)' },
+  MeasCalfR:        { es: 'Gemelo der (cm)',             en: 'Calf R (cm)',         fr: 'Mollet D (cm)' },
+  MeasNeck:         { es: 'Cuello (cm)',                 en: 'Neck (cm)',           fr: 'Cou (cm)' },
+  MeasBodyFat:      { es: 'Grasa corporal (%)',          en: 'Body fat (%)',        fr: 'Graisse (%)',  },
+  MeasNotes:        { es: 'Notas',                       en: 'Notes',               fr: 'Notes' },
+  NoMeasurements:   { es: 'Sin medidas registradas',     en: 'No measurements yet', fr: 'Aucune mesure' },
+  MeasHistory:      { es: 'Historial de medidas',        en: 'Measurement history', fr: 'Historique des mesures' },
+  MeasSaved:        { es: 'Medida guardada',             en: 'Measurement saved',   fr: 'Mesure enregistrée' },
+  ConfirmDeleteMeas:{ es: '¿Eliminar esta medida?',      en: 'Delete this measurement?', fr: 'Supprimer cette mesure ?' },
+
   // === Auto-update ===
   AppUpdated:    { es: 'Aplicación actualizada',                                  en: 'App Updated',                                            fr: 'Application mise à jour' },
   AppUpdatedMsg: { es: 'Hay una nueva versión disponible. ¿Reiniciar ahora?',     en: 'A new version is available. Restart now?',                fr: 'Une nouvelle version est disponible. Redémarrer maintenant ?' },
