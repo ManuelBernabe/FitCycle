@@ -4,20 +4,23 @@ import { t } from '../l10n.js';
 import { api } from '../api.js';
 
 const FIELDS = [
-  { key: 'weight', label: 'MeasWeight', step: '0.1' },
-  { key: 'height', label: 'MeasHeight', step: '0.1' },
-  { key: 'chest', label: 'MeasChest', step: '0.1' },
-  { key: 'waist', label: 'MeasWaist', step: '0.1' },
-  { key: 'hips', label: 'MeasHips', step: '0.1' },
-  { key: 'bicepLeft', label: 'MeasBicepL', step: '0.1' },
-  { key: 'bicepRight', label: 'MeasBicepR', step: '0.1' },
-  { key: 'thighLeft', label: 'MeasThighL', step: '0.1' },
-  { key: 'thighRight', label: 'MeasThighR', step: '0.1' },
-  { key: 'calfLeft', label: 'MeasCalfL', step: '0.1' },
-  { key: 'calfRight', label: 'MeasCalfR', step: '0.1' },
-  { key: 'neck', label: 'MeasNeck', step: '0.1' },
-  { key: 'bodyFat', label: 'MeasBodyFat', step: '0.1' },
+  { key: 'weight', label: 'MeasWeight', step: '0.1', unit: 'kg' },
+  { key: 'height', label: 'MeasHeight', step: '0.1', unit: 'cm' },
+  { key: 'chest', label: 'MeasChest', step: '0.1', unit: 'cm' },
+  { key: 'waist', label: 'MeasWaist', step: '0.1', unit: 'cm' },
+  { key: 'hips', label: 'MeasHips', step: '0.1', unit: 'cm' },
+  { key: 'bicepLeft', label: 'MeasBicepL', step: '0.1', unit: 'cm' },
+  { key: 'bicepRight', label: 'MeasBicepR', step: '0.1', unit: 'cm' },
+  { key: 'thighLeft', label: 'MeasThighL', step: '0.1', unit: 'cm' },
+  { key: 'thighRight', label: 'MeasThighR', step: '0.1', unit: 'cm' },
+  { key: 'calfLeft', label: 'MeasCalfL', step: '0.1', unit: 'cm' },
+  { key: 'calfRight', label: 'MeasCalfR', step: '0.1', unit: 'cm' },
+  { key: 'neck', label: 'MeasNeck', step: '0.1', unit: 'cm' },
+  { key: 'bodyFat', label: 'MeasBodyFat', step: '0.1', unit: '%' },
 ];
+
+// Which fields are visible in the form
+let activeFields = ['weight'];
 
 export function render() {
   return `
@@ -38,6 +41,12 @@ export async function mount() {
 
   try {
     const measurements = await api.get('/measurements');
+    // Auto-detect active fields from last measurement
+    if (measurements && measurements.length > 0) {
+      const last = measurements[0];
+      const detected = FIELDS.filter(f => last[f.key] != null && last[f.key] > 0).map(f => f.key);
+      if (detected.length > 0) activeFields = detected;
+    }
     renderContent(container, measurements || []);
   } catch (err) {
     container.innerHTML = `<div class="empty-state"><div class="empty-state-text">${t('ErrorFmt', err.message)}</div></div>`;
@@ -47,18 +56,32 @@ export async function mount() {
 function renderContent(container, measurements) {
   let html = '';
 
-  // Add new measurement form
+  // Field selector dropdown
+  const fieldOptions = FIELDS.map(f =>
+    `<option value="${f.key}" ${activeFields.includes(f.key) ? 'selected' : ''}>${t(f.label)}</option>`
+  ).join('');
+
+  // Active field inputs
+  const fieldInputs = FIELDS.filter(f => activeFields.includes(f.key)).map(f => `
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+      <label style="font-size:13px;color:#333;min-width:100px;font-weight:500;">${t(f.label)}</label>
+      <input type="number" id="meas-${f.key}" class="form-input" placeholder="0" step="${f.step}" min="0"
+        style="font-size:14px;padding:6px 8px;flex:1;">
+      <span style="font-size:12px;color:#999;min-width:24px;">${f.unit}</span>
+    </div>
+  `).join('');
+
   html += `
     <div class="card mb-8">
       <div class="card-title mb-8">${t('AddMeasurement')}</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-        ${FIELDS.map(f => `
-          <div>
-            <label style="font-size:11px;color:#666;">${t(f.label)}</label>
-            <input type="number" id="meas-${f.key}" class="form-input" placeholder="—" step="${f.step}" min="0"
-              style="font-size:14px;padding:6px 8px;">
-          </div>
-        `).join('')}
+      <div style="margin-bottom:10px;">
+        <label style="font-size:11px;color:#666;display:block;margin-bottom:4px;">${t('MeasSelectFields')}</label>
+        <select id="meas-field-select" multiple size="4" style="width:100%;font-size:13px;padding:4px;border:1px solid #ccc;border-radius:8px;">
+          ${fieldOptions}
+        </select>
+      </div>
+      <div id="meas-fields">
+        ${fieldInputs}
       </div>
       <div style="margin-top:8px;">
         <label style="font-size:11px;color:#666;">${t('MeasNotes')}</label>
@@ -77,23 +100,21 @@ function renderContent(container, measurements) {
     html += measurements.map(m => {
       const date = new Date(m.measuredAt || m.MeasuredAt).toLocaleDateString();
       const values = [];
-      if (m.weight) values.push(`${m.weight}kg`);
-      if (m.chest) values.push(`${t('MeasChest').split(' ')[0]}: ${m.chest}`);
-      if (m.waist) values.push(`${t('MeasWaist').split(' ')[0]}: ${m.waist}`);
-      if (m.hips) values.push(`${t('MeasHips').split(' ')[0]}: ${m.hips}`);
-      if (m.bicepLeft || m.bicepRight) values.push(`Biceps: ${m.bicepLeft || '-'}/${m.bicepRight || '-'}`);
-      if (m.bodyFat) values.push(`${m.bodyFat}%`);
+      FIELDS.forEach(f => {
+        const v = m[f.key];
+        if (v != null && v > 0) values.push(`${t(f.label).split(' ')[0]}: ${v}${f.unit}`);
+      });
       const summary = values.length > 0 ? values.join(' | ') : '—';
 
       return `
-        <div class="exercise-row" style="cursor:pointer;" data-meas-id="${m.id || m.Id}">
-          <div class="exercise-info" style="flex:1;">
-            <div class="exercise-name">${date}</div>
-            <div class="exercise-detail" style="font-size:12px;color:#666;">${summary}</div>
-            ${m.notes ? `<div style="font-size:11px;color:#999;margin-top:2px;">${m.notes}</div>` : ''}
+        <div class="exercise-row" style="padding:8px 0;border-bottom:1px solid #f0f0f0;">
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:600;font-size:14px;">${date}</div>
+            <div style="font-size:12px;color:#666;margin-top:2px;overflow-wrap:break-word;">${summary}</div>
+            ${m.notes ? `<div style="font-size:11px;color:#999;margin-top:2px;font-style:italic;">${m.notes}</div>` : ''}
           </div>
           <button class="btn-delete-meas" data-meas-id="${m.id || m.Id}"
-            style="background:none;border:none;color:#dc3545;font-size:16px;cursor:pointer;padding:4px 8px;">&#10005;</button>
+            style="background:none;border:none;color:#dc3545;font-size:16px;cursor:pointer;padding:4px 8px;flex-shrink:0;">&#10005;</button>
         </div>
       `;
     }).join('');
@@ -110,6 +131,14 @@ function renderContent(container, measurements) {
       if (el && last[f.key]) el.value = last[f.key];
     });
   }
+
+  // Field selector change
+  document.getElementById('meas-field-select')?.addEventListener('change', (e) => {
+    const select = e.target;
+    activeFields = Array.from(select.selectedOptions).map(o => o.value);
+    if (activeFields.length === 0) activeFields = ['weight'];
+    renderContent(container, measurements);
+  });
 
   // Save handler
   document.getElementById('meas-save')?.addEventListener('click', async () => {

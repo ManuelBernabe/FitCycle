@@ -187,6 +187,7 @@ const Strings = {
   MeasNotes:        { es: 'Notas',                       en: 'Notes',               fr: 'Notes' },
   NoMeasurements:   { es: 'Sin medidas registradas',     en: 'No measurements yet', fr: 'Aucune mesure' },
   MeasHistory:      { es: 'Historial de medidas',        en: 'Measurement history', fr: 'Historique des mesures' },
+  MeasSelectFields: { es: 'Campos a registrar',           en: 'Fields to record',    fr: 'Champs à enregistrer' },
   MeasSaved:        { es: 'Medida guardada',             en: 'Measurement saved',   fr: 'Mesure enregistrée' },
   ConfirmDeleteMeas:{ es: '¿Eliminar esta medida?',      en: 'Delete this measurement?', fr: 'Supprimer cette mesure ?' },
 

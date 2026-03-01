@@ -167,7 +167,7 @@ function buildUI() {
 }
 
 function buildExerciseRows(group, gi) {
-  return group.exercises.map((ex, ei) => {
+  try { return group.exercises.map((ex, ei) => {
     const checkedAttr = ex.isSelected ? 'checked' : '';
     const imgHtml = ex.imageUrl
       ? `<img src="${ex.imageUrl}" alt="" style="width:40px;height:40px;object-fit:cover;border-radius:4px;" onerror="this.onerror=null;this.parentElement.innerHTML='&#127947;&#65039;'">`
@@ -215,25 +215,23 @@ function buildExerciseRows(group, gi) {
     }
 
     return `
-      <div class="exercise-row" style="margin-bottom:10px;border:1px solid #eee;border-radius:8px;padding:8px;${supersetBorder}">
+      <div class="exercise-row" style="margin-bottom:10px;border:1px solid #eee;border-radius:8px;padding:8px;overflow:hidden;${supersetBorder}">
         <div style="display:flex;align-items:center;gap:6px;">
           <input type="checkbox" class="ex-check" data-gi="${gi}" data-ei="${ei}" ${checkedAttr}>
           <div class="exercise-img">${imgHtml}</div>
-          <span class="ex-name" style="font-size:13px;flex:1;min-width:60px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${ex.name}</span>
-          ${supersetBtn}
-          <button class="btn-toggle-sets" data-gi="${gi}" data-ei="${ei}"
-            style="background:${ex.expanded ? '#512BD4' : '#e0e0e0'};color:${ex.expanded ? '#fff' : '#333'};border:none;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;white-space:nowrap;">
-            ${ex.setDetails.length}S
-          </button>
-          <button class="btn btn-xs btn-save-ex" data-gi="${gi}" data-ei="${ei}" style="background:#28a745;color:#fff;border:none;border-radius:6px;padding:2px 8px;font-size:14px;cursor:pointer;min-width:34px;" title="${t('Save')}">&#10003;</button>
-          <button class="btn btn-xs btn-delete-ex" data-gi="${gi}" data-ei="${ei}" style="background:#dc3545;color:#fff;border:none;border-radius:6px;padding:2px 8px;font-size:14px;cursor:pointer;min-width:34px;" title="${t('Delete')}">&#10005;</button>
+          <span style="font-size:13px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${ex.name}</span>
         </div>
         ${supersetLabel}
-        ${!ex.expanded ? `
-          <div style="margin-left:52px;margin-top:4px;font-size:12px;color:#666;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-            ${summaryText}
-          </div>
-        ` : `
+        <div style="display:flex;align-items:center;gap:4px;margin-top:6px;margin-left:52px;flex-wrap:wrap;">
+          <button class="btn-toggle-sets" data-gi="${gi}" data-ei="${ei}"
+            style="background:${ex.expanded ? '#512BD4' : '#e0e0e0'};color:${ex.expanded ? '#fff' : '#333'};border:none;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;">
+            ${ex.setDetails.length}S
+          </button>
+          <span style="font-size:12px;color:#666;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${summaryText}</span>
+          ${supersetBtn}
+          <button class="btn btn-xs btn-delete-ex" data-gi="${gi}" data-ei="${ei}" style="background:#dc3545;color:#fff;border:none;border-radius:6px;padding:2px 8px;font-size:14px;cursor:pointer;" title="${t('Delete')}">&#10005;</button>
+        </div>
+        ${ex.expanded ? `
           <div style="margin-left:10px;margin-top:6px;">
             ${setRows}
             <button class="btn-add-set" data-gi="${gi}" data-ei="${ei}"
@@ -241,10 +239,11 @@ function buildExerciseRows(group, gi) {
               + ${t('AddSet')}
             </button>
           </div>
-        `}
+        ` : ''}
       </div>
     `;
   }).join('');
+  } catch (err) { console.error('buildExerciseRows error:', err); return ''; }
 }
 
 function showSupersetModal(sourceGi, sourceEi) {
@@ -424,11 +423,6 @@ function attachEvents(container) {
       }));
       buildUI();
     });
-  });
-
-  // Save buttons (per exercise)
-  container.querySelectorAll('.btn-save-ex').forEach(btn => {
-    btn.addEventListener('click', () => doSave());
   });
 
   // Delete exercise buttons
