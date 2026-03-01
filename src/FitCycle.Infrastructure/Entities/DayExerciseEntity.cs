@@ -13,5 +13,6 @@ public class DayExerciseEntity
     public decimal Weight { get; set; }
     public string SetDetails { get; set; } = string.Empty;
     public int SupersetGroup { get; set; }
+    public string Notes { get; set; } = string.Empty;
     public Exercise? Exercise { get; set; }
 }

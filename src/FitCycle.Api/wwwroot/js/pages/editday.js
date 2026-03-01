@@ -50,13 +50,23 @@ function parseSetDetails(raw) {
   if (!raw) return null;
   try {
     const arr = typeof raw === 'string' ? JSON.parse(raw) : raw;
-    if (Array.isArray(arr) && arr.length > 0) return arr;
+    if (Array.isArray(arr) && arr.length > 0) return normalizeSetDetails(arr);
   } catch (e) { /* ignore */ }
   return null;
 }
 
 function buildDefaultSets(count, reps, weight) {
-  return Array.from({ length: count }, () => ({ reps, weight }));
+  return Array.from({ length: count }, () => ({ reps, weight, tempoPos: 0, tempoNeg: 0, grip: '' }));
+}
+
+function normalizeSetDetails(arr) {
+  return arr.map(s => ({
+    reps: s.reps || 12,
+    weight: s.weight || 0,
+    tempoPos: s.tempoPos || 0,
+    tempoNeg: s.tempoNeg || 0,
+    grip: s.grip || '',
+  }));
 }
 
 // ── Data Loading ──
@@ -106,6 +116,7 @@ async function loadData() {
           const setDetails = parseSetDetails(rawDetails) || buildDefaultSets(sets, reps, weight);
 
           const supersetGroup = existing ? (existing.supersetGroup || existing.SupersetGroup || 0) : 0;
+          const notes = existing ? (existing.notes || existing.Notes || '') : '';
           return {
             exerciseId: eId,
             name: e.name || e.Name,
@@ -116,6 +127,7 @@ async function loadData() {
             weight,
             setDetails,
             supersetGroup,
+            notes,
             expanded: false,
           };
         });
@@ -185,6 +197,15 @@ function buildExerciseRows(group, gi) {
         <select class="picker-select set-weight-picker" data-gi="${gi}" data-ei="${ei}" data-si="${si}" style="width:56px;font-size:12px;padding:2px;">
           ${buildWeightOptions(s.weight)}
         </select><span style="font-size:10px;color:gray;">kg</span>
+        <span style="font-size:10px;color:gray;">↑</span><select class="picker-select set-tempo-pos" data-gi="${gi}" data-ei="${ei}" data-si="${si}" style="width:40px;font-size:11px;padding:1px;">
+          ${buildTempoOptions(s.tempoPos)}
+        </select>
+        <span style="font-size:10px;color:gray;">↓</span><select class="picker-select set-tempo-neg" data-gi="${gi}" data-ei="${ei}" data-si="${si}" style="width:40px;font-size:11px;padding:1px;">
+          ${buildTempoOptions(s.tempoNeg)}
+        </select>
+        <select class="picker-select set-grip-picker" data-gi="${gi}" data-ei="${ei}" data-si="${si}" style="width:62px;font-size:11px;padding:1px;">
+          ${buildGripOptions(s.grip)}
+        </select>
         ${ex.setDetails.length > 1 ? `<button class="btn-remove-set" data-gi="${gi}" data-ei="${ei}" data-si="${si}"
           style="background:none;border:none;color:#dc3545;font-size:13px;cursor:pointer;padding:0 4px;">&#10005;</button>` : ''}
       </div>
@@ -218,11 +239,24 @@ function buildExerciseRows(group, gi) {
         ${isInSuperset ? `<div style="font-size:10px;color:#e67e22;font-weight:600;margin:2px 0 0 24px;">&#8644; ${partnerName || t('Superset')}</div>` : ''}
         <div style="margin:4px 0 0 24px;">
           <div style="font-size:10px;color:#666;word-break:break-word;">${summaryText}</div>
-          <button class="btn-toggle-sets" data-gi="${gi}" data-ei="${ei}"
-            style="background:${ex.expanded ? '#512BD4' : '#e9e9e9'};color:${ex.expanded ? '#fff' : '#333'};border:none;border-radius:6px;padding:2px 8px;font-size:11px;cursor:pointer;margin-top:3px;">
-            ${ex.expanded ? 'Ocultar series' : 'Ver series'}
-          </button>
+          <div style="display:flex;gap:4px;margin-top:3px;align-items:center;">
+            <button class="btn-toggle-sets" data-gi="${gi}" data-ei="${ei}"
+              style="background:${ex.expanded ? '#512BD4' : '#e9e9e9'};color:${ex.expanded ? '#fff' : '#333'};border:none;border-radius:6px;padding:2px 8px;font-size:11px;cursor:pointer;">
+              ${ex.expanded ? 'Ocultar series' : 'Ver series'}
+            </button>
+            <button class="btn-toggle-notes" data-gi="${gi}" data-ei="${ei}"
+              style="background:${ex.notes ? '#e67e22' : '#e9e9e9'};color:${ex.notes ? '#fff' : '#333'};border:none;border-radius:6px;padding:2px 8px;font-size:11px;cursor:pointer;">
+              ${t('ExerciseNotes')}
+            </button>
+          </div>
         </div>
+        ${ex.showNotes ? `
+          <div style="margin:4px 0 0 24px;">
+            <textarea class="exercise-notes" data-gi="${gi}" data-ei="${ei}"
+              style="width:100%;font-size:12px;border:1px solid #ddd;border-radius:6px;padding:4px;resize:vertical;max-height:80px;min-height:36px;"
+              maxlength="500" placeholder="${t('ExerciseNotes')}...">${ex.notes || ''}</textarea>
+          </div>
+        ` : ''}
         ${ex.expanded ? `
           <div style="margin:6px 0 0 4px;padding:4px;background:#fafafa;border-radius:6px;">
             ${setRows}
@@ -322,6 +356,24 @@ function buildWeightOptions(selected) {
   return vals.map(v => `<option value="${v}" ${v === selected ? 'selected' : ''}>${v}</option>`).join('');
 }
 
+function buildTempoOptions(selected) {
+  let html = '<option value="0"' + (selected === 0 ? ' selected' : '') + '>-</option>';
+  for (let i = 1; i <= 10; i++) {
+    html += `<option value="${i}" ${i === selected ? 'selected' : ''}>${i}s</option>`;
+  }
+  return html;
+}
+
+function buildGripOptions(selected) {
+  const options = [
+    { value: '', label: '-' },
+    { value: 'prono', label: t('GripProne') },
+    { value: 'supino', label: t('GripSupine') },
+    { value: 'neutro', label: t('GripNeutral') },
+  ];
+  return options.map(o => `<option value="${o.value}" ${o.value === (selected || '') ? 'selected' : ''}>${o.label}</option>`).join('');
+}
+
 // ── Event Handling ──
 
 function attachEvents(container) {
@@ -372,14 +424,57 @@ function attachEvents(container) {
     });
   });
 
+  // Per-set tempo positive
+  container.querySelectorAll('.set-tempo-pos').forEach(sel => {
+    sel.addEventListener('change', () => {
+      const { gi, ei, si } = parseIndices(sel);
+      groups[gi].exercises[ei].setDetails[si].tempoPos = parseInt(sel.value) || 0;
+    });
+  });
+
+  // Per-set tempo negative
+  container.querySelectorAll('.set-tempo-neg').forEach(sel => {
+    sel.addEventListener('change', () => {
+      const { gi, ei, si } = parseIndices(sel);
+      groups[gi].exercises[ei].setDetails[si].tempoNeg = parseInt(sel.value) || 0;
+    });
+  });
+
+  // Per-set grip
+  container.querySelectorAll('.set-grip-picker').forEach(sel => {
+    sel.addEventListener('change', () => {
+      const { gi, ei, si } = parseIndices(sel);
+      groups[gi].exercises[ei].setDetails[si].grip = sel.value;
+    });
+  });
+
+  // Toggle notes
+  container.querySelectorAll('.btn-toggle-notes').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const gi = parseInt(btn.dataset.gi);
+      const ei = parseInt(btn.dataset.ei);
+      groups[gi].exercises[ei].showNotes = !groups[gi].exercises[ei].showNotes;
+      buildUI();
+    });
+  });
+
+  // Notes textarea
+  container.querySelectorAll('.exercise-notes').forEach(ta => {
+    ta.addEventListener('input', () => {
+      const gi = parseInt(ta.dataset.gi);
+      const ei = parseInt(ta.dataset.ei);
+      groups[gi].exercises[ei].notes = ta.value;
+    });
+  });
+
   // Add set button
   container.querySelectorAll('.btn-add-set').forEach(btn => {
     btn.addEventListener('click', () => {
       const gi = parseInt(btn.dataset.gi);
       const ei = parseInt(btn.dataset.ei);
       const ex = groups[gi].exercises[ei];
-      const lastSet = ex.setDetails[ex.setDetails.length - 1] || { reps: 12, weight: 0 };
-      ex.setDetails.push({ reps: lastSet.reps, weight: lastSet.weight });
+      const lastSet = ex.setDetails[ex.setDetails.length - 1] || { reps: 12, weight: 0, tempoPos: 0, tempoNeg: 0, grip: '' };
+      ex.setDetails.push({ reps: lastSet.reps, weight: lastSet.weight, tempoPos: lastSet.tempoPos || 0, tempoNeg: lastSet.tempoNeg || 0, grip: lastSet.grip || '' });
       syncSummaryFromDetails(gi, ei);
       buildUI();
     });
@@ -487,6 +582,7 @@ async function doSave() {
         weight: Math.max(...ex.setDetails.map(s => s.weight), 0),
         setDetails: JSON.stringify(ex.setDetails),
         supersetGroup: ex.supersetGroup || 0,
+        notes: ex.notes || '',
       }));
 
     await api.put(`/routines/${dayNum}`, {
@@ -605,6 +701,7 @@ async function createAndAddExercise(group, name, imageUrl) {
       weight: 0,
       setDetails: buildDefaultSets(3, 12, 0),
       supersetGroup: 0,
+      notes: '',
       expanded: false,
     });
 

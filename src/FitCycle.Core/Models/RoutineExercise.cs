@@ -18,4 +18,8 @@ public class RoutineExercise
     /// Superset group number. Exercises with the same non-zero SupersetGroup are done back-to-back.
     /// </summary>
     public int SupersetGroup { get; set; }
+    /// <summary>
+    /// Free-text notes/instructions for this exercise (e.g. trainer cues).
+    /// </summary>
+    public string Notes { get; set; } = string.Empty;
 }

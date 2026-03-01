@@ -89,11 +89,22 @@ function renderDays(container) {
         setInfo = `<span class="exercise-meta">${sets}x${reps}${weight > 0 ? ' @<span style="color:#28a745;font-weight:600">' + weight + 'kg</span>' : ''}</span>`;
       }
 
+      // Tempo info from setDetails
+      let tempoInfo = '';
+      if (Array.isArray(details) && details.length > 0) {
+        const tp = details[0].tempoPos || 0;
+        const tn = details[0].tempoNeg || 0;
+        if (tp > 0 || tn > 0) tempoInfo = `<span style="font-size:10px;color:#512BD4;">&#9201;${tp}/${tn}s</span>`;
+      }
+
+      const exNotes = e.notes || e.Notes || '';
+      const notesIcon = exNotes ? '<span style="font-size:10px;color:#e67e22;" title="' + exNotes.replace(/"/g, '&quot;') + '">&#128221;</span>' : '';
+
       const ssGroup = e.supersetGroup || e.SupersetGroup || 0;
       const ssIcon = ssGroup > 0 ? `<span style="color:#e67e22;font-weight:bold;font-size:10px;" title="Superset #${ssGroup}">&#8644;</span> ` : '';
       return `<div class="exercise-line-compact">
-        <div class="ex-name-line">${ssIcon}${name}</div>
-        <div class="ex-detail-line">${setInfo} ${mgTag}</div>
+        <div class="ex-name-line">${ssIcon}${name} ${notesIcon}</div>
+        <div class="ex-detail-line">${setInfo} ${tempoInfo} ${mgTag}</div>
       </div>`;
     }).join('');
 

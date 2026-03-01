@@ -227,6 +227,7 @@ public class SqliteRoutineRepository : IRoutineRepository
                     Weight = input.Weight,
                     SetDetails = input.SetDetails ?? string.Empty,
                     SupersetGroup = input.SupersetGroup,
+                    Notes = input.Notes ?? string.Empty,
                     UserId = userId
                 });
             }
@@ -267,6 +268,7 @@ public class SqliteRoutineRepository : IRoutineRepository
                 Weight = de.Weight,
                 SetDetails = de.SetDetails ?? string.Empty,
                 SupersetGroup = de.SupersetGroup,
+                Notes = de.Notes ?? string.Empty,
                 ImageUrl = de.Exercise?.ImageUrl ?? string.Empty,
                 MuscleGroupName = mg?.Name ?? string.Empty
             };

@@ -160,6 +160,16 @@ const Strings = {
   SelectPair:          { es: 'Selecciona el ejercicio pareja',   en: 'Select pair exercise',      fr: "Sélectionner l'exercice partenaire" },
   NoExercisesAvailable: { es: 'No hay ejercicios disponibles', en: 'No exercises available',    fr: "Aucun exercice disponible" },
 
+  // === Tempo / Grip / Notes ===
+  Tempo:           { es: 'Tempo',             en: 'Tempo',            fr: 'Tempo' },
+  TempoPositive:   { es: 'Fase positiva',     en: 'Positive phase',   fr: 'Phase positive' },
+  TempoNegative:   { es: 'Fase negativa',     en: 'Negative phase',   fr: 'Phase négative' },
+  Grip:            { es: 'Agarre',            en: 'Grip',             fr: 'Prise' },
+  GripProne:       { es: 'Prono',             en: 'Prone',            fr: 'Pronation' },
+  GripSupine:      { es: 'Supino',            en: 'Supine',           fr: 'Supination' },
+  GripNeutral:     { es: 'Neutro',            en: 'Neutral',          fr: 'Neutre' },
+  ExerciseNotes:   { es: 'Notas',             en: 'Notes',            fr: 'Notes' },
+
   // === Password ===
   PwdMinLength:  { es: 'Mínimo 8 caracteres',             en: 'At least 8 characters',           fr: 'Au moins 8 caractères' },
   PwdUppercase:  { es: 'Una letra mayúscula',              en: 'One uppercase letter',            fr: 'Une lettre majuscule' },

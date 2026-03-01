@@ -43,10 +43,13 @@ export async function mount(params) {
         setDetails = raw ? JSON.parse(raw) : null;
       } catch (e) { setDetails = null; }
       if (!Array.isArray(setDetails) || setDetails.length === 0) {
-        setDetails = Array.from({ length: sets }, () => ({ reps, weight }));
+        setDetails = Array.from({ length: sets }, () => ({ reps, weight, tempoPos: 0, tempoNeg: 0, grip: '' }));
+      } else {
+        setDetails = setDetails.map(s => ({ reps: s.reps || 12, weight: s.weight || 0, tempoPos: s.tempoPos || 0, tempoNeg: s.tempoNeg || 0, grip: s.grip || '' }));
       }
       const supersetGroup = ex.supersetGroup || ex.SupersetGroup || 0;
-      return { ...ex, setDetails, supersetGroup };
+      const notes = ex.notes || ex.Notes || '';
+      return { ...ex, setDetails, supersetGroup, notes };
     });
 
     if (exercises.length === 0) {
@@ -91,7 +94,8 @@ function renderExercise() {
   const exMuscle = ex.muscleGroupName || ex.MuscleGroupName || '';
   const exImage = ex.imageUrl || ex.ImageUrl || '';
   const totalSets = ex.setDetails.length;
-  const currentSetData = ex.setDetails[currentSet] || { reps: 12, weight: 0 };
+  const currentSetData = ex.setDetails[currentSet] || { reps: 12, weight: 0, tempoPos: 0, tempoNeg: 0, grip: '' };
+  const exNotes = ex.notes || '';
   const progressPct = ((currentIndex + 1) / exercises.length * 100).toFixed(0);
   const isLastExercise = currentIndex === exercises.length - 1;
   const isLastSet = currentSet >= totalSets - 1;
@@ -157,7 +161,19 @@ function renderExercise() {
                 style="width:70px;font-size:20px;font-weight:bold;text-align:center;border:1px solid #ddd;border-radius:8px;padding:6px;">
             </div>
           </div>
+          ${(currentSetData.tempoPos > 0 || currentSetData.tempoNeg > 0 || currentSetData.grip) ? `
+            <div style="margin-top:8px;display:flex;justify-content:center;gap:12px;flex-wrap:wrap;">
+              ${currentSetData.tempoPos > 0 || currentSetData.tempoNeg > 0 ? `<span style="font-size:13px;color:#512BD4;">&#9201; ${currentSetData.tempoPos}s&#8593; / ${currentSetData.tempoNeg}s&#8595;</span>` : ''}
+              ${currentSetData.grip ? `<span style="font-size:13px;color:#e67e22;">&#9994; ${currentSetData.grip}</span>` : ''}
+            </div>
+          ` : ''}
         </div>
+        ${exNotes ? `
+          <div style="background:#fff3e0;border-radius:8px;padding:8px 12px;margin:8px auto;max-width:300px;text-align:left;">
+            <div style="font-size:11px;color:#e67e22;font-weight:600;margin-bottom:2px;">&#128221; ${t('ExerciseNotes')}</div>
+            <div style="font-size:12px;color:#333;white-space:pre-wrap;">${exNotes}</div>
+          </div>
+        ` : ''}
 
         <div style="border-top:1px solid #eee;margin-top:16px;padding-top:12px;">
           <div style="font-size:12px;color:#512BD4;font-weight:bold;letter-spacing:2px;">${t('Rest')}</div>
