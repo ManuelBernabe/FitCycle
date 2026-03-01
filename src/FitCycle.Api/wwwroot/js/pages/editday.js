@@ -196,17 +196,20 @@ function buildExerciseRows(group, gi) {
     const isInSuperset = ex.supersetGroup > 0;
     const isLinkSource = supersetLinkMode && supersetLinkMode.gi === gi && supersetLinkMode.ei === ei;
     const isLinkTarget = supersetLinkMode && !(supersetLinkMode.gi === gi && supersetLinkMode.ei === ei) && ex.isSelected;
-    const supersetBorder = isInSuperset ? 'border-left:3px solid #e67e22;' : '';
+    const supersetBorder = isInSuperset ? 'border-left:3px solid #e67e22;' : (isLinkSource ? 'border-left:3px solid #e67e22;' : '');
     const supersetLabel = isInSuperset ? `<div style="font-size:10px;color:#e67e22;font-weight:600;margin-left:52px;">&#8644; ${t('Superset')} #${ex.supersetGroup}</div>` : '';
 
     // Superset button
     let supersetBtn = '';
-    if (ex.isSelected && !isLinkSource) {
-      if (isInSuperset) {
+    if (ex.isSelected) {
+      if (isLinkSource) {
+        // Source exercise: show cancel button + "selecting..." indicator
+        supersetBtn = `<button class="btn-cancel-link" data-gi="${gi}" data-ei="${ei}" style="background:#e67e22;color:#fff;border:none;border-radius:6px;padding:2px 6px;font-size:10px;cursor:pointer;animation:pulse 1s infinite;">${t('SelectPair')}...</button>`;
+      } else if (isInSuperset) {
         supersetBtn = `<button class="btn-unlink-superset" data-gi="${gi}" data-ei="${ei}" style="background:none;border:1px solid #e67e22;color:#e67e22;border-radius:6px;padding:2px 6px;font-size:10px;cursor:pointer;" title="${t('UnlinkSuperset')}">&#8644;</button>`;
       } else if (isLinkTarget) {
-        supersetBtn = `<button class="btn-link-target" data-gi="${gi}" data-ei="${ei}" style="background:#e67e22;color:#fff;border:none;border-radius:6px;padding:2px 6px;font-size:10px;cursor:pointer;animation:pulse 1s infinite;">${t('LinkSuperset')}</button>`;
-      } else {
+        supersetBtn = `<button class="btn-link-target" data-gi="${gi}" data-ei="${ei}" style="background:#e67e22;color:#fff;border:none;border-radius:6px;padding:2px 6px;font-size:10px;cursor:pointer;animation:pulse 1s infinite;">&#8644; ${t('LinkSuperset')}</button>`;
+      } else if (!supersetLinkMode) {
         supersetBtn = `<button class="btn-link-superset" data-gi="${gi}" data-ei="${ei}" style="background:none;border:1px solid #ccc;color:#999;border-radius:6px;padding:2px 6px;font-size:10px;cursor:pointer;" title="${t('LinkSuperset')}">&#8644;</button>`;
       }
     }
@@ -334,6 +337,14 @@ function attachEvents(container) {
       const gi = parseInt(btn.dataset.gi);
       const ei = parseInt(btn.dataset.ei);
       supersetLinkMode = { gi, ei };
+      buildUI();
+    });
+  });
+
+  // Superset link: cancel
+  container.querySelectorAll('.btn-cancel-link').forEach(btn => {
+    btn.addEventListener('click', () => {
+      supersetLinkMode = null;
       buildUI();
     });
   });

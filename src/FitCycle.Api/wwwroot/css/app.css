@@ -826,10 +826,17 @@ body {
 .exercise-line-compact {
   font-size: 13px;
   color: var(--text);
+  line-height: 1.3;
+  margin-bottom: 2px;
+}
+.exercise-line-compact .ex-name-line {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  line-height: 1.4;
+}
+.exercise-line-compact .ex-detail-line {
+  margin-top: 1px;
+  font-size: 12px;
 }
 
 .exercise-meta {

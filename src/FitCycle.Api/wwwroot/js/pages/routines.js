@@ -91,7 +91,10 @@ function renderDays(container) {
 
       const ssGroup = e.supersetGroup || e.SupersetGroup || 0;
       const ssIcon = ssGroup > 0 ? `<span style="color:#e67e22;font-weight:bold;font-size:10px;" title="Superset #${ssGroup}">&#8644;</span> ` : '';
-      return `<div class="exercise-line-compact">${ssIcon}${name} ${setInfo}${mgTag}</div>`;
+      return `<div class="exercise-line-compact">
+        <div class="ex-name-line">${ssIcon}${name}</div>
+        <div class="ex-detail-line">${setInfo} ${mgTag}</div>
+      </div>`;
     }).join('');
 
     html += `
