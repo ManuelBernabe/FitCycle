@@ -13,39 +13,14 @@
 </head>
 <body>
   <div id="app">
-    <div style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;">
+    <div id="app-loading" style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;">
       <div style="font-size:32px;font-weight:bold;color:#512BD4;">FC</div>
       <div style="margin-top:8px;color:#999;">Cargando...</div>
     </div>
   </div>
   <script>
-    // Force unregister old service workers and clear caches on first load of new version
-    (async function() {
-      if (!('serviceWorker' in navigator)) return;
-      try {
-        var regs = await navigator.serviceWorker.getRegistrations();
-        for (var r of regs) { await r.unregister(); }
-        var keys = await caches.keys();
-        for (var k of keys) { await caches.delete(k); }
-      } catch(e) { console.warn('SW cleanup error:', e); }
-      // Re-register fresh
-      navigator.serviceWorker.register('/sw.js');
-    })();
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js');
   </script>
-  <script type="module" src="/js/app.js"></script>
-  <script>
-    // Show error if app fails to load within 10 seconds
-    setTimeout(function() {
-      var app = document.getElementById('app');
-      if (app && app.querySelector('.loading-page,.login-page,.page')) return; // app loaded
-      if (app) {
-        app.innerHTML = '<div style="padding:40px;text-align:center;">' +
-          '<div style="font-size:32px;font-weight:bold;color:#512BD4;">FC</div>' +
-          '<div style="margin:16px 0;color:#dc3545;">Error al cargar la aplicación</div>' +
-          '<button onclick="location.reload()" style="padding:10px 24px;background:#512BD4;color:#fff;border:none;border-radius:8px;font-size:16px;cursor:pointer;">Reintentar</button>' +
-          '</div>';
-      }
-    }, 10000);
-  </script>
+  <script type="module" src="/js/app.js" onerror="document.getElementById('app').innerHTML='<p style=padding:40px;text-align:center;color:red>Error loading app</p>'"></script>
 </body>
 </html>
