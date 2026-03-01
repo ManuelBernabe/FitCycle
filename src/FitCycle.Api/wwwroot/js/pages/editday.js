@@ -222,14 +222,16 @@ function buildExerciseRows(group, gi) {
           <span style="font-size:13px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${ex.name}</span>
         </div>
         ${supersetLabel}
-        <div style="display:flex;align-items:center;gap:4px;margin-top:6px;margin-left:52px;flex-wrap:wrap;">
-          <button class="btn-toggle-sets" data-gi="${gi}" data-ei="${ei}"
-            style="background:${ex.expanded ? '#512BD4' : '#e0e0e0'};color:${ex.expanded ? '#fff' : '#333'};border:none;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;">
-            ${ex.setDetails.length}S
-          </button>
-          <span style="font-size:12px;color:#666;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${summaryText}</span>
-          ${supersetBtn}
-          <button class="btn btn-xs btn-delete-ex" data-gi="${gi}" data-ei="${ei}" style="background:#dc3545;color:#fff;border:none;border-radius:6px;padding:2px 8px;font-size:14px;cursor:pointer;" title="${t('Delete')}">&#10005;</button>
+        <div style="margin-top:4px;margin-left:52px;">
+          <div style="font-size:11px;color:#666;line-height:1.4;overflow-wrap:break-word;word-break:break-word;">${summaryText}</div>
+          <div style="display:flex;align-items:center;gap:4px;margin-top:4px;">
+            <button class="btn-toggle-sets" data-gi="${gi}" data-ei="${ei}"
+              style="background:${ex.expanded ? '#512BD4' : '#e0e0e0'};color:${ex.expanded ? '#fff' : '#333'};border:none;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;">
+              ${ex.setDetails.length}S
+            </button>
+            ${supersetBtn}
+            <button class="btn btn-xs btn-delete-ex" data-gi="${gi}" data-ei="${ei}" style="background:#dc3545;color:#fff;border:none;border-radius:6px;padding:2px 8px;font-size:14px;cursor:pointer;margin-left:auto;" title="${t('Delete')}">&#10005;</button>
+          </div>
         </div>
         ${ex.expanded ? `
           <div style="margin-left:10px;margin-top:6px;">
