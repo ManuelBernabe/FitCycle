@@ -522,6 +522,37 @@ app.MapDelete("/measurements/{id}", (int id, FitCycleDbContext db, ClaimsPrincip
 .WithOpenApi()
 .RequireAuthorization();
 
+// -- Webhook de deploy (Railway llama aquí al terminar) --
+app.MapPost("/webhook/deploy", async (HttpRequest req, IEmailService emailService, ILogger<Program> logger) =>
+{
+    // Validate webhook secret
+    var secret = req.Headers["X-Webhook-Secret"].FirstOrDefault()
+              ?? req.Query["secret"].FirstOrDefault();
+    if (!string.IsNullOrEmpty(emailSettings.WebhookSecret) &&
+        secret != emailSettings.WebhookSecret)
+    {
+        return Results.Unauthorized();
+    }
+
+    var status = req.Query["status"].FirstOrDefault() ?? "SUCCESS";
+    var env = req.Query["env"].FirstOrDefault() ?? "production";
+
+    try
+    {
+        await emailService.SendDeployNotificationAsync(status, env);
+        logger.LogInformation("Deploy webhook processed: {Status} ({Env})", status, env);
+        return Results.Ok(new { message = $"Notification sent: {status}" });
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Failed to send deploy notification");
+        return Results.Ok(new { message = "Webhook received but email failed", error = ex.Message });
+    }
+})
+.WithName("DeployWebhook")
+.WithOpenApi()
+.AllowAnonymous();
+
 app.MapFallbackToFile("index.html");
 
 app.Run();

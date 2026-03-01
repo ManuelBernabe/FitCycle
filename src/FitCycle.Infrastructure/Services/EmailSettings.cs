@@ -8,4 +8,6 @@ public class EmailSettings
     public string SmtpPassword { get; set; } = "";
     public string FromEmail { get; set; } = "";
     public string FromName { get; set; } = "FitCycle";
+    public string NotifyEmail { get; set; } = "";
+    public string WebhookSecret { get; set; } = "";
 }

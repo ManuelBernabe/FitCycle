@@ -44,6 +44,54 @@ public class EmailService : IEmailService
         _logger.LogInformation("Welcome email sent to {Email}", toEmail);
     }
 
+    public async Task SendDeployNotificationAsync(string status, string? environment = null)
+    {
+        if (string.IsNullOrWhiteSpace(_settings.SmtpUser) || string.IsNullOrWhiteSpace(_settings.SmtpPassword))
+        {
+            _logger.LogWarning("Email not configured — skipping deploy notification");
+            return;
+        }
+
+        var toEmail = !string.IsNullOrWhiteSpace(_settings.NotifyEmail) ? _settings.NotifyEmail : _settings.SmtpUser;
+        var isSuccess = status.Equals("SUCCESS", StringComparison.OrdinalIgnoreCase);
+        var emoji = isSuccess ? "✅" : "❌";
+        var env = environment ?? "production";
+
+        var message = new MimeMessage();
+        message.From.Add(new MailboxAddress(_settings.FromName, _settings.FromEmail));
+        message.To.Add(new MailboxAddress("Admin", toEmail));
+        message.Subject = $"{emoji} FitCycle Deploy {status} — {env}";
+
+        var bodyBuilder = new BodyBuilder
+        {
+            HtmlBody = $@"<!DOCTYPE html>
+<html><head><meta charset=""UTF-8""></head>
+<body style=""margin:0;padding:0;background:#f3f0fc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;"">
+  <table width=""100%"" cellpadding=""0"" cellspacing=""0"" style=""max-width:500px;margin:32px auto;background:#fff;border-radius:12px;overflow:hidden;"">
+    <tr><td style=""background:{(isSuccess ? "#28a745" : "#dc3545")};padding:24px;text-align:center;"">
+      <div style=""font-size:40px;"">{emoji}</div>
+      <div style=""font-size:20px;color:#fff;font-weight:700;margin-top:8px;"">Deploy {status}</div>
+    </td></tr>
+    <tr><td style=""padding:24px;"">
+      <p style=""color:#333;font-size:16px;margin:0 0 8px;""><strong>App:</strong> FitCycle</p>
+      <p style=""color:#333;font-size:16px;margin:0 0 8px;""><strong>Entorno:</strong> {env}</p>
+      <p style=""color:#333;font-size:16px;margin:0 0 8px;""><strong>Fecha:</strong> {DateTime.UtcNow:yyyy-MM-dd HH:mm} UTC</p>
+      {(isSuccess ? @"<div style=""text-align:center;margin-top:16px;""><a href=""https://fitcycle-production.up.railway.app/"" style=""display:inline-block;background:#512BD4;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;"">Abrir App</a></div>" : "")}
+    </td></tr>
+  </table>
+</body></html>"
+        };
+        message.Body = bodyBuilder.ToMessageBody();
+
+        using var client = new SmtpClient();
+        await client.ConnectAsync(_settings.SmtpHost, _settings.SmtpPort, SecureSocketOptions.StartTls);
+        await client.AuthenticateAsync(_settings.SmtpUser, _settings.SmtpPassword);
+        await client.SendAsync(message);
+        await client.DisconnectAsync(true);
+
+        _logger.LogInformation("Deploy notification sent to {Email}: {Status}", toEmail, status);
+    }
+
     private static string BuildWelcomeHtml(string username)
     {
         return $@"<!DOCTYPE html>
