@@ -182,10 +182,9 @@ function buildExerciseRows(group, gi) {
         <select class="picker-select set-reps-picker" data-gi="${gi}" data-ei="${ei}" data-si="${si}" style="width:48px;font-size:12px;padding:2px;">
           ${buildPickerOptions(1, 30, s.reps)}
         </select><span style="font-size:10px;color:gray;">r ×</span>
-        <input type="number" class="set-weight-input" data-gi="${gi}" data-ei="${ei}" data-si="${si}"
-          value="${s.weight > 0 ? s.weight : ''}" placeholder="0" step="0.5" min="0"
-          style="width:52px;font-size:12px;padding:2px 4px;border:1px solid #ccc;border-radius:4px;">
-        <span style="font-size:10px;color:gray;">kg</span>
+        <select class="picker-select set-weight-picker" data-gi="${gi}" data-ei="${ei}" data-si="${si}" style="width:56px;font-size:12px;padding:2px;">
+          ${buildWeightOptions(s.weight)}
+        </select><span style="font-size:10px;color:gray;">kg</span>
         ${ex.setDetails.length > 1 ? `<button class="btn-remove-set" data-gi="${gi}" data-ei="${ei}" data-si="${si}"
           style="background:none;border:none;color:#dc3545;font-size:13px;cursor:pointer;padding:0 4px;">&#10005;</button>` : ''}
       </div>
@@ -313,6 +312,16 @@ function buildPickerOptions(min, max, selected) {
   return html;
 }
 
+function buildWeightOptions(selected) {
+  const vals = [0];
+  for (let i = 1; i <= 30; i++) vals.push(i);           // 1-30 kg (1 en 1)
+  for (let i = 32.5; i <= 60; i += 2.5) vals.push(i);   // 32.5-60 kg (2.5 en 2.5)
+  for (let i = 65; i <= 100; i += 5) vals.push(i);       // 65-100 kg (5 en 5)
+  for (let i = 110; i <= 200; i += 10) vals.push(i);     // 110-200 kg (10 en 10)
+  if (selected > 0 && !vals.includes(selected)) { vals.push(selected); vals.sort((a, b) => a - b); }
+  return vals.map(v => `<option value="${v}" ${v === selected ? 'selected' : ''}>${v}</option>`).join('');
+}
+
 // ── Event Handling ──
 
 function attachEvents(container) {
@@ -354,11 +363,11 @@ function attachEvents(container) {
     });
   });
 
-  // Per-set weight inputs
-  container.querySelectorAll('.set-weight-input').forEach(inp => {
-    inp.addEventListener('input', () => {
-      const { gi, ei, si } = parseIndices(inp);
-      groups[gi].exercises[ei].setDetails[si].weight = parseFloat(inp.value) || 0;
+  // Per-set weight pickers
+  container.querySelectorAll('.set-weight-picker').forEach(sel => {
+    sel.addEventListener('change', () => {
+      const { gi, ei, si } = parseIndices(sel);
+      groups[gi].exercises[ei].setDetails[si].weight = parseFloat(sel.value) || 0;
       syncSummaryFromDetails(gi, ei);
     });
   });
