@@ -176,18 +176,19 @@ function buildExerciseRows(group, gi) {
     const summaryText = ex.setDetails.map((s, i) => `S${i + 1}: ${s.reps}r/${s.weight > 0 ? s.weight + 'kg' : '-'}`).join(' | ');
 
     const setRows = ex.setDetails.map((s, si) => `
-      <div class="set-detail-row" style="display:flex;align-items:center;gap:6px;margin:3px 0;padding:3px 0;border-bottom:1px solid #f0f0f0;">
-        <span style="font-size:12px;color:#512BD4;font-weight:600;min-width:36px;">S${si + 1}</span>
-        <span style="font-size:11px;color:gray;">${t('Reps')}</span>
-        <select class="picker-select set-reps-picker" data-gi="${gi}" data-ei="${ei}" data-si="${si}" style="width:60px;font-size:13px;padding:4px;">
+      <div class="set-detail-row" style="display:flex;align-items:center;gap:4px;margin:3px 0;padding:3px 0;border-bottom:1px solid #f0f0f0;flex-wrap:wrap;">
+        <span style="font-size:12px;color:#512BD4;font-weight:600;width:28px;">S${si + 1}</span>
+        <select class="picker-select set-reps-picker" data-gi="${gi}" data-ei="${ei}" data-si="${si}" style="width:50px;font-size:12px;padding:3px;">
           ${buildPickerOptions(1, 30, s.reps)}
         </select>
-        <span style="font-size:11px;color:gray;">kg</span>
+        <span style="font-size:10px;color:gray;">r</span>
+        <span style="font-size:10px;color:#999;">×</span>
         <input type="number" class="set-weight-input" data-gi="${gi}" data-ei="${ei}" data-si="${si}"
           value="${s.weight > 0 ? s.weight : ''}" placeholder="0" step="0.5" min="0"
-          style="width:65px;font-size:13px;padding:4px 6px;border:1px solid #ccc;border-radius:4px;">
+          style="width:55px;font-size:12px;padding:3px 4px;border:1px solid #ccc;border-radius:4px;">
+        <span style="font-size:10px;color:gray;">kg</span>
         ${ex.setDetails.length > 1 ? `<button class="btn-remove-set" data-gi="${gi}" data-ei="${ei}" data-si="${si}"
-          style="background:none;border:none;color:#dc3545;font-size:16px;cursor:pointer;padding:2px 6px;" title="${t('Delete')}">&#10005;</button>` : ''}
+          style="background:none;border:none;color:#dc3545;font-size:14px;cursor:pointer;padding:1px 4px;" title="${t('Delete')}">&#10005;</button>` : ''}
       </div>
     `).join('');
 
@@ -234,7 +235,7 @@ function buildExerciseRows(group, gi) {
           </div>
         </div>
         ${ex.expanded ? `
-          <div style="margin-left:10px;margin-top:6px;">
+          <div style="margin-top:6px;padding:0 4px;">
             ${setRows}
             <button class="btn-add-set" data-gi="${gi}" data-ei="${ei}"
               style="background:none;border:1px dashed #512BD4;color:#512BD4;border-radius:6px;padding:4px 12px;font-size:12px;cursor:pointer;margin-top:4px;width:100%;">
