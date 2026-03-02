@@ -72,11 +72,40 @@ async function tryRefresh() {
   }
 }
 
+async function requestForm(path, formData, isRetry = false) {
+  const headers = {};
+  const token = auth.getAccessToken();
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const res = await fetch(`${BASE}${path}`, { method: 'POST', headers, body: formData });
+
+  if (res.status === 401 && !isRetry) {
+    const refreshed = await tryRefresh();
+    if (refreshed) return requestForm(path, formData, true);
+    auth.clear();
+    location.hash = '#login';
+    throw new Error('Unauthorized');
+  }
+
+  if (!res.ok) {
+    let errorData;
+    try { errorData = await res.json(); } catch (e) { errorData = { error: res.statusText }; }
+    const err = new Error(errorData.error || errorData.message || `HTTP ${res.status}`);
+    err.status = res.status;
+    throw err;
+  }
+
+  const text = await res.text();
+  if (!text) return null;
+  return JSON.parse(text);
+}
+
 const api = {
   get(path)         { return request('GET',    path); },
   post(path, body)  { return request('POST',   path, body); },
   put(path, body)   { return request('PUT',    path, body); },
   del(path)         { return request('DELETE', path); },
+  postForm(path, formData) { return requestForm(path, formData); },
 };
 
 export { api };

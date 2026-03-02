@@ -170,6 +170,14 @@ const Strings = {
   GripNeutral:     { es: 'Neutro',            en: 'Neutral',          fr: 'Neutre' },
   ExerciseNotes:   { es: 'Notas',             en: 'Notes',            fr: 'Notes' },
 
+  // === PDF Import ===
+  ImportPdf:       { es: 'Importar PDF',                          en: 'Import PDF',                      fr: 'Importer PDF' },
+  SelectUser:      { es: 'Seleccionar usuario',                   en: 'Select user',                     fr: 'Sélectionner utilisateur' },
+  SelectPdfFile:   { es: 'Seleccionar archivo PDF',               en: 'Select PDF file',                 fr: 'Sélectionner fichier PDF' },
+  Importing:       { es: 'Importando rutinas...',                 en: 'Importing routines...',            fr: 'Importation des routines...' },
+  ImportSuccess:   { es: 'Rutinas importadas correctamente',      en: 'Routines imported successfully',   fr: 'Routines importées avec succès' },
+  ImportError:     { es: 'Error al importar',                     en: 'Import error',                     fr: "Erreur d'importation" },
+
   // === Password ===
   PwdMinLength:  { es: 'Mínimo 8 caracteres',             en: 'At least 8 characters',           fr: 'Au moins 8 caractères' },
   PwdUppercase:  { es: 'Una letra mayúscula',              en: 'One uppercase letter',            fr: 'Une lettre majuscule' },

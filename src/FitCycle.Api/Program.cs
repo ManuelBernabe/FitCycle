@@ -31,6 +31,10 @@ var emailSettings = builder.Configuration.GetSection("Email").Get<EmailSettings>
 builder.Services.AddSingleton(emailSettings);
 builder.Services.AddScoped<IEmailService, EmailService>();
 
+// Anthropic (Claude API for PDF import)
+builder.Services.Configure<AnthropicSettings>(builder.Configuration.GetSection("Anthropic"));
+builder.Services.AddScoped<IPdfImportService, PdfImportService>();
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -324,6 +328,39 @@ app.MapPut("/routines/{day}", (DayOfWeek day, UpdateDayRoutineRequest request, I
 .WithName("UpdateDayRoutine")
 .WithOpenApi()
 .RequireAuthorization();
+
+// -- Importar rutinas desde PDF (solo Superuser) --
+app.MapPost("/routines/import-pdf", async (HttpRequest request, IPdfImportService importService, ILogger<Program> logger) =>
+{
+    try
+    {
+        var form = await request.ReadFormAsync();
+        var file = form.Files["pdf"];
+        if (file == null || file.Length == 0)
+            return Results.BadRequest(new { error = "No se proporcionó archivo PDF." });
+
+        if (file.Length > 10 * 1024 * 1024)
+            return Results.BadRequest(new { error = "El archivo excede el límite de 10 MB." });
+
+        if (!int.TryParse(form["userId"].ToString(), out var targetUserId) || targetUserId <= 0)
+            return Results.BadRequest(new { error = "userId inválido." });
+
+        using var ms = new MemoryStream();
+        await file.CopyToAsync(ms);
+        var result = await importService.ImportFromPdfAsync(ms.ToArray(), targetUserId);
+
+        return result.Success ? Results.Ok(result) : Results.BadRequest(result);
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Error importing PDF");
+        return Results.BadRequest(new { error = ex.Message });
+    }
+})
+.WithName("ImportPdfRoutine")
+.WithOpenApi()
+.RequireAuthorization("SuperuserOnly")
+.DisableAntiforgery();
 
 // -- Historial de entrenamientos --
 app.MapPost("/workouts", (SaveWorkoutRequest request, FitCycleDbContext db, ClaimsPrincipal user) =>

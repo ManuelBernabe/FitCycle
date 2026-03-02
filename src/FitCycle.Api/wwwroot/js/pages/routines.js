@@ -2,6 +2,7 @@
 
 import { t, dayName, muscleGroup } from '../l10n.js';
 import { api } from '../api.js';
+import { auth } from '../auth.js';
 
 let weekData = null;
 
@@ -9,7 +10,10 @@ export function render() {
   return `
     <div class="page">
       <div class="page-content">
-        <div class="section-title">${t('MyWeeklyRoutine')}</div>
+        <div class="flex items-center justify-between">
+          <div class="section-title">${t('MyWeeklyRoutine')}</div>
+          ${auth.isSuperuser() ? `<button id="import-pdf-btn" class="btn btn-sm btn-outline" style="color:#512BD4;font-size:12px;">&#128196; ${t('ImportPdf')}</button>` : ''}
+        </div>
         <div class="section-subtitle">${t('ConfigureWeekly')}</div>
         <div id="routines-list">
           <div class="loading-page"><div class="spinner"></div><span>${t('Loading')}</span></div>
@@ -21,6 +25,7 @@ export function render() {
 
 export async function mount() {
   await loadRoutines();
+  document.getElementById('import-pdf-btn')?.addEventListener('click', showImportModal);
 }
 
 export function destroy() {}
@@ -159,4 +164,107 @@ async function handleDelete(day) {
   } catch (err) {
     alert(t('ErrorFmt', err.message));
   }
+}
+
+// ── PDF Import (Superuser only) ──
+
+async function showImportModal() {
+  // Load users
+  let users = [];
+  try {
+    users = await api.get('/users');
+  } catch (e) {
+    alert(t('ErrorFmt', e.message));
+    return;
+  }
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay modal-centered';
+
+  const userOptions = (users || []).map(u => {
+    const uid = u.id || u.Id;
+    const uname = u.username || u.Username;
+    const uemail = u.email || u.Email;
+    return `<option value="${uid}">${uname} (${uemail})</option>`;
+  }).join('');
+
+  overlay.innerHTML = `
+    <div class="modal-content" style="max-width:400px;">
+      <div class="modal-header">
+        <div class="modal-title">&#128196; ${t('ImportPdf')}</div>
+        <button class="modal-close" id="import-modal-close">&times;</button>
+      </div>
+      <div class="form-group">
+        <label class="form-label">${t('SelectUser')}</label>
+        <select id="import-user" class="form-input">${userOptions}</select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">${t('SelectPdfFile')}</label>
+        <input type="file" id="import-file" accept=".pdf" class="form-input" style="padding:6px;">
+      </div>
+      <button id="import-submit" class="btn btn-primary btn-block">${t('ImportPdf')}</button>
+      <div id="import-status" style="margin-top:8px;font-size:13px;text-align:center;"></div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  overlay.querySelector('#import-modal-close')?.addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+  overlay.querySelector('#import-submit')?.addEventListener('click', async () => {
+    const fileInput = overlay.querySelector('#import-file');
+    const userSelect = overlay.querySelector('#import-user');
+    const statusEl = overlay.querySelector('#import-status');
+    const submitBtn = overlay.querySelector('#import-submit');
+
+    if (!fileInput?.files?.length) {
+      if (statusEl) statusEl.textContent = t('SelectPdfFile');
+      return;
+    }
+
+    const file = fileInput.files[0];
+    if (file.size > 10 * 1024 * 1024) {
+      if (statusEl) statusEl.textContent = 'Max 10 MB';
+      return;
+    }
+
+    const userId = userSelect?.value;
+    if (!userId) return;
+
+    // Disable and show progress
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = t('Importing'); }
+    if (statusEl) { statusEl.style.color = '#512BD4'; statusEl.textContent = t('Importing'); }
+
+    try {
+      const formData = new FormData();
+      formData.append('pdf', file);
+      formData.append('userId', userId);
+
+      const result = await api.postForm('/routines/import-pdf', formData);
+
+      if (result?.success) {
+        const daysSummary = (result.days || []).map(d =>
+          `${d.dayName}: ${d.exerciseCount} ej.${d.newExercisesCreated > 0 ? ' (+' + d.newExercisesCreated + ' nuevos)' : ''}`
+        ).join('\n');
+
+        if (statusEl) {
+          statusEl.style.color = '#28a745';
+          statusEl.innerHTML = `<strong>${t('ImportSuccess')}</strong><br><pre style="text-align:left;font-size:11px;margin-top:4px;white-space:pre-wrap;">${daysSummary}</pre>`;
+        }
+
+        // Reload routines after 2s
+        setTimeout(() => {
+          overlay.remove();
+          loadRoutines();
+        }, 2500);
+      } else {
+        if (statusEl) { statusEl.style.color = '#dc3545'; statusEl.textContent = result?.message || t('ImportError'); }
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = t('ImportPdf'); }
+      }
+    } catch (err) {
+      if (statusEl) { statusEl.style.color = '#dc3545'; statusEl.textContent = t('ErrorFmt', err.message); }
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = t('ImportPdf'); }
+    }
+  });
 }
