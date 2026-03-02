@@ -1,11 +1,10 @@
-using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using FitCycle.Core.Models;
 using FitCycle.Infrastructure.Repositories;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
+using UglyToad.PdfPig;
 
 namespace FitCycle.Infrastructure.Services;
 
@@ -16,56 +15,102 @@ public interface IPdfImportService
 
 public class PdfImportService : IPdfImportService
 {
-    private readonly AnthropicSettings _settings;
     private readonly IRoutineRepository _repo;
     private readonly ILogger<PdfImportService> _logger;
-    private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromMinutes(3) };
 
-    private static readonly JsonSerializerOptions _jsonOpts = new()
+    // -- Regex patterns --
+    private static readonly Regex DayHeaderRegex = new(
+        @"^((?:[A-ZÁÉÍÓÚÑÜ]+(?:\s+Y\s+[A-ZÁÉÍÓÚÑÜ]+)*))[\s\-–]+D[IÍ]A\s*(\d+)",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly Regex ExerciseNameRegex = new(
+        @"^[A-ZÁÉÍÓÚÑÜ][A-ZÁÉÍÓÚÑÜ\s\.\,\(\)]{4,}$",
+        RegexOptions.Compiled);
+
+    private static readonly Regex RepsShorthandRegex = new(
+        @"^(\d+)\s*[*xX×]\s*(\d+(?:\s*[*xX×]\s*\d+)*)$",
+        RegexOptions.Compiled);
+
+    private static readonly Regex SerieRowRegex = new(
+        @"^SERIE\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly Regex RepsRowRegex = new(
+        @"^REPS\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly Regex TempoPositivaRegex = new(
+        @"FASE\s+POSITIVA", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly Regex TempoNegativaRegex = new(
+        @"FASE\s+NEGATIVA", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly Regex RestTimeRegex = new(
+        @"TIEMPO\s+DE\s+DESCANSO", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly Regex NumbersRegex = new(
+        @"\b(\d+)\b", RegexOptions.Compiled);
+
+    private static readonly Regex TempoSecondsRegex = new(
+        @"(\d+)\s*seg", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    // -- Muscle group mapping from PDF headers to DB names --
+    private static readonly Dictionary<string, string> MuscleGroupMap = new(StringComparer.OrdinalIgnoreCase)
     {
-        PropertyNameCaseInsensitive = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        ["PECTORAL"] = "Pecho",
+        ["PECTORALES"] = "Pecho",
+        ["PECHO"] = "Pecho",
+        ["ESPALDA"] = "Espalda",
+        ["HOMBRO"] = "Hombros",
+        ["HOMBROS"] = "Hombros",
+        ["BICEPS"] = "Bíceps",
+        ["BÍCEPS"] = "Bíceps",
+        ["TRICEPS"] = "Tríceps",
+        ["TRÍCEPS"] = "Tríceps",
+        ["PIERNA"] = "Piernas",
+        ["PIERNAS"] = "Piernas",
+        ["ABDOMINAL"] = "Abdominales",
+        ["ABDOMINALES"] = "Abdominales",
+        ["GLUTEO"] = "Glúteos",
+        ["GLÚTEO"] = "Glúteos",
+        ["GLUTEOS"] = "Glúteos",
+        ["GLÚTEOS"] = "Glúteos",
     };
 
-    public PdfImportService(IOptions<AnthropicSettings> settings, IRoutineRepository repo, ILogger<PdfImportService> logger)
+    private enum ParserState { LookingForDay, LookingForExercise, CollectingNotes, ParsingTable }
+
+    public PdfImportService(IRoutineRepository repo, ILogger<PdfImportService> logger)
     {
-        _settings = settings.Value;
         _repo = repo;
         _logger = logger;
     }
 
-    public async Task<PdfImportResult> ImportFromPdfAsync(byte[] pdfBytes, int targetUserId)
+    public Task<PdfImportResult> ImportFromPdfAsync(byte[] pdfBytes, int targetUserId)
     {
-        if (string.IsNullOrWhiteSpace(_settings.ApiKey))
-            return new PdfImportResult { Success = false, Message = "API key de Anthropic no configurada." };
+        return Task.FromResult(ImportFromPdfInternal(pdfBytes, targetUserId));
+    }
 
-        // 1. Send PDF to Claude API
-        var pdfBase64 = Convert.ToBase64String(pdfBytes);
-        var (extractedJson, apiError) = await CallClaudeAsync(pdfBase64);
-        if (extractedJson == null)
-            return new PdfImportResult { Success = false, Message = apiError ?? "No se pudo analizar el PDF." };
-
-        // 2. Parse Claude's response
-        PdfExtraction? extraction;
+    private PdfImportResult ImportFromPdfInternal(byte[] pdfBytes, int targetUserId)
+    {
+        // 1. Extract and parse PDF locally
+        PdfExtraction extraction;
         try
         {
-            extraction = JsonSerializer.Deserialize<PdfExtraction>(extractedJson, _jsonOpts);
+            extraction = ParsePdf(pdfBytes);
         }
-        catch (JsonException ex)
+        catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to parse Claude response JSON");
-            return new PdfImportResult { Success = false, Message = $"Error al parsear respuesta: {ex.Message}" };
+            _logger.LogError(ex, "Failed to parse PDF");
+            return new PdfImportResult { Success = false, Message = $"Error al parsear el PDF: {ex.Message}" };
         }
 
-        if (extraction?.Routines == null || extraction.Routines.Count == 0)
+        if (extraction.Routines.Count == 0)
             return new PdfImportResult { Success = false, Message = "No se encontraron rutinas en el PDF." };
 
-        // 3. Get all muscle groups and exercises
+        // 2. Get all muscle groups and exercises
         var allMuscleGroups = _repo.GetAllMuscleGroups();
         var allExercises = _repo.GetExercises();
         var result = new PdfImportResult { Success = true, Message = "Rutinas importadas correctamente." };
 
-        // 4. Process each day
+        // 3. Process each day
         foreach (var dayRoutine in extraction.Routines)
         {
             var dayOfWeek = dayRoutine.DayOfWeek switch
@@ -178,128 +223,281 @@ public class PdfImportService : IPdfImportService
         return result;
     }
 
-    private async Task<(string? Json, string? Error)> CallClaudeAsync(string pdfBase64)
-    {
-        var prompt = @"Analiza este PDF de plan de entrenamiento y extrae TODA la información en formato JSON.
+    // ── PDF text extraction with PdfPig ──
 
-IMPORTANTE: Responde SOLO con el JSON, sin texto adicional, sin markdown, sin ```json```.
-
-Formato requerido:
-{
-  ""routines"": [
+    private PdfExtraction ParsePdf(byte[] pdfBytes)
     {
-      ""dayOfWeek"": 1,
-      ""muscleGroups"": [""Pecho"", ""Tríceps""],
-      ""exercises"": [
+        var allLines = new List<string>();
+        using (var document = PdfDocument.Open(pdfBytes))
         {
-          ""name"": ""Press banca"",
-          ""muscleGroup"": ""Pecho"",
-          ""sets"": [
-            { ""reps"": 12, ""tempoPos"": 2, ""tempoNeg"": 3, ""grip"": """" }
-          ],
-          ""notes"": ""Instrucciones del entrenador..."",
-          ""supersetWith"": null
+            foreach (var page in document.GetPages())
+            {
+                var text = page.Text;
+                var lines = text.Split('\n')
+                    .Select(l => l.Trim())
+                    .Where(l => l.Length > 0)
+                    .ToList();
+                allLines.AddRange(lines);
+            }
         }
-      ]
+
+        _logger.LogDebug("Extracted {LineCount} lines from PDF", allLines.Count);
+        return ParseLines(allLines);
     }
-  ]
+
+    private PdfExtraction ParseLines(List<string> lines)
+    {
+        var extraction = new PdfExtraction();
+        var state = ParserState.LookingForDay;
+
+        PdfDayRoutine? currentDay = null;
+        PdfExercise? currentExercise = null;
+        var notesBuilder = new StringBuilder();
+
+        List<int>? tableReps = null;
+        List<int>? tableTempoPos = null;
+        List<int>? tableTempoNeg = null;
+
+        for (int i = 0; i < lines.Count; i++)
+        {
+            var line = lines[i];
+
+            // ── Day header always takes priority ──
+            var dayMatch = DayHeaderRegex.Match(line);
+            if (dayMatch.Success)
+            {
+                FinalizeExercise(currentExercise, notesBuilder, tableReps, tableTempoPos, tableTempoNeg);
+
+                var rawMuscles = dayMatch.Groups[1].Value;
+                var dayNumber = int.Parse(dayMatch.Groups[2].Value);
+
+                // Split on " Y " for multi-muscle days (e.g., "PECTORAL Y TRÍCEPS")
+                var muscleNames = rawMuscles.Split(new[] { " Y " }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(m => MapMuscleGroup(m.Trim()))
+                    .Where(m => !string.IsNullOrEmpty(m))
+                    .ToList();
+
+                currentDay = new PdfDayRoutine
+                {
+                    DayOfWeek = dayNumber,
+                    MuscleGroups = muscleNames,
+                };
+                extraction.Routines.Add(currentDay);
+
+                currentExercise = null;
+                notesBuilder.Clear();
+                tableReps = null;
+                tableTempoPos = null;
+                tableTempoNeg = null;
+                state = ParserState.LookingForExercise;
+                continue;
+            }
+
+            if (currentDay == null) continue;
+
+            // ── Rest time = end of exercise ──
+            if (RestTimeRegex.IsMatch(line))
+            {
+                FinalizeExercise(currentExercise, notesBuilder, tableReps, tableTempoPos, tableTempoNeg);
+                currentExercise = null;
+                tableReps = null;
+                tableTempoPos = null;
+                tableTempoNeg = null;
+                notesBuilder.Clear();
+                state = ParserState.LookingForExercise;
+                continue;
+            }
+
+            // ── Table: Serie row ──
+            if (SerieRowRegex.IsMatch(line))
+            {
+                state = ParserState.ParsingTable;
+                continue;
+            }
+
+            // ── Table: Reps row ──
+            if (RepsRowRegex.IsMatch(line))
+            {
+                tableReps = ExtractNumbers(line);
+                state = ParserState.ParsingTable;
+                continue;
+            }
+
+            // ── Table: Fase positiva ──
+            if (TempoPositivaRegex.IsMatch(line))
+            {
+                tableTempoPos = ExtractTempoValues(line, lines, ref i);
+                state = ParserState.ParsingTable;
+                continue;
+            }
+
+            // ── Table: Fase negativa ──
+            if (TempoNegativaRegex.IsMatch(line))
+            {
+                tableTempoNeg = ExtractTempoValues(line, lines, ref i);
+                state = ParserState.ParsingTable;
+                continue;
+            }
+
+            // ── Skip "SEG. EJECUCIÓN" lines ──
+            if (line.Contains("EJECUCI", StringComparison.OrdinalIgnoreCase) &&
+                line.Contains("SEG", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            // ── Reps shorthand: "4*15*12*10*8" ──
+            if (RepsShorthandRegex.IsMatch(line))
+            {
+                var allNums = ExtractNumbers(line);
+                if (allNums.Count >= 2)
+                {
+                    // If first number = count of remaining, it's total_sets*rep1*rep2...
+                    if (allNums[0] == allNums.Count - 1)
+                        tableReps = allNums.Skip(1).ToList();
+                    else
+                        tableReps = allNums;
+                }
+                continue;
+            }
+
+            // ── Exercise name (all caps, not a table keyword) ──
+            if (ExerciseNameRegex.IsMatch(line) && !IsTableKeyword(line))
+            {
+                FinalizeExercise(currentExercise, notesBuilder, tableReps, tableTempoPos, tableTempoNeg);
+
+                currentExercise = new PdfExercise
+                {
+                    Name = ToTitleCase(line),
+                    MuscleGroup = currentDay.MuscleGroups.FirstOrDefault() ?? "",
+                };
+                currentDay.Exercises.Add(currentExercise);
+
+                notesBuilder.Clear();
+                tableReps = null;
+                tableTempoPos = null;
+                tableTempoNeg = null;
+                state = ParserState.CollectingNotes;
+                continue;
+            }
+
+            // ── Collect notes text ──
+            if (state == ParserState.CollectingNotes && currentExercise != null)
+            {
+                if (notesBuilder.Length > 0) notesBuilder.Append(' ');
+                notesBuilder.Append(line);
+            }
+        }
+
+        // Finalize last exercise
+        FinalizeExercise(currentExercise, notesBuilder, tableReps, tableTempoPos, tableTempoNeg);
+
+        return extraction;
+    }
+
+    // ── Helper methods ──
+
+    private static void FinalizeExercise(
+        PdfExercise? exercise, StringBuilder notesBuilder,
+        List<int>? reps, List<int>? tempoPos, List<int>? tempoNeg)
+    {
+        if (exercise == null) return;
+
+        var notes = notesBuilder.ToString().Trim();
+        if (!string.IsNullOrEmpty(notes))
+            exercise.Notes = notes;
+
+        if (reps != null && reps.Count > 0)
+        {
+            for (int i = 0; i < reps.Count; i++)
+            {
+                exercise.Sets.Add(new PdfSet
+                {
+                    Reps = reps[i],
+                    TempoPos = tempoPos != null && i < tempoPos.Count ? tempoPos[i] : 0,
+                    TempoNeg = tempoNeg != null && i < tempoNeg.Count ? tempoNeg[i] : 0,
+                    Grip = "",
+                });
+            }
+        }
+
+        notesBuilder.Clear();
+    }
+
+    private static List<int> ExtractNumbers(string line)
+    {
+        return NumbersRegex.Matches(line)
+            .Cast<Match>()
+            .Select(m => int.Parse(m.Value))
+            .ToList();
+    }
+
+    private static List<int> ExtractTempoValues(string line, List<string> lines, ref int i)
+    {
+        // Try "N seg" pattern first
+        var tempos = TempoSecondsRegex.Matches(line)
+            .Cast<Match>()
+            .Select(m => int.Parse(m.Groups[1].Value))
+            .ToList();
+
+        if (tempos.Count > 0) return tempos;
+
+        // Try plain numbers on same line (after the label)
+        var nums = ExtractNumbers(line);
+        if (nums.Count > 0) return nums;
+
+        // Peek next line for values (table might split across lines)
+        if (i + 1 < lines.Count)
+        {
+            var nextLine = lines[i + 1];
+            if (!ExerciseNameRegex.IsMatch(nextLine) && !DayHeaderRegex.IsMatch(nextLine))
+            {
+                tempos = TempoSecondsRegex.Matches(nextLine)
+                    .Cast<Match>()
+                    .Select(m => int.Parse(m.Groups[1].Value))
+                    .ToList();
+                if (tempos.Count > 0) { i++; return tempos; }
+
+                nums = ExtractNumbers(nextLine);
+                if (nums.Count > 0) { i++; return nums; }
+            }
+        }
+
+        return new List<int>();
+    }
+
+    private static bool IsTableKeyword(string line)
+    {
+        return SerieRowRegex.IsMatch(line)
+            || RepsRowRegex.IsMatch(line)
+            || TempoPositivaRegex.IsMatch(line)
+            || TempoNegativaRegex.IsMatch(line)
+            || RestTimeRegex.IsMatch(line)
+            || (line.Contains("SEG", StringComparison.OrdinalIgnoreCase)
+                && line.Contains("EJECUCI", StringComparison.OrdinalIgnoreCase))
+            || line.StartsWith("PLAN DE ENTRENAMIENTO", StringComparison.OrdinalIgnoreCase)
+            || line.StartsWith("MOVILIDAD", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string MapMuscleGroup(string raw)
+    {
+        var cleaned = Regex.Replace(raw.Trim(), @"\(([A-ZÁÉÍÓÚÑ]*)\)", "$1");
+        return MuscleGroupMap.TryGetValue(cleaned, out var mapped) ? mapped : cleaned;
+    }
+
+    private static string ToTitleCase(string allCaps)
+    {
+        if (string.IsNullOrWhiteSpace(allCaps)) return allCaps;
+        var words = allCaps.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return string.Join(' ', words.Select(w =>
+        {
+            if (w.Length <= 2) return w.ToLowerInvariant();
+            return char.ToUpperInvariant(w[0]) + w[1..].ToLowerInvariant();
+        }));
+    }
 }
 
-Reglas:
-- dayOfWeek: 1=Lunes, 2=Martes, 3=Miércoles, 4=Jueves, 5=Viernes
-- Grupos musculares válidos: Pecho, Espalda, Hombros, Bíceps, Tríceps, Piernas, Abdominales, Glúteos
-- Tipos de agarre: prono, supino, neutro (o cadena vacía si no se especifica)
-- Si hay varias series con distintas repeticiones, crea un objeto por cada serie en el array ""sets""
-- Si todas las series tienen las mismas reps, repite el objeto tantas veces como series haya
-- NO incluyas pesos (se añadirán manualmente)
-- tempoPos y tempoNeg son los segundos de la fase concéntrica y excéntrica (0 si no se especifica)
-- Si hay superseries, pon el nombre exacto del ejercicio pareja en ""supersetWith""
-- Extrae las notas/instrucciones del entrenador para cada ejercicio
-- Si el PDF tiene rutinas para varios días, extrae cada uno por separado";
-
-        var requestBody = new
-        {
-            model = "claude-sonnet-4-6-20250514",
-            max_tokens = 8192,
-            messages = new[]
-            {
-                new
-                {
-                    role = "user",
-                    content = new object[]
-                    {
-                        new
-                        {
-                            type = "document",
-                            source = new
-                            {
-                                type = "base64",
-                                media_type = "application/pdf",
-                                data = pdfBase64,
-                            }
-                        },
-                        new
-                        {
-                            type = "text",
-                            text = prompt,
-                        }
-                    }
-                }
-            }
-        };
-
-        var json = JsonSerializer.Serialize(requestBody);
-        var httpRequest = new HttpRequestMessage(HttpMethod.Post, "https://api.anthropic.com/v1/messages")
-        {
-            Content = new StringContent(json, Encoding.UTF8, "application/json")
-        };
-        httpRequest.Headers.Add("x-api-key", _settings.ApiKey);
-        httpRequest.Headers.Add("anthropic-version", "2023-06-01");
-
-        try
-        {
-            var response = await _http.SendAsync(httpRequest);
-            var responseText = await response.Content.ReadAsStringAsync();
-
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger.LogError("Claude API error {Status}: {Body}", response.StatusCode, responseText);
-                return (null, $"Claude API error {response.StatusCode}: {responseText[..Math.Min(responseText.Length, 300)]}");
-            }
-
-            // Parse the Claude response to extract the text content
-            using var doc = JsonDocument.Parse(responseText);
-            var content = doc.RootElement.GetProperty("content");
-            foreach (var block in content.EnumerateArray())
-            {
-                if (block.GetProperty("type").GetString() == "text")
-                {
-                    var text = block.GetProperty("text").GetString() ?? "";
-                    // Strip markdown code fences if present
-                    text = text.Trim();
-                    if (text.StartsWith("```json")) text = text[7..];
-                    else if (text.StartsWith("```")) text = text[3..];
-                    if (text.EndsWith("```")) text = text[..^3];
-                    return (text.Trim(), null);
-                }
-            }
-
-            return (null, "Claude API respondió pero sin contenido de texto.");
-        }
-        catch (TaskCanceledException)
-        {
-            _logger.LogError("Claude API call timed out");
-            return (null, "Timeout: la API de Claude tardó demasiado (>3 min).");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to call Claude API");
-            return (null, $"Error llamando a Claude API: {ex.Message}");
-        }
-    }
-}
-
-// -- DTOs for Claude response --
+// -- DTOs --
 
 public class PdfExtraction
 {

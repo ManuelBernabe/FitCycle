@@ -31,8 +31,7 @@ var emailSettings = builder.Configuration.GetSection("Email").Get<EmailSettings>
 builder.Services.AddSingleton(emailSettings);
 builder.Services.AddScoped<IEmailService, EmailService>();
 
-// Anthropic (Claude API for PDF import)
-builder.Services.Configure<AnthropicSettings>(builder.Configuration.GetSection("Anthropic"));
+// PDF import (local parsing with PdfPig)
 builder.Services.AddScoped<IPdfImportService, PdfImportService>();
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
