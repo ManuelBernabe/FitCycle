@@ -41,9 +41,9 @@ public class PdfImportService : IPdfImportService
 
         // 1. Send PDF to Claude API
         var pdfBase64 = Convert.ToBase64String(pdfBytes);
-        var extractedJson = await CallClaudeAsync(pdfBase64);
+        var (extractedJson, apiError) = await CallClaudeAsync(pdfBase64);
         if (extractedJson == null)
-            return new PdfImportResult { Success = false, Message = "No se pudo analizar el PDF." };
+            return new PdfImportResult { Success = false, Message = apiError ?? "No se pudo analizar el PDF." };
 
         // 2. Parse Claude's response
         PdfExtraction? extraction;
@@ -178,7 +178,7 @@ public class PdfImportService : IPdfImportService
         return result;
     }
 
-    private async Task<string?> CallClaudeAsync(string pdfBase64)
+    private async Task<(string? Json, string? Error)> CallClaudeAsync(string pdfBase64)
     {
         var prompt = @"Analiza este PDF de plan de entrenamiento y extrae TODA la información en formato JSON.
 
@@ -264,7 +264,7 @@ Reglas:
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogError("Claude API error {Status}: {Body}", response.StatusCode, responseText);
-                return null;
+                return (null, $"Claude API error {response.StatusCode}: {responseText[..Math.Min(responseText.Length, 300)]}");
             }
 
             // Parse the Claude response to extract the text content
@@ -280,16 +280,21 @@ Reglas:
                     if (text.StartsWith("```json")) text = text[7..];
                     else if (text.StartsWith("```")) text = text[3..];
                     if (text.EndsWith("```")) text = text[..^3];
-                    return text.Trim();
+                    return (text.Trim(), null);
                 }
             }
 
-            return null;
+            return (null, "Claude API respondió pero sin contenido de texto.");
+        }
+        catch (TaskCanceledException)
+        {
+            _logger.LogError("Claude API call timed out");
+            return (null, "Timeout: la API de Claude tardó demasiado (>3 min).");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to call Claude API");
-            return null;
+            return (null, $"Error llamando a Claude API: {ex.Message}");
         }
     }
 }
