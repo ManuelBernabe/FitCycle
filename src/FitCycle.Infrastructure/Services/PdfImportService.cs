@@ -210,8 +210,10 @@ Formato requerido:
 }
 
 Reglas:
-- dayOfWeek: 1=Lunes, 2=Martes, 3=Miércoles, 4=Jueves, 5=Viernes
+- dayOfWeek: 1=Lunes(DÍA 1), 2=Martes(DÍA 2), 3=Miércoles(DÍA 3), 4=Jueves(DÍA 4), 5=Viernes(DÍA 5)
+- Los encabezados de día pueden tener formatos variados como: ""PECTORAL-DÍA 1"", ""DÍA 2 ESPALDA+ FEMORAL"", ""DÍA3---CUADRICEPS"", etc.
 - Grupos musculares válidos: Pecho, Espalda, Hombros, Bíceps, Tríceps, Piernas, Abdominales, Glúteos
+- Mapea estos nombres del PDF a los grupos válidos: PECTORAL→Pecho, ESPALDA→Espalda, HOMBRO(S)→Hombros, BÍCEPS→Bíceps, TRÍCEPS→Tríceps, CUADRICEPS/FEMORAL/ABDUCTOR/ADUCTOR/GEMELO→Piernas, ABDOMINAL(ES)→Abdominales, GLÚTEO(S)→Glúteos
 - Tipos de agarre (grip): prono, supino, neutro (o cadena vacía si no se especifica)
 - Si hay varias series con distintas repeticiones, crea un objeto por cada serie en el array ""sets""
 - Si todas las series tienen las mismas reps, repite el objeto tantas veces como series haya
@@ -219,7 +221,8 @@ Reglas:
 - tempoPos y tempoNeg son los segundos de la fase concéntrica y excéntrica (0 si no se especifica)
 - Si hay superseries, pon el nombre exacto del ejercicio pareja en ""supersetWith""
 - Extrae las notas/instrucciones del entrenador para cada ejercicio
-- Si el PDF tiene rutinas para varios días, extrae cada uno por separado";
+- Si el PDF tiene rutinas para varios días, extrae cada uno por separado
+- Los nombres de ejercicios deben estar en formato Title Case (ej: ""Press Banca"", no ""PRESS BANCA"")";
 
         var requestBody = new
         {
@@ -247,12 +250,12 @@ Reglas:
             generationConfig = new
             {
                 temperature = 0.1,
-                maxOutputTokens = 8192,
+                maxOutputTokens = 16384,
             }
         };
 
         var json = JsonSerializer.Serialize(requestBody);
-        var url = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={_settings.ApiKey}";
+        var url = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key={_settings.ApiKey}";
 
         var httpRequest = new HttpRequestMessage(HttpMethod.Post, url)
         {
