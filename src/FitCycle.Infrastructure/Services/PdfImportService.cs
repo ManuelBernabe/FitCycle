@@ -92,9 +92,10 @@ public class PdfImportService : IPdfImportService
     {
         // 1. Extract and parse PDF locally
         PdfExtraction extraction;
+        List<string> debugLines;
         try
         {
-            extraction = ParsePdf(pdfBytes);
+            (extraction, debugLines) = ParsePdf(pdfBytes);
         }
         catch (Exception ex)
         {
@@ -103,7 +104,10 @@ public class PdfImportService : IPdfImportService
         }
 
         if (extraction.Routines.Count == 0)
-            return new PdfImportResult { Success = false, Message = "No se encontraron rutinas en el PDF." };
+        {
+            var preview = string.Join("\n", debugLines.Take(50));
+            return new PdfImportResult { Success = false, Message = $"No se encontraron rutinas en el PDF.\n\nTexto extraído ({debugLines.Count} líneas):\n{preview}" };
+        }
 
         // 2. Get all muscle groups and exercises
         var allMuscleGroups = _repo.GetAllMuscleGroups();
@@ -225,7 +229,7 @@ public class PdfImportService : IPdfImportService
 
     // ── PDF text extraction with PdfPig ──
 
-    private PdfExtraction ParsePdf(byte[] pdfBytes)
+    private (PdfExtraction Extraction, List<string> Lines) ParsePdf(byte[] pdfBytes)
     {
         var allLines = new List<string>();
         using (var document = PdfDocument.Open(pdfBytes))
@@ -242,7 +246,7 @@ public class PdfImportService : IPdfImportService
         }
 
         _logger.LogDebug("Extracted {LineCount} lines from PDF", allLines.Count);
-        return ParseLines(allLines);
+        return (ParseLines(allLines), allLines);
     }
 
     private PdfExtraction ParseLines(List<string> lines)
