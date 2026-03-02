@@ -29,6 +29,11 @@ public class PdfImportService : IPdfImportService
     public PdfImportService(IOptions<GeminiSettings> settings, IRoutineRepository repo, ILogger<PdfImportService> logger)
     {
         _settings = settings.Value;
+        // Fallback: read from env var directly if config binding didn't work
+        if (string.IsNullOrWhiteSpace(_settings.ApiKey))
+            _settings.ApiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY")
+                            ?? Environment.GetEnvironmentVariable("Gemini__ApiKey")
+                            ?? "";
         _repo = repo;
         _logger = logger;
     }
@@ -36,7 +41,7 @@ public class PdfImportService : IPdfImportService
     public async Task<PdfImportResult> ImportFromPdfAsync(byte[] pdfBytes, int targetUserId)
     {
         if (string.IsNullOrWhiteSpace(_settings.ApiKey))
-            return new PdfImportResult { Success = false, Message = "API key de Gemini no configurada." };
+            return new PdfImportResult { Success = false, Message = "API key de Gemini no configurada. Configura Gemini__ApiKey o GEMINI_API_KEY en las variables de entorno." };
 
         // 1. Send PDF to Gemini API
         var pdfBase64 = Convert.ToBase64String(pdfBytes);
