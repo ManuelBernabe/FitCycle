@@ -14,10 +14,14 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// EF Core SQLite
+// EF Core SQLite — support Railway volume mount via DATA_DIR env var
+var dataDir = Environment.GetEnvironmentVariable("DATA_DIR");
+if (!string.IsNullOrEmpty(dataDir) && !Directory.Exists(dataDir))
+    Directory.CreateDirectory(dataDir);
+
+var defaultDb = !string.IsNullOrEmpty(dataDir) ? $"Data Source={Path.Combine(dataDir, "fitcycle.db")}" : "Data Source=fitcycle.db";
 builder.Services.AddDbContext<FitCycleDbContext>(options =>
-    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection")
-                      ?? "Data Source=fitcycle.db"));
+    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection") ?? defaultDb));
 
 builder.Services.AddScoped<IRoutineRepository, SqliteRoutineRepository>();
 
@@ -31,7 +35,8 @@ var emailSettings = builder.Configuration.GetSection("Email").Get<EmailSettings>
 builder.Services.AddSingleton(emailSettings);
 builder.Services.AddScoped<IEmailService, EmailService>();
 
-// PDF import (local parsing with PdfPig)
+// Gemini (Google AI for PDF import)
+builder.Services.Configure<GeminiSettings>(builder.Configuration.GetSection("Gemini"));
 builder.Services.AddScoped<IPdfImportService, PdfImportService>();
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
