@@ -104,14 +104,18 @@ public class PdfImportService : IPdfImportService
             }
         }
 
-        if (extraction?.Routines == null || extraction.Routines.Count == 0)
+        // Filter out days with no exercises for the "no routines" check
+        var daysWithExercises = extraction?.Routines?.Where(r => r.Exercises.Count > 0).ToList() ?? new();
+        if (daysWithExercises.Count == 0)
         {
-            // Include extracted text lines containing "DÍA" for debugging
+            var dayBoundaryInfo = extraction?.Routines?.Count > 0
+                ? $"Se encontraron {extraction.Routines.Count} cabeceras de día pero 0 ejercicios."
+                : "No se encontraron cabeceras de día.";
             var errLines = pdfText.Split('\n').Where(l => !string.IsNullOrWhiteSpace(l)).ToList();
-            var errDiaLines = errLines.Where(l => l.Contains("DÍA", StringComparison.OrdinalIgnoreCase) || l.Contains("DIA", StringComparison.OrdinalIgnoreCase))
+            var errDiaLines = errLines.Where(l => Regex.IsMatch(l, @"D[IÍ]A", RegexOptions.IgnoreCase))
                 .Select(l => l.Trim().Length > 80 ? l.Trim()[..80] : l.Trim()).Take(10);
             var firstLines = errLines.Take(15).Select(l => l.Trim().Length > 60 ? l.Trim()[..60] : l.Trim());
-            var debugText = $"Líneas con DÍA: [{string.Join(" | ", errDiaLines)}]. Primeras líneas: [{string.Join(" | ", firstLines)}]";
+            var debugText = $"{dayBoundaryInfo} Líneas DÍA: [{string.Join(" | ", errDiaLines)}]. Primeras: [{string.Join(" | ", firstLines)}]";
             return new PdfImportResult { Success = false, Message = $"No se encontraron rutinas. {debugText[..Math.Min(debugText.Length, 600)]}" };
         }
 
@@ -119,18 +123,13 @@ public class PdfImportService : IPdfImportService
         var allMuscleGroups = _repo.GetAllMuscleGroups();
         var allExercises = _repo.GetExercises();
 
-        // Debug: include found days and DÍA lines in message
-        var foundDays = extraction.Routines.Select(r => $"Día{r.DayOfWeek}({r.Exercises.Count}ej)").ToList();
-        var allTextLines = pdfText.Split('\n').Where(l => !string.IsNullOrWhiteSpace(l)).ToList();
-        var diaLines = allTextLines
-            .Where(l => l.Contains("DÍA", StringComparison.OrdinalIgnoreCase) || l.Contains("DIA", StringComparison.OrdinalIgnoreCase))
-            .Select(l => l.Trim().Length > 70 ? l.Trim()[..70] : l.Trim())
-            .ToList();
-        var debugMsg = $"Encontradas: {string.Join(", ", foundDays)}. Líneas DÍA: [{string.Join(" | ", diaLines)}]";
-        var result = new PdfImportResult { Success = true, Message = debugMsg[..Math.Min(debugMsg.Length, 600)] };
+        // Debug: include found days info
+        var foundDays = extraction!.Routines.Select(r => $"Día{r.DayOfWeek}({r.Exercises.Count}ej/{string.Join("+", r.MuscleGroups)})").ToList();
+        var debugMsg = $"Parser encontró {extraction.Routines.Count} días: {string.Join(", ", foundDays)}";
+        var result = new PdfImportResult { Success = true, Message = debugMsg[..Math.Min(debugMsg.Length, 500)] };
 
-        // 5. Process each day
-        foreach (var dayRoutine in extraction.Routines)
+        // 5. Process each day (only those with exercises)
+        foreach (var dayRoutine in daysWithExercises)
         {
             var dayOfWeek = dayRoutine.DayOfWeek switch
             {
@@ -275,7 +274,11 @@ public class PdfImportService : IPdfImportService
             sb.AppendLine();
         }
 
-        return sb.ToString();
+        // Normalize Unicode (decomposed → composed: I+accent → Í)
+        var text = sb.ToString().Normalize(NormalizationForm.FormC);
+        // Normalize various dash characters to regular hyphen
+        text = text.Replace('\u2013', '-').Replace('\u2014', '-').Replace('\u2015', '-').Replace('\u2212', '-');
+        return text;
     }
 
     private async Task<(string? Json, string? Error)> CallGeminiWithTextAsync(string pdfText)
@@ -467,6 +470,7 @@ public static class LocalPdfParser
         "TEMPO", "DESCANSO", "REST", "AGARRE", "GRIP", "PESO", "WEIGHT",
         "PÁGINA", "PAGE", "PLAN", "ENTRENAMIENTO", "TRAINING", "NOTA", "NOTAS",
         "TIEMPO", "SEG", "SEGUNDOS", "MIN", "MINUTOS", "KG", "LBS",
+        "RGANUTRI", "ASESORÍA",
     };
 
     // Words that signal instructional/note text, not exercise names
@@ -500,9 +504,8 @@ public static class LocalPdfParser
                 if (dayNum < 1 || dayNum > 7) continue;
 
                 // Avoid false matches on random numbers — require "DÍA" keyword
-                var diaIdx = line.IndexOf("DÍA", StringComparison.OrdinalIgnoreCase);
-                if (diaIdx < 0) diaIdx = line.IndexOf("DIA", StringComparison.OrdinalIgnoreCase);
-                if (diaIdx < 0) continue;
+                // Use regex to handle Unicode normalization edge cases
+                if (!Regex.IsMatch(line, @"D[IÍ]A", RegexOptions.IgnoreCase)) continue;
 
                 var muscleText = (match.Groups[1].Value + " " + match.Groups[3].Value).Trim();
                 var muscleGroups = ExtractMuscleGroups(muscleText);
@@ -532,8 +535,8 @@ public static class LocalPdfParser
             var sectionLines = lines.Skip(startLine + 1).Take(endLine - startLine - 1).ToList();
             dayRoutine.Exercises = ParseExercises(sectionLines, muscleGroups);
 
-            if (dayRoutine.Exercises.Count > 0)
-                extraction.Routines.Add(dayRoutine);
+            // Always add the day even if empty — let caller see it in debug output
+            extraction.Routines.Add(dayRoutine);
         }
 
         return extraction;
@@ -744,8 +747,11 @@ public static class LocalPdfParser
             return false;
 
         // Exercise names are typically in UPPERCASE or mostly uppercase
-        // and contain at least 2 words (e.g., "PRESS BANCA")
-        return upperRatio > 0.5 && words.Length >= 2;
+        // Allow single-word names if they're long enough (e.g., ABDUCTOR, BÚLGARA)
+        if (upperRatio <= 0.5) return false;
+        if (words.Length >= 2) return true;
+        // Single word: must be ≥7 chars and not a known muscle group keyword
+        return words.Length == 1 && line.Length >= 7 && !MuscleGroupMap.ContainsKey(line.Trim());
     }
 
     private static string ToTitleCase(string text)
