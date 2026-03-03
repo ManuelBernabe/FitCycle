@@ -230,13 +230,37 @@ public class PdfImportService : IPdfImportService
 
         foreach (var page in document.GetPages())
         {
-            var pageText = page.Text;
-            if (!string.IsNullOrWhiteSpace(pageText))
+            var words = page.GetWords().ToList();
+            if (words.Count == 0) continue;
+
+            sb.AppendLine($"--- Página {page.Number} ---");
+
+            // Group words into lines by Y-coordinate (vertical position)
+            var lines = new List<(double y, List<(double x, string text)> words)>();
+
+            foreach (var word in words)
             {
-                sb.AppendLine($"--- Página {page.Number} ---");
-                sb.AppendLine(pageText);
-                sb.AppendLine();
+                var y = Math.Round(word.BoundingBox.Bottom, 1);
+                var existingLine = lines.FirstOrDefault(l => Math.Abs(l.y - y) < 3);
+
+                if (existingLine.words != null)
+                {
+                    existingLine.words.Add((word.BoundingBox.Left, word.Text));
+                }
+                else
+                {
+                    lines.Add((y, new List<(double x, string text)> { (word.BoundingBox.Left, word.Text) }));
+                }
             }
+
+            // Sort lines top-to-bottom (higher Y = higher on page in PDF coords)
+            foreach (var line in lines.OrderByDescending(l => l.y))
+            {
+                var sortedWords = line.words.OrderBy(w => w.x).Select(w => w.text);
+                sb.AppendLine(string.Join(" ", sortedWords));
+            }
+
+            sb.AppendLine();
         }
 
         return sb.ToString();
@@ -399,14 +423,10 @@ public static class LocalPdfParser
         ["BRAZO"] = "Bíceps", ["BRAZOS"] = "Bíceps",
     };
 
-    // Regex for day headers like: "PECTORAL-DÍA 1", "DÍA 2 ESPALDA+ FEMORAL", "DÍA3---CUADRICEPS"
+    // Regex for day headers — matches anywhere in line, not just at start
+    // Patterns: "PECTORAL-DÍA 1", "DÍA 2 ESPALDA+ FEMORAL", "DÍA3---CUADRICEPS"
     private static readonly Regex DayHeaderRegex = new(
-        @"(?:^|\n)\s*(?:([A-ZÁÉÍÓÚÑ\s\+]+?)\s*[-–—]+\s*)?D[IÍ]A\s*(\d+)\s*[-–—]*\s*([A-ZÁÉÍÓÚÑ\s\+\(\)]*)",
-        RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
-    // Also match "DÍA N" at start or "GRUPO-DÍA N" patterns
-    private static readonly Regex DayHeaderAlt = new(
-        @"(?:^|\n)\s*([A-ZÁÉÍÓÚÑ\s]+?)?\s*[-–—]*\s*D[IÍ]A\s*[-–—]*\s*(\d+)",
+        @"(?:([A-ZÁÉÍÓÚÑ\s\+]+?)\s*[-–—]+\s*)?D[IÍ]A\s*[-–—]*\s*(\d+)\s*[-–—]*\s*([A-ZÁÉÍÓÚÑ\s\+\(\)]*)",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     // Reps patterns: "4*15*12*10*8", "15 12 10 8", "REPS 15 12 10 8"
@@ -426,7 +446,7 @@ public static class LocalPdfParser
         @"(?:SERIES?|SETS?)\s*[:\s]*(\d+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly Regex RestLine = new(
-        @"(?:TIEMPO\s+DE\s+)?DESCANSO|REST", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        @"(?:TIEMPO\s+DE\s+)?DESCANSO\s*:", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     // Keywords that are NOT exercise names
     private static readonly HashSet<string> TableKeywords = new(StringComparer.OrdinalIgnoreCase)
@@ -435,6 +455,15 @@ public static class LocalPdfParser
         "TEMPO", "DESCANSO", "REST", "AGARRE", "GRIP", "PESO", "WEIGHT",
         "PÁGINA", "PAGE", "PLAN", "ENTRENAMIENTO", "TRAINING", "NOTA", "NOTAS",
         "TIEMPO", "SEG", "SEGUNDOS", "MIN", "MINUTOS", "KG", "LBS",
+    };
+
+    // Words that signal instructional/note text, not exercise names
+    private static readonly HashSet<string> NoteStartWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "MOVILIDAD", "HAZ", "POR", "SIEMPRE", "AUMENTANDO", "VAMOS",
+        "RECUERDA", "IMPORTANTE", "NOTA", "NOTAS", "REALIZA", "MANTÉN",
+        "INTENTA", "ASEGÚRATE", "CUIDADO", "EVITA", "NO", "SI", "CUANDO",
+        "TIEMPO", "DESCANSO", "1º", "2º", "3º", "4º", "5º",
     };
 
     public static PdfExtraction Parse(string pdfText)
@@ -448,19 +477,24 @@ public static class LocalPdfParser
         for (int i = 0; i < lines.Count; i++)
         {
             var line = lines[i];
+            // Skip page separators and very short lines
+            if (line.StartsWith("---") || line.Length < 3) continue;
+
             var match = DayHeaderRegex.Match(line);
-            if (!match.Success)
-                match = DayHeaderAlt.Match(line);
 
             if (match.Success)
             {
                 var dayNum = int.Parse(match.Groups[2].Value);
                 if (dayNum < 1 || dayNum > 7) continue;
 
+                // Avoid false matches on random numbers — require "DÍA" keyword
+                var diaIdx = line.IndexOf("DÍA", StringComparison.OrdinalIgnoreCase);
+                if (diaIdx < 0) diaIdx = line.IndexOf("DIA", StringComparison.OrdinalIgnoreCase);
+                if (diaIdx < 0) continue;
+
                 var muscleText = (match.Groups[1].Value + " " + match.Groups[3].Value).Trim();
                 var muscleGroups = ExtractMuscleGroups(muscleText);
 
-                // Also check the line itself for muscle group keywords
                 if (muscleGroups.Count == 0)
                     muscleGroups = ExtractMuscleGroups(line);
 
@@ -660,7 +694,7 @@ public static class LocalPdfParser
 
     private static bool IsExerciseName(string line)
     {
-        if (line.Length < 4) return false;
+        if (line.Length < 5) return false;
         if (line.Length > 80) return false;
 
         // Must have significant uppercase content
@@ -673,17 +707,33 @@ public static class LocalPdfParser
         // Skip lines that are mostly numbers
         if (line.Count(char.IsDigit) > line.Count(char.IsLetter)) return false;
 
-        // Skip table keywords
-        var words = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (words.Length > 0 && words.All(w => TableKeywords.Contains(w.TrimEnd(':', ',', '.'))))
+        // Skip lines containing DÍA (day headers)
+        if (line.Contains("DÍA", StringComparison.OrdinalIgnoreCase) || line.Contains("DIA ", StringComparison.OrdinalIgnoreCase))
             return false;
 
-        // Skip lines starting with table keywords
-        if (words.Length > 0 && TableKeywords.Contains(words[0].TrimEnd(':', ',', '.')))
+        var words = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length == 0) return false;
+
+        // Skip lines that are entirely table keywords
+        if (words.All(w => TableKeywords.Contains(w.TrimEnd(':', ',', '.', 'º'))))
+            return false;
+
+        // Skip lines starting with structural table keywords
+        var firstWord = words[0].TrimEnd(':', ',', '.', 'º');
+        if (TableKeywords.Contains(firstWord))
+            return false;
+
+        // Skip lines starting with note/instruction words
+        if (NoteStartWords.Contains(firstWord))
+            return false;
+
+        // Skip lines starting with ordinals like "1º.", "2º."
+        if (Regex.IsMatch(words[0], @"^\d+[º°]"))
             return false;
 
         // Exercise names are typically in UPPERCASE or mostly uppercase
-        return upperRatio > 0.6;
+        // and contain at least 2 words (e.g., "PRESS BANCA")
+        return upperRatio > 0.5 && words.Length >= 2;
     }
 
     private static string ToTitleCase(string text)
