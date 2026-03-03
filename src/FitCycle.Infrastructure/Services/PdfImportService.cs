@@ -14,6 +14,7 @@ namespace FitCycle.Infrastructure.Services;
 public interface IPdfImportService
 {
     Task<PdfImportResult> ImportFromPdfAsync(byte[] pdfBytes, int targetUserId);
+    string ExtractTextFromPdf(byte[] pdfBytes);
 }
 
 public class PdfImportService : IPdfImportService
@@ -59,76 +60,79 @@ public class PdfImportService : IPdfImportService
 
         _logger.LogInformation("Extracted {Chars} characters from PDF", pdfText.Length);
 
-        // 2. Try Gemini API first, fall back to local parser if it fails
+        // 2. ALWAYS run local parser first (it's free and reliable)
         PdfExtraction? extraction = null;
-        string? parseError = null;
-
-        if (!string.IsNullOrWhiteSpace(_settings.ApiKey))
+        try
         {
+            extraction = LocalPdfParser.Parse(pdfText);
+            _logger.LogInformation("Local parser found {Days} days with {Ex} total exercises",
+                extraction.Routines.Count,
+                extraction.Routines.Sum(r => r.Exercises.Count));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Local parser failed");
+        }
+
+        // 3. Try Gemini only if local parser found < 3 useful days
+        var localUsefulDays = extraction?.Routines?.Count(r => r.Exercises.Count > 0) ?? 0;
+        if (localUsefulDays < 3 && !string.IsNullOrWhiteSpace(_settings.ApiKey))
+        {
+            _logger.LogInformation("Local found only {Days} days, trying Gemini as supplement", localUsefulDays);
             var (extractedJson, apiError) = await CallGeminiWithTextAsync(pdfText);
             if (extractedJson != null)
             {
                 try
                 {
-                    extraction = JsonSerializer.Deserialize<PdfExtraction>(extractedJson, _jsonOpts);
+                    var gemini = JsonSerializer.Deserialize<PdfExtraction>(extractedJson, _jsonOpts);
+                    var geminiUseful = gemini?.Routines?.Count(r => r.Exercises.Count > 0) ?? 0;
+                    if (geminiUseful > localUsefulDays)
+                    {
+                        _logger.LogInformation("Using Gemini result ({G} days vs local {L} days)", geminiUseful, localUsefulDays);
+                        extraction = gemini;
+                    }
                 }
                 catch (JsonException ex)
                 {
-                    _logger.LogWarning(ex, "Failed to parse Gemini JSON, falling back to local parser");
-                    parseError = ex.Message;
+                    _logger.LogWarning(ex, "Failed to parse Gemini JSON");
                 }
             }
             else
             {
-                _logger.LogWarning("Gemini API failed: {Error}. Falling back to local parser.", apiError);
-                parseError = apiError;
-            }
-        }
-        else
-        {
-            _logger.LogInformation("No Gemini API key configured, using local parser");
-        }
-
-        // 3. Fallback: local regex parser
-        if (extraction?.Routines == null || extraction.Routines.Count == 0)
-        {
-            _logger.LogInformation("Using local regex parser for PDF text");
-            try
-            {
-                extraction = LocalPdfParser.Parse(pdfText);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Local parser also failed");
-                return new PdfImportResult { Success = false, Message = parseError ?? $"Error al parsear PDF: {ex.Message}" };
+                _logger.LogWarning("Gemini failed: {Error}", apiError);
             }
         }
 
-        // Filter out days with no exercises for the "no routines" check
+        // 4. Check results
         var daysWithExercises = extraction?.Routines?.Where(r => r.Exercises.Count > 0).ToList() ?? new();
         if (daysWithExercises.Count == 0)
         {
-            var dayBoundaryInfo = extraction?.Routines?.Count > 0
-                ? $"Se encontraron {extraction.Routines.Count} cabeceras de día pero 0 ejercicios."
+            var dayCount = extraction?.Routines?.Count ?? 0;
+            var info = dayCount > 0
+                ? $"Se encontraron {dayCount} cabeceras de día pero 0 ejercicios."
                 : "No se encontraron cabeceras de día.";
             var errLines = pdfText.Split('\n').Where(l => !string.IsNullOrWhiteSpace(l)).ToList();
-            var errDiaLines = errLines.Where(l => Regex.IsMatch(l, @"D[IÍ]A", RegexOptions.IgnoreCase))
+            var diaLines = errLines.Where(l => Regex.IsMatch(l, @"D[IÍ]A", RegexOptions.IgnoreCase))
                 .Select(l => l.Trim().Length > 80 ? l.Trim()[..80] : l.Trim()).Take(10);
-            var firstLines = errLines.Take(15).Select(l => l.Trim().Length > 60 ? l.Trim()[..60] : l.Trim());
-            var debugText = $"{dayBoundaryInfo} Líneas DÍA: [{string.Join(" | ", errDiaLines)}]. Primeras: [{string.Join(" | ", firstLines)}]";
-            return new PdfImportResult { Success = false, Message = $"No se encontraron rutinas. {debugText[..Math.Min(debugText.Length, 600)]}" };
+            var first = errLines.Take(20).Select(l => l.Trim().Length > 60 ? l.Trim()[..60] : l.Trim());
+            var debug = $"{info} DÍA lines: [{string.Join(" | ", diaLines)}]. First lines: [{string.Join(" | ", first)}]";
+            return new PdfImportResult { Success = false, Message = $"No se encontraron rutinas. {debug[..Math.Min(debug.Length, 800)]}" };
         }
 
-        // 4. Get all muscle groups and exercises
+        // 5. Get all muscle groups and exercises
         var allMuscleGroups = _repo.GetAllMuscleGroups();
         var allExercises = _repo.GetExercises();
 
-        // Debug: include found days info
-        var foundDays = extraction!.Routines.Select(r => $"Día{r.DayOfWeek}({r.Exercises.Count}ej/{string.Join("+", r.MuscleGroups)})").ToList();
-        var debugMsg = $"Parser encontró {extraction.Routines.Count} días: {string.Join(", ", foundDays)}";
-        var result = new PdfImportResult { Success = true, Message = debugMsg[..Math.Min(debugMsg.Length, 500)] };
+        // Build result message with debug info
+        var allDayInfo = extraction!.Routines.Select(r =>
+            $"D{r.DayOfWeek}:{r.Exercises.Count}ej").ToList();
+        var result = new PdfImportResult
+        {
+            Success = true,
+            Message = $"Importadas {daysWithExercises.Count} rutinas. [{string.Join(", ", allDayInfo)}]"
+        };
 
-        // 5. Process each day (only those with exercises)
+        // 6. Process each day with exercises
         foreach (var dayRoutine in daysWithExercises)
         {
             var dayOfWeek = dayRoutine.DayOfWeek switch
@@ -138,9 +142,10 @@ public class PdfImportService : IPdfImportService
                 3 => DayOfWeek.Wednesday,
                 4 => DayOfWeek.Thursday,
                 5 => DayOfWeek.Friday,
+                6 => DayOfWeek.Saturday,
+                7 => DayOfWeek.Sunday,
                 _ => (DayOfWeek?)null
             };
-
             if (dayOfWeek == null) continue;
 
             var summary = new DayImportSummary
@@ -197,7 +202,6 @@ public class PdfImportService : IPdfImportService
                     var key = string.Compare(pdfEx.Name, pdfEx.SupersetWith, StringComparison.OrdinalIgnoreCase) < 0
                         ? $"{pdfEx.Name}|{pdfEx.SupersetWith}"
                         : $"{pdfEx.SupersetWith}|{pdfEx.Name}";
-
                     if (!supersetMap.TryGetValue(key, out supersetGroup))
                     {
                         supersetGroup = supersetCounter++;
@@ -234,7 +238,7 @@ public class PdfImportService : IPdfImportService
         return result;
     }
 
-    private string ExtractTextFromPdf(byte[] pdfBytes)
+    public string ExtractTextFromPdf(byte[] pdfBytes)
     {
         var sb = new StringBuilder();
         using var document = PdfDocument.Open(pdfBytes);
@@ -277,7 +281,8 @@ public class PdfImportService : IPdfImportService
         // Normalize Unicode (decomposed → composed: I+accent → Í)
         var text = sb.ToString().Normalize(NormalizationForm.FormC);
         // Normalize various dash characters to regular hyphen
-        text = text.Replace('\u2013', '-').Replace('\u2014', '-').Replace('\u2015', '-').Replace('\u2212', '-');
+        text = text.Replace('\u2013', '-').Replace('\u2014', '-')
+                   .Replace('\u2015', '-').Replace('\u2212', '-');
         return text;
     }
 
@@ -347,12 +352,11 @@ TEXTO DEL PDF:
         var json = JsonSerializer.Serialize(requestBody);
         var url = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key={_settings.ApiKey}";
 
-        // Retry up to 3 times with backoff for 429 errors
         for (int attempt = 0; attempt < 3; attempt++)
         {
             if (attempt > 0)
             {
-                var delay = attempt * 5; // 5s, 10s
+                var delay = attempt * 5;
                 _logger.LogInformation("Retrying Gemini API call in {Delay}s (attempt {Attempt}/3)", delay, attempt + 1);
                 await Task.Delay(TimeSpan.FromSeconds(delay));
             }
@@ -370,14 +374,14 @@ TEXTO DEL PDF:
                 if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
                 {
                     _logger.LogWarning("Gemini API 429 (attempt {Attempt}/3)", attempt + 1);
-                    if (attempt < 2) continue; // retry
-                    return (null, "Gemini API: demasiadas solicitudes (429). Se usará el parser local.");
+                    if (attempt < 2) continue;
+                    return (null, "Gemini 429: rate limited");
                 }
 
                 if (!response.IsSuccessStatusCode)
                 {
                     _logger.LogError("Gemini API error {Status}: {Body}", response.StatusCode, responseText);
-                    return (null, $"Gemini API error {response.StatusCode}: {responseText[..Math.Min(responseText.Length, 300)]}");
+                    return (null, $"Gemini error {response.StatusCode}");
                 }
 
                 using var doc = JsonDocument.Parse(responseText);
@@ -400,31 +404,31 @@ TEXTO DEL PDF:
                     }
                 }
 
-                return (null, "Gemini respondió sin contenido de texto.");
+                return (null, "Gemini returned no text content");
             }
             catch (TaskCanceledException)
             {
-                return (null, "Timeout: Gemini tardó demasiado (>3 min).");
+                return (null, "Gemini timeout (>3 min)");
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to call Gemini API");
-                return (null, $"Error llamando a Gemini: {ex.Message}");
+                return (null, $"Gemini error: {ex.Message}");
             }
         }
 
-        return (null, "Gemini API: agotados los reintentos.");
+        return (null, "Gemini: retries exhausted");
     }
 }
 
-// -- Local PDF Parser (fallback when Gemini is unavailable) --
+// -- Local PDF Parser --
 
 public static class LocalPdfParser
 {
     private static readonly Dictionary<string, string> MuscleGroupMap = new(StringComparer.OrdinalIgnoreCase)
     {
         ["PECTORAL"] = "Pecho", ["PECHO"] = "Pecho", ["CHEST"] = "Pecho",
-        ["ESPALDA"] = "Espalda", ["DORSAL"] = "Espalda", ["BACK"] = "Espalda",
+        ["ESPALDA"] = "Espalda", ["DORSAL"] = "Espalda", ["BACK"] = "Espalda", ["LUMBAR"] = "Espalda",
         ["HOMBRO"] = "Hombros", ["HOMBROS"] = "Hombros", ["DELTOIDES"] = "Hombros",
         ["BÍCEPS"] = "Bíceps", ["BICEPS"] = "Bíceps",
         ["TRÍCEPS"] = "Tríceps", ["TRICEPS"] = "Tríceps",
@@ -438,48 +442,31 @@ public static class LocalPdfParser
         ["BRAZO"] = "Bíceps", ["BRAZOS"] = "Bíceps",
     };
 
-    // Regex for day headers — matches anywhere in line, not just at start
-    // Patterns: "PECTORAL-DÍA 1", "DÍA 2 ESPALDA+ FEMORAL", "DÍA3---CUADRICEPS"
+    // Regex for day headers — flexible to match many formats
+    // "PECTORAL-DÍA 1", "DÍA 2 ESPALDA+ FEMORAL", "DÍA3---CUADRICEPS", "DÍA 4---HOMBRO:"
     private static readonly Regex DayHeaderRegex = new(
-        @"(?:([A-ZÁÉÍÓÚÑ\s\+]+?)\s*[-–—]+\s*)?D[IÍ]A\s*[-–—]*\s*(\d+)\s*[-–—]*\s*([A-ZÁÉÍÓÚÑ\s\+\(\)]*)",
+        @"D[IÍ]A\s*[-–—:]*\s*(\d+)",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-    // Reps patterns: "4*15*12*10*8", "15 12 10 8", "REPS 15 12 10 8"
-    private static readonly Regex RepsShorthand = new(
-        @"(\d+)\s*\*\s*(\d+(?:\s*\*\s*\d+)*)", RegexOptions.Compiled);
-
-    private static readonly Regex RepsLine = new(
-        @"(?:REPS?|REPETICION(?:ES)?)\s*[:\s]*(\d[\d\s,*]+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
-    private static readonly Regex TempoPos = new(
-        @"(?:FASE\s+POSITIVA|TEMPO\s+POS|CONC[EÉ]NTRIC[AO])\s*[:\s]*(\d+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
-    private static readonly Regex TempoNeg = new(
-        @"(?:FASE\s+NEGATIVA|TEMPO\s+NEG|EXC[EÉ]NTRIC[AO])\s*[:\s]*(\d+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
-    private static readonly Regex SeriesCount = new(
-        @"(?:SERIES?|SETS?)\s*[:\s]*(\d+)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
     private static readonly Regex RestLine = new(
-        @"(?:TIEMPO\s+DE\s+)?DESCANSO\s*:", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        @"(?:TIEMPO\s+DE\s+)?DESCANSO", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     // Keywords that are NOT exercise names
-    private static readonly HashSet<string> TableKeywords = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> NonExerciseWords = new(StringComparer.OrdinalIgnoreCase)
     {
         "SERIE", "SERIES", "REPS", "REPETICIONES", "FASE", "POSITIVA", "NEGATIVA",
         "TEMPO", "DESCANSO", "REST", "AGARRE", "GRIP", "PESO", "WEIGHT",
         "PÁGINA", "PAGE", "PLAN", "ENTRENAMIENTO", "TRAINING", "NOTA", "NOTAS",
         "TIEMPO", "SEG", "SEGUNDOS", "MIN", "MINUTOS", "KG", "LBS",
-        "RGANUTRI", "ASESORÍA",
+        "RGANUTRI", "ASESORÍA", "TOTAL",
     };
 
-    // Words that signal instructional/note text, not exercise names
     private static readonly HashSet<string> NoteStartWords = new(StringComparer.OrdinalIgnoreCase)
     {
         "MOVILIDAD", "HAZ", "POR", "SIEMPRE", "AUMENTANDO", "VAMOS",
         "RECUERDA", "IMPORTANTE", "NOTA", "NOTAS", "REALIZA", "MANTÉN",
         "INTENTA", "ASEGÚRATE", "CUIDADO", "EVITA", "NO", "SI", "CUANDO",
-        "TIEMPO", "DESCANSO", "1º", "2º", "3º", "4º", "5º",
+        "TIEMPO", "DESCANSO",
     };
 
     public static PdfExtraction Parse(string pdfText)
@@ -487,34 +474,58 @@ public static class LocalPdfParser
         var extraction = new PdfExtraction();
         var lines = pdfText.Split('\n').Select(l => l.Trim()).ToList();
 
+        // Pre-process: merge lines where DÍA is at end and next line starts with digit
+        for (int i = 0; i < lines.Count - 1; i++)
+        {
+            if (Regex.IsMatch(lines[i], @"D[IÍ]A\s*$", RegexOptions.IgnoreCase))
+            {
+                var next = lines[i + 1].Trim();
+                if (next.Length > 0 && char.IsDigit(next[0]))
+                {
+                    lines[i] = lines[i] + " " + next;
+                    lines.RemoveAt(i + 1);
+                }
+            }
+        }
+
         // Find all day boundaries
         var dayBoundaries = new List<(int lineIndex, int dayNum, List<string> muscleGroups)>();
 
         for (int i = 0; i < lines.Count; i++)
         {
             var line = lines[i];
-            // Skip page separators and very short lines
-            if (line.StartsWith("---") || line.Length < 3) continue;
+            if (line.StartsWith("---") && line.Contains("Página")) continue; // page separator
+            if (line.Length < 3) continue;
+
+            // Must contain DÍA/DIA keyword
+            if (!Regex.IsMatch(line, @"D[IÍ]A", RegexOptions.IgnoreCase)) continue;
 
             var match = DayHeaderRegex.Match(line);
+            if (!match.Success) continue;
 
-            if (match.Success)
+            var dayNum = int.Parse(match.Groups[1].Value);
+            if (dayNum < 1 || dayNum > 7) continue;
+
+            // Avoid duplicate day numbers
+            if (dayBoundaries.Any(d => d.dayNum == dayNum)) continue;
+
+            // Extract muscle groups from the entire line
+            var muscleGroups = ExtractMuscleGroups(line);
+
+            // If no muscle groups found on this line, look at nearby lines
+            if (muscleGroups.Count == 0)
             {
-                var dayNum = int.Parse(match.Groups[2].Value);
-                if (dayNum < 1 || dayNum > 7) continue;
-
-                // Avoid false matches on random numbers — require "DÍA" keyword
-                // Use regex to handle Unicode normalization edge cases
-                if (!Regex.IsMatch(line, @"D[IÍ]A", RegexOptions.IgnoreCase)) continue;
-
-                var muscleText = (match.Groups[1].Value + " " + match.Groups[3].Value).Trim();
-                var muscleGroups = ExtractMuscleGroups(muscleText);
-
-                if (muscleGroups.Count == 0)
-                    muscleGroups = ExtractMuscleGroups(line);
-
-                dayBoundaries.Add((i, dayNum, muscleGroups));
+                for (int j = i + 1; j < Math.Min(i + 4, lines.Count); j++)
+                {
+                    var nextLine = lines[j].Trim();
+                    if (string.IsNullOrWhiteSpace(nextLine) || nextLine.StartsWith("---")) continue;
+                    if (Regex.IsMatch(nextLine, @"D[IÍ]A", RegexOptions.IgnoreCase)) break;
+                    var mg = ExtractMuscleGroups(nextLine);
+                    if (mg.Count > 0) { muscleGroups = mg; break; }
+                }
             }
+
+            dayBoundaries.Add((i, dayNum, muscleGroups));
         }
 
         if (dayBoundaries.Count == 0)
@@ -526,16 +537,15 @@ public static class LocalPdfParser
             var (startLine, dayNum, muscleGroups) = dayBoundaries[d];
             var endLine = d + 1 < dayBoundaries.Count ? dayBoundaries[d + 1].lineIndex : lines.Count;
 
+            var sectionLines = lines.Skip(startLine + 1).Take(endLine - startLine - 1).ToList();
+
             var dayRoutine = new PdfDayRoutine
             {
                 DayOfWeek = dayNum,
                 MuscleGroups = muscleGroups,
+                Exercises = ParseExercises(sectionLines, muscleGroups),
             };
 
-            var sectionLines = lines.Skip(startLine + 1).Take(endLine - startLine - 1).ToList();
-            dayRoutine.Exercises = ParseExercises(sectionLines, muscleGroups);
-
-            // Always add the day even if empty — let caller see it in debug output
             extraction.Routines.Add(dayRoutine);
         }
 
@@ -545,33 +555,23 @@ public static class LocalPdfParser
     private static List<string> ExtractMuscleGroups(string text)
     {
         var groups = new List<string>();
-        // Split by common separators
-        var parts = Regex.Split(text, @"[\+\-–—,/\\&y]+", RegexOptions.IgnoreCase);
+        var parts = Regex.Split(text, @"[\+\-–—,/\\&:()]+");
 
         foreach (var part in parts)
         {
-            var clean = part.Trim().TrimEnd('S'); // handle plurals loosely
-            var cleanFull = part.Trim();
+            var clean = part.Trim();
+            if (clean.Length < 3) continue;
 
-            // Try exact match first, then trimmed
-            foreach (var candidate in new[] { cleanFull, clean })
+            // Try each word in the part
+            var words = clean.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            foreach (var word in words)
             {
-                if (MuscleGroupMap.TryGetValue(candidate, out var mapped))
+                var w = word.TrimEnd('S', 's', ':', ',', '.');
+                if (MuscleGroupMap.TryGetValue(word, out var mapped) ||
+                    MuscleGroupMap.TryGetValue(w, out mapped))
                 {
                     if (!groups.Contains(mapped))
                         groups.Add(mapped);
-                    break;
-                }
-
-                // Try partial match
-                foreach (var kvp in MuscleGroupMap)
-                {
-                    if (candidate.Contains(kvp.Key, StringComparison.OrdinalIgnoreCase))
-                    {
-                        if (!groups.Contains(kvp.Value))
-                            groups.Add(kvp.Value);
-                        break;
-                    }
                 }
             }
         }
@@ -584,27 +584,85 @@ public static class LocalPdfParser
         var exercises = new List<PdfExercise>();
         PdfExercise? current = null;
         var notesBuilder = new StringBuilder();
+        bool inTable = false;
 
-        foreach (var rawLine in lines)
+        for (int idx = 0; idx < lines.Count; idx++)
         {
-            var line = rawLine.Trim();
+            var line = lines[idx].Trim();
             if (string.IsNullOrWhiteSpace(line)) continue;
             if (line.StartsWith("---")) continue; // page separator
 
-            // Check if this is a rest line (signals end of current exercise)
+            // Rest/descanso line — finalize current exercise notes
             if (RestLine.IsMatch(line))
             {
-                if (current != null)
+                FinalizeNotes(current, notesBuilder);
+                inTable = false;
+                continue;
+            }
+
+            // Check for exercise name FIRST (before table parsing)
+            if (IsExerciseName(line))
+            {
+                FinalizeNotes(current, notesBuilder);
+                inTable = false;
+
+                current = new PdfExercise
                 {
-                    current.Notes = notesBuilder.ToString().Trim();
-                    notesBuilder.Clear();
+                    Name = ToTitleCase(CleanExerciseName(line)),
+                    MuscleGroup = dayMuscleGroups.FirstOrDefault() ?? "Pecho",
+                };
+                exercises.Add(current);
+                continue;
+            }
+
+            if (current == null) continue; // Skip lines before first exercise
+
+            // Table header detection: "Serie Reps Fase positiva Fase negativa"
+            if (IsTableHeader(line))
+            {
+                inTable = true;
+                continue;
+            }
+
+            // Table data row: "1 15 2 seg 3 seg" or "1 15 2 3"
+            if (inTable)
+            {
+                var row = TryParseTableRow(line);
+                if (row != null)
+                {
+                    current.Sets.Add(row);
+                    continue;
+                }
+                // Not a valid row — exit table mode
+                inTable = false;
+            }
+
+            // Individual pattern matchers (for non-table formats)
+            // Reps shorthand: "4*15*12*10*8"
+            if (Regex.IsMatch(line, @"\d+\s*\*\s*\d+"))
+            {
+                var nums = Regex.Matches(line, @"\d+").Select(m => int.Parse(m.Value)).ToList();
+                if (nums.Count >= 2)
+                {
+                    current.Sets.Clear();
+                    if (nums.Count == 2)
+                    {
+                        for (int i = 0; i < nums[0]; i++)
+                            current.Sets.Add(new PdfSet { Reps = nums[1] });
+                    }
+                    else
+                    {
+                        foreach (var r in nums)
+                            current.Sets.Add(new PdfSet { Reps = r });
+                    }
                 }
                 continue;
             }
 
-            // Try to extract reps
-            var repsMatch = RepsLine.Match(line);
-            if (repsMatch.Success && current != null)
+            // REPS line: "REPS 15 12 10 8"
+            var repsMatch = Regex.Match(line, @"(?:REPS?|REPETICION(?:ES)?)\s*[:\s]+(\d[\d\s,*]+)",
+                RegexOptions.IgnoreCase);
+            if (repsMatch.Success)
             {
                 var repsNums = Regex.Matches(repsMatch.Groups[1].Value, @"\d+")
                     .Select(m => int.Parse(m.Value)).ToList();
@@ -614,144 +672,176 @@ public static class LocalPdfParser
                 continue;
             }
 
-            // Try shorthand reps like "4*15*12*10*8"
-            var shortMatch = RepsShorthand.Match(line);
-            if (shortMatch.Success && current != null)
+            // FASE POSITIVA: N seg
+            var tpMatch = Regex.Match(line,
+                @"(?:FASE\s+POSITIVA|CONC[EÉ]NTRIC[AO])\s*[:\s]*(\d+)",
+                RegexOptions.IgnoreCase);
+            if (tpMatch.Success)
             {
-                var nums = Regex.Matches(line, @"\d+").Select(m => int.Parse(m.Value)).ToList();
-                if (nums.Count >= 2)
-                {
-                    // First number could be series count, rest are reps
-                    // Pattern: "4*15" means 4 sets of 15, "4*15*12*10*8" means reps per set
-                    if (nums.Count == 2)
-                    {
-                        current.Sets.Clear();
-                        for (int i = 0; i < nums[0]; i++)
-                            current.Sets.Add(new PdfSet { Reps = nums[1] });
-                    }
-                    else
-                    {
-                        current.Sets.Clear();
-                        foreach (var r in nums.Skip(0))
-                            current.Sets.Add(new PdfSet { Reps = r });
-                    }
-                }
-                continue;
-            }
-
-            // Try to extract tempo
-            var tempoPosMatch = TempoPos.Match(line);
-            if (tempoPosMatch.Success && current != null)
-            {
-                var val = int.Parse(tempoPosMatch.Groups[1].Value);
+                var val = int.Parse(tpMatch.Groups[1].Value);
                 foreach (var s in current.Sets) s.TempoPos = val;
                 continue;
             }
 
-            var tempoNegMatch = TempoNeg.Match(line);
-            if (tempoNegMatch.Success && current != null)
+            // FASE NEGATIVA: N seg
+            var tnMatch = Regex.Match(line,
+                @"(?:FASE\s+NEGATIVA|EXC[EÉ]NTRIC[AO])\s*[:\s]*(\d+)",
+                RegexOptions.IgnoreCase);
+            if (tnMatch.Success)
             {
-                var val = int.Parse(tempoNegMatch.Groups[1].Value);
+                var val = int.Parse(tnMatch.Groups[1].Value);
                 foreach (var s in current.Sets) s.TempoNeg = val;
                 continue;
             }
 
-            // Series count
-            var seriesMatch = SeriesCount.Match(line);
-            if (seriesMatch.Success && current != null && current.Sets.Count == 0)
+            // SERIES: N
+            var seriesMatch = Regex.Match(line, @"(?:SERIES?|SETS?)\s*[:\s]*(\d+)",
+                RegexOptions.IgnoreCase);
+            if (seriesMatch.Success && current.Sets.Count == 0)
             {
                 var count = int.Parse(seriesMatch.Groups[1].Value);
-                for (int i = 0; i < count; i++)
+                for (int i = 0; i < Math.Min(count, 10); i++)
                     current.Sets.Add(new PdfSet { Reps = 12 });
                 continue;
             }
 
-            // Check if line looks like an exercise name (mostly uppercase, not a table keyword)
-            if (IsExerciseName(line))
-            {
-                // Save previous exercise
-                if (current != null)
-                    current.Notes = notesBuilder.ToString().Trim();
-                notesBuilder.Clear();
-
-                current = new PdfExercise
-                {
-                    Name = ToTitleCase(line),
-                    MuscleGroup = dayMuscleGroups.FirstOrDefault() ?? "Pecho",
-                };
-                exercises.Add(current);
-                continue;
-            }
-
-            // Anything else is notes for the current exercise
-            if (current != null && line.Length > 3)
-            {
+            // Anything else → notes (if it has some text substance)
+            if (line.Length > 3)
                 notesBuilder.AppendLine(line);
-            }
         }
 
-        // Finalize last exercise
-        if (current != null)
-            current.Notes = notesBuilder.ToString().Trim();
+        FinalizeNotes(current, notesBuilder);
 
         // Default sets for exercises with none
-        foreach (var ex in exercises)
-        {
-            if (ex.Sets.Count == 0)
-            {
-                for (int i = 0; i < 3; i++)
-                    ex.Sets.Add(new PdfSet { Reps = 12 });
-            }
-        }
+        foreach (var ex in exercises.Where(e => e.Sets.Count == 0))
+            for (int i = 0; i < 3; i++)
+                ex.Sets.Add(new PdfSet { Reps = 12 });
 
         return exercises;
     }
 
+    private static void FinalizeNotes(PdfExercise? ex, StringBuilder sb)
+    {
+        if (ex != null)
+            ex.Notes = sb.ToString().Trim();
+        sb.Clear();
+    }
+
+    /// <summary>
+    /// Detects table header lines like "Serie Reps Fase positiva Fase negativa"
+    /// </summary>
+    private static bool IsTableHeader(string line)
+    {
+        var lower = line.ToLowerInvariant();
+        int hits = 0;
+        if (lower.Contains("serie")) hits++;
+        if (lower.Contains("reps") || lower.Contains("repeticion")) hits++;
+        if (lower.Contains("fase")) hits++;
+        if (lower.Contains("positiva") || lower.Contains("negativa")) hits++;
+        return hits >= 2;
+    }
+
+    /// <summary>
+    /// Parses a table data row: "1 15 2 seg 3 seg" → PdfSet with reps, tempo
+    /// Numbers: [serieNum, reps, tempoPos?, tempoNeg?]
+    /// </summary>
+    private static PdfSet? TryParseTableRow(string line)
+    {
+        var trimmed = line.Trim();
+        if (trimmed.Length == 0 || !char.IsDigit(trimmed[0])) return null;
+
+        var numbers = Regex.Matches(trimmed, @"\d+")
+            .Select(m => int.Parse(m.Value)).ToList();
+
+        if (numbers.Count < 2) return null;
+
+        // First number is serie index (1-10), filter out unreasonable values
+        if (numbers[0] < 1 || numbers[0] > 10) return null;
+
+        // Second number is reps — should be reasonable (1-100)
+        if (numbers[1] < 1 || numbers[1] > 100) return null;
+
+        return new PdfSet
+        {
+            Reps = numbers[1],
+            TempoPos = numbers.Count > 2 ? numbers[2] : 0,
+            TempoNeg = numbers.Count > 3 ? numbers[3] : 0,
+        };
+    }
+
     private static bool IsExerciseName(string line)
     {
-        if (line.Length < 5) return false;
-        if (line.Length > 80) return false;
+        if (line.Length < 5 || line.Length > 100) return false;
 
-        // Must have significant uppercase content
-        var upperCount = line.Count(c => char.IsUpper(c));
-        var letterCount = line.Count(c => char.IsLetter(c));
+        var letterCount = line.Count(char.IsLetter);
         if (letterCount == 0) return false;
 
+        var upperCount = line.Count(char.IsUpper);
         var upperRatio = (double)upperCount / letterCount;
+        if (upperRatio <= 0.5) return false;
 
         // Skip lines that are mostly numbers
-        if (line.Count(char.IsDigit) > line.Count(char.IsLetter)) return false;
+        if (line.Count(char.IsDigit) > letterCount) return false;
 
         // Skip lines containing DÍA (day headers)
-        if (line.Contains("DÍA", StringComparison.OrdinalIgnoreCase) || line.Contains("DIA ", StringComparison.OrdinalIgnoreCase))
-            return false;
+        if (Regex.IsMatch(line, @"D[IÍ]A", RegexOptions.IgnoreCase)) return false;
 
         var words = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (words.Length == 0) return false;
 
+        var firstWord = words[0].TrimEnd(':', ',', '.', 'º', '°');
+
+        // Skip lines starting with table/note keywords
+        if (NonExerciseWords.Contains(firstWord)) return false;
+        if (NoteStartWords.Contains(firstWord)) return false;
+
+        // Skip ordinals: "1º.", "2º."
+        if (Regex.IsMatch(words[0], @"^\d+[º°]")) return false;
+
         // Skip lines that are entirely table keywords
-        if (words.All(w => TableKeywords.Contains(w.TrimEnd(':', ',', '.', 'º'))))
+        if (words.All(w => NonExerciseWords.Contains(w.TrimEnd(':', ',', '.', 'º', '°'))))
             return false;
 
-        // Skip lines starting with structural table keywords
-        var firstWord = words[0].TrimEnd(':', ',', '.', 'º');
-        if (TableKeywords.Contains(firstWord))
+        // Skip lines that are muscle group descriptions (≥2 muscle group keywords)
+        var mgHits = CountMuscleGroupKeywords(line);
+        var cleanWords = Regex.Split(line, @"[\+\-–—,/\\&\s:()]+")
+            .Where(w => w.Length >= 3).ToList();
+        if (mgHits >= 2 && cleanWords.Count > 0 && mgHits >= cleanWords.Count * 0.5)
             return false;
 
-        // Skip lines starting with note/instruction words
-        if (NoteStartWords.Contains(firstWord))
-            return false;
+        // For single-word lines, require ≥7 chars and not a muscle group
+        if (words.Length == 1)
+            return line.Length >= 7 && !MuscleGroupMap.ContainsKey(line.Trim());
 
-        // Skip lines starting with ordinals like "1º.", "2º."
-        if (Regex.IsMatch(words[0], @"^\d+[º°]"))
-            return false;
+        return words.Length >= 2;
+    }
 
-        // Exercise names are typically in UPPERCASE or mostly uppercase
-        // Allow single-word names if they're long enough (e.g., ABDUCTOR, BÚLGARA)
-        if (upperRatio <= 0.5) return false;
-        if (words.Length >= 2) return true;
-        // Single word: must be ≥7 chars and not a known muscle group keyword
-        return words.Length == 1 && line.Length >= 7 && !MuscleGroupMap.ContainsKey(line.Trim());
+    private static int CountMuscleGroupKeywords(string line)
+    {
+        int count = 0;
+        var used = new HashSet<string>();
+        foreach (var kvp in MuscleGroupMap)
+        {
+            if (!used.Contains(kvp.Value) &&
+                line.Contains(kvp.Key, StringComparison.OrdinalIgnoreCase))
+            {
+                count++;
+                used.Add(kvp.Value); // Count each muscle group only once
+            }
+        }
+        return count;
+    }
+
+    /// <summary>
+    /// Cleans exercise name: remove trailing punctuation, numbering prefixes
+    /// </summary>
+    private static string CleanExerciseName(string name)
+    {
+        // Remove leading numbering like "1." or "1-"
+        name = Regex.Replace(name, @"^\d+[\.\-\)]\s*", "").Trim();
+        // Remove trailing colons, periods
+        name = name.TrimEnd(':', '.', ',', '-');
+        return name;
     }
 
     private static string ToTitleCase(string text)

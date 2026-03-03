@@ -366,6 +366,36 @@ app.MapPost("/routines/import-pdf", async (HttpRequest request, IPdfImportServic
 .RequireAuthorization("SuperuserOnly")
 .DisableAntiforgery();
 
+// -- Debug: ver texto extraído del PDF --
+app.MapPost("/routines/debug-pdf", async (HttpRequest request, IPdfImportService importService) =>
+{
+    var form = await request.ReadFormAsync();
+    var file = form.Files["pdf"];
+    if (file == null || file.Length == 0)
+        return Results.BadRequest(new { error = "No se proporcionó archivo PDF." });
+
+    using var ms = new MemoryStream();
+    await file.CopyToAsync(ms);
+    var text = importService.ExtractTextFromPdf(ms.ToArray());
+    var linesList = text.Split('\n').Where(l => !string.IsNullOrWhiteSpace(l)).ToList();
+    var diaLines = linesList.Where(l =>
+        System.Text.RegularExpressions.Regex.IsMatch(l, @"D[IÍ]A", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+        .Select(l => l.Trim()).ToList();
+
+    return Results.Ok(new
+    {
+        totalLines = linesList.Count,
+        totalChars = text.Length,
+        diaLines,
+        first100Lines = linesList.Take(100).Select(l => l.Trim()).ToList(),
+        fullText = text.Length <= 20000 ? text : text[..20000] + "... (truncated)"
+    });
+})
+.WithName("DebugPdfText")
+.WithOpenApi()
+.RequireAuthorization("SuperuserOnly")
+.DisableAntiforgery();
+
 // -- Historial de entrenamientos --
 app.MapPost("/workouts", (SaveWorkoutRequest request, FitCycleDbContext db, ClaimsPrincipal user) =>
 {
