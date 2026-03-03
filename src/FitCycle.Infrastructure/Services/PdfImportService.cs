@@ -5,6 +5,7 @@ using FitCycle.Core.Models;
 using FitCycle.Infrastructure.Repositories;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using UglyToad.PdfPig;
 
 namespace FitCycle.Infrastructure.Services;
 
@@ -43,13 +44,29 @@ public class PdfImportService : IPdfImportService
         if (string.IsNullOrWhiteSpace(_settings.ApiKey))
             return new PdfImportResult { Success = false, Message = "API key de Gemini no configurada. Configura Gemini__ApiKey o GEMINI_API_KEY en las variables de entorno." };
 
-        // 1. Send PDF to Gemini API
-        var pdfBase64 = Convert.ToBase64String(pdfBytes);
-        var (extractedJson, apiError) = await CallGeminiAsync(pdfBase64);
+        // 1. Extract text from PDF locally using PdfPig (avoids sending large binary to API)
+        string pdfText;
+        try
+        {
+            pdfText = ExtractTextFromPdf(pdfBytes);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to extract text from PDF");
+            return new PdfImportResult { Success = false, Message = $"Error al leer el PDF: {ex.Message}" };
+        }
+
+        if (string.IsNullOrWhiteSpace(pdfText))
+            return new PdfImportResult { Success = false, Message = "No se pudo extraer texto del PDF. Asegúrate de que el PDF contiene texto (no imágenes escaneadas)." };
+
+        _logger.LogInformation("Extracted {Chars} characters from PDF", pdfText.Length);
+
+        // 2. Send extracted TEXT to Gemini (much smaller than sending full PDF binary)
+        var (extractedJson, apiError) = await CallGeminiWithTextAsync(pdfText);
         if (extractedJson == null)
             return new PdfImportResult { Success = false, Message = apiError ?? "No se pudo analizar el PDF." };
 
-        // 2. Parse Gemini's response
+        // 3. Parse Gemini's response
         PdfExtraction? extraction;
         try
         {
@@ -64,12 +81,12 @@ public class PdfImportService : IPdfImportService
         if (extraction?.Routines == null || extraction.Routines.Count == 0)
             return new PdfImportResult { Success = false, Message = "No se encontraron rutinas en el PDF." };
 
-        // 3. Get all muscle groups and exercises
+        // 4. Get all muscle groups and exercises
         var allMuscleGroups = _repo.GetAllMuscleGroups();
         var allExercises = _repo.GetExercises();
         var result = new PdfImportResult { Success = true, Message = "Rutinas importadas correctamente." };
 
-        // 4. Process each day
+        // 5. Process each day
         foreach (var dayRoutine in extraction.Routines)
         {
             var dayOfWeek = dayRoutine.DayOfWeek switch
@@ -182,9 +199,32 @@ public class PdfImportService : IPdfImportService
         return result;
     }
 
-    private async Task<(string? Json, string? Error)> CallGeminiAsync(string pdfBase64)
+    private string ExtractTextFromPdf(byte[] pdfBytes)
     {
-        var prompt = @"Analiza este PDF de plan de entrenamiento y extrae TODA la información en formato JSON.
+        var sb = new StringBuilder();
+        using var document = PdfDocument.Open(pdfBytes);
+
+        foreach (var page in document.GetPages())
+        {
+            var pageText = page.Text;
+            if (!string.IsNullOrWhiteSpace(pageText))
+            {
+                sb.AppendLine($"--- Página {page.Number} ---");
+                sb.AppendLine(pageText);
+                sb.AppendLine();
+            }
+        }
+
+        return sb.ToString();
+    }
+
+    private async Task<(string? Json, string? Error)> CallGeminiWithTextAsync(string pdfText)
+    {
+        // Truncate if extremely long to stay within token limits
+        if (pdfText.Length > 30000)
+            pdfText = pdfText[..30000];
+
+        var prompt = @"Analiza este texto extraído de un PDF de plan de entrenamiento y extrae TODA la información en formato JSON.
 
 IMPORTANTE: Responde SOLO con el JSON, sin texto adicional, sin markdown, sin ```json```.
 
@@ -222,7 +262,10 @@ Reglas:
 - Si hay superseries, pon el nombre exacto del ejercicio pareja en ""supersetWith""
 - Extrae las notas/instrucciones del entrenador para cada ejercicio
 - Si el PDF tiene rutinas para varios días, extrae cada uno por separado
-- Los nombres de ejercicios deben estar en formato Title Case (ej: ""Press Banca"", no ""PRESS BANCA"")";
+- Los nombres de ejercicios deben estar en formato Title Case (ej: ""Press Banca"", no ""PRESS BANCA"")
+
+TEXTO DEL PDF:
+" + pdfText;
 
         var requestBody = new
         {
@@ -232,18 +275,7 @@ Reglas:
                 {
                     parts = new object[]
                     {
-                        new
-                        {
-                            inline_data = new
-                            {
-                                mime_type = "application/pdf",
-                                data = pdfBase64,
-                            }
-                        },
-                        new
-                        {
-                            text = prompt,
-                        }
+                        new { text = prompt }
                     }
                 }
             },
