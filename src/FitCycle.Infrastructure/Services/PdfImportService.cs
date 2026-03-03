@@ -105,7 +105,12 @@ public class PdfImportService : IPdfImportService
         }
 
         if (extraction?.Routines == null || extraction.Routines.Count == 0)
-            return new PdfImportResult { Success = false, Message = "No se encontraron rutinas en el PDF." };
+        {
+            // Include first lines of extracted text for debugging
+            var debugLines = pdfText.Split('\n').Where(l => !string.IsNullOrWhiteSpace(l)).Take(30);
+            var debugText = string.Join(" | ", debugLines.Select(l => l.Trim().Length > 60 ? l.Trim()[..60] : l.Trim()));
+            return new PdfImportResult { Success = false, Message = $"No se encontraron rutinas en el PDF. Texto extraído: {debugText[..Math.Min(debugText.Length, 500)]}" };
+        }
 
         // 4. Get all muscle groups and exercises
         var allMuscleGroups = _repo.GetAllMuscleGroups();
