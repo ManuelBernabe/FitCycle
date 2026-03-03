@@ -115,8 +115,13 @@ public class PdfImportService : IPdfImportService
             var diaLines = errLines.Where(l => Regex.IsMatch(l, @"D[IÍ]A", RegexOptions.IgnoreCase))
                 .Select(l => l.Trim().Length > 80 ? l.Trim()[..80] : l.Trim()).Take(10);
             var first = errLines.Take(20).Select(l => l.Trim().Length > 60 ? l.Trim()[..60] : l.Trim());
-            var debug = $"{info} DÍA lines: [{string.Join(" | ", diaLines)}]. First lines: [{string.Join(" | ", first)}]";
-            return new PdfImportResult { Success = false, Message = $"No se encontraron rutinas. {debug[..Math.Min(debug.Length, 800)]}" };
+            return new PdfImportResult
+            {
+                Success = false,
+                Message = $"No se encontraron rutinas. {info}",
+                DebugDiaLines = diaLines.ToList(),
+                DebugLines = first.ToList(),
+            };
         }
 
         // 5. Get all muscle groups and exercises
@@ -125,11 +130,28 @@ public class PdfImportService : IPdfImportService
 
         // Build result message with debug info
         var allDayInfo = extraction!.Routines.Select(r =>
-            $"D{r.DayOfWeek}:{r.Exercises.Count}ej").ToList();
+        {
+            var exNames = r.Exercises.Select(e => e.Name).Take(5);
+            return $"D{r.DayOfWeek}({r.Exercises.Count}ej): {string.Join(", ", exNames)}";
+        }).ToList();
+
+        // Include extracted text for debugging
+        var allLines = pdfText.Split('\n').Where(l => !string.IsNullOrWhiteSpace(l)).ToList();
+        var diaLinesDebug = allLines
+            .Where(l => Regex.IsMatch(l, @"D[IÍ]A", RegexOptions.IgnoreCase))
+            .Select(l => l.Trim().Length > 100 ? l.Trim()[..100] : l.Trim()).ToList();
+        var pageLines = allLines
+            .Where(l => l.TrimStart().StartsWith("---") || Regex.IsMatch(l, @"D[IÍ]A", RegexOptions.IgnoreCase)
+                || l.Trim().Length > 10)
+            .Select(l => l.Trim().Length > 120 ? l.Trim()[..120] : l.Trim())
+            .Take(150).ToList();
+
         var result = new PdfImportResult
         {
             Success = true,
-            Message = $"Importadas {daysWithExercises.Count} rutinas. [{string.Join(", ", allDayInfo)}]"
+            Message = $"Importadas {daysWithExercises.Count} rutinas. {string.Join(" | ", allDayInfo)}",
+            DebugLines = pageLines,
+            DebugDiaLines = diaLinesDebug,
         };
 
         // 6. Process each day with exercises
@@ -890,6 +912,8 @@ public class PdfImportResult
     public bool Success { get; set; }
     public string Message { get; set; } = "";
     public List<DayImportSummary> Days { get; set; } = new();
+    public List<string>? DebugLines { get; set; }
+    public List<string>? DebugDiaLines { get; set; }
 }
 
 public class DayImportSummary
