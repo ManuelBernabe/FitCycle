@@ -107,11 +107,11 @@ public class PdfImportService : IPdfImportService
         if (extraction?.Routines == null || extraction.Routines.Count == 0)
         {
             // Include extracted text lines containing "DÍA" for debugging
-            var allLines = pdfText.Split('\n').Where(l => !string.IsNullOrWhiteSpace(l)).ToList();
-            var diaLines = allLines.Where(l => l.Contains("DÍA", StringComparison.OrdinalIgnoreCase) || l.Contains("DIA", StringComparison.OrdinalIgnoreCase))
+            var errLines = pdfText.Split('\n').Where(l => !string.IsNullOrWhiteSpace(l)).ToList();
+            var errDiaLines = errLines.Where(l => l.Contains("DÍA", StringComparison.OrdinalIgnoreCase) || l.Contains("DIA", StringComparison.OrdinalIgnoreCase))
                 .Select(l => l.Trim().Length > 80 ? l.Trim()[..80] : l.Trim()).Take(10);
-            var firstLines = allLines.Take(15).Select(l => l.Trim().Length > 60 ? l.Trim()[..60] : l.Trim());
-            var debugText = $"Líneas con DÍA: [{string.Join(" | ", diaLines)}]. Primeras líneas: [{string.Join(" | ", firstLines)}]";
+            var firstLines = errLines.Take(15).Select(l => l.Trim().Length > 60 ? l.Trim()[..60] : l.Trim());
+            var debugText = $"Líneas con DÍA: [{string.Join(" | ", errDiaLines)}]. Primeras líneas: [{string.Join(" | ", firstLines)}]";
             return new PdfImportResult { Success = false, Message = $"No se encontraron rutinas. {debugText[..Math.Min(debugText.Length, 600)]}" };
         }
 
@@ -119,10 +119,15 @@ public class PdfImportService : IPdfImportService
         var allMuscleGroups = _repo.GetAllMuscleGroups();
         var allExercises = _repo.GetExercises();
 
-        // Debug: include found days in success message
+        // Debug: include found days and DÍA lines in message
         var foundDays = extraction.Routines.Select(r => $"Día{r.DayOfWeek}({r.Exercises.Count}ej)").ToList();
-        var debugMsg = $"Rutinas encontradas: {string.Join(", ", foundDays)}";
-        var result = new PdfImportResult { Success = true, Message = debugMsg };
+        var allTextLines = pdfText.Split('\n').Where(l => !string.IsNullOrWhiteSpace(l)).ToList();
+        var diaLines = allTextLines
+            .Where(l => l.Contains("DÍA", StringComparison.OrdinalIgnoreCase) || l.Contains("DIA", StringComparison.OrdinalIgnoreCase))
+            .Select(l => l.Trim().Length > 70 ? l.Trim()[..70] : l.Trim())
+            .ToList();
+        var debugMsg = $"Encontradas: {string.Join(", ", foundDays)}. Líneas DÍA: [{string.Join(" | ", diaLines)}]";
+        var result = new PdfImportResult { Success = true, Message = debugMsg[..Math.Min(debugMsg.Length, 600)] };
 
         // 5. Process each day
         foreach (var dayRoutine in extraction.Routines)
