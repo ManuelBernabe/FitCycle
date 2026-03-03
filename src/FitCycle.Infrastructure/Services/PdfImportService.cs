@@ -477,7 +477,7 @@ public static class LocalPdfParser
     private static readonly HashSet<string> NonExerciseWords = new(StringComparer.OrdinalIgnoreCase)
     {
         "SERIE", "SERIES", "REPS", "REPETICIONES", "FASE", "POSITIVA", "NEGATIVA",
-        "TEMPO", "DESCANSO", "REST", "AGARRE", "GRIP", "PESO", "WEIGHT",
+        "TEMPO", "DESCANSO", "REST", "AGARRE", "GRIP", "WEIGHT",
         "PÁGINA", "PAGE", "PLAN", "ENTRENAMIENTO", "TRAINING", "NOTA", "NOTAS",
         "TIEMPO", "SEG", "SEGUNDOS", "MIN", "MINUTOS", "KG", "LBS",
         "RGANUTRI", "ASESORÍA", "TOTAL",
@@ -489,6 +489,45 @@ public static class LocalPdfParser
         "RECUERDA", "IMPORTANTE", "NOTA", "NOTAS", "REALIZA", "MANTÉN",
         "INTENTA", "ASEGÚRATE", "CUIDADO", "EVITA", "NO", "SI", "CUANDO",
         "TIEMPO", "DESCANSO",
+    };
+
+    // Exercise-related keywords (equipment, movements, body parts used as exercise names)
+    private static readonly HashSet<string> ExerciseKeywords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        // Equipment
+        "MÁQUINA", "MAQUINA", "BARRA", "MANCUERNA", "MANCUERNAS", "POLEA", "CABLE", "CABLES",
+        "BANCO", "CUERDA", "MULTIPOWER", "SMITH", "NAUTILUS", "NAUTILIUS", "TRX",
+        // Movements
+        "PRESS", "CURL", "EXTENSIÓN", "EXTENSION", "PRENSA", "REMO", "ELEVACIÓN", "ELEVACION",
+        "FONDOS", "APERTURA", "APERTURAS", "PULL", "JALÓN", "JALON", "DOMINADA", "DOMINADAS",
+        "SENTADILLA", "SENTADILLAS", "BÚLGARA", "BULGARA", "PATADA", "CRUCE", "CRUCES",
+        "PESO", // "peso muerto"
+        // Types/modifiers
+        "UNILATERAL", "BILATERAL", "INCLINADO", "INCLINADA", "PREDICADOR", "GIRONDA",
+        "MARTILLO", "FRONTAL", "MILITAR", "TUMBADO", "TUMBADA",
+        // Body parts used as exercise name starters
+        "FEMORAL", "TRAPECIO", "POSTERIOR", "LATERAL", "LATERALES", "GEMELO",
+        "ABDUCTOR", "ADUCTOR", "LUMBAR", "BÍCEPS", "BICEPS", "TRÍCEPS", "TRICEPS",
+        "GLÚTEO", "GLUTEO",
+    };
+
+    // Words that start instruction/note sentences — NOT exercise names
+    private static readonly HashSet<string> InstructionStartWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        // Articles
+        "EL", "LA", "LOS", "LAS", "UN", "UNA", "UNOS", "UNAS",
+        // Prepositions
+        "CON", "SIN", "PARA", "DESDE", "HACIA", "ENTRE", "SOBRE", "BAJO",
+        "EN", "DE", "AL", "DEL",
+        // Imperative verbs
+        "POSICIONA", "COGE", "AGARRA", "TIRA", "EMPUJA", "GIRA", "COLOCA", "AJUSTA",
+        "APRIETA", "CONTRAE", "ESTIRA", "FLEXIONA", "LEVANTA", "MUEVE", "SUBE", "BAJA",
+        // Instructional
+        "PRIMERO", "DESPUÉS", "DESPUES", "LUEGO", "AHORA", "TAMBIÉN", "TAMBIEN",
+        "ADEMÁS", "ADEMAS", "AQUÍ", "AQUI", "COMO",
+        // Demonstratives / pronouns
+        "ESTE", "ESTA", "ESTOS", "ESTAS", "ESE", "ESA",
+        "SE", "TE", "NOS", "ME", "QUE",
     };
 
     public static PdfExtraction Parse(string pdfText)
@@ -623,10 +662,39 @@ public static class LocalPdfParser
             }
 
             // Check for exercise name FIRST (before table parsing)
-            if (IsExerciseName(line))
+            if (IsExerciseName(line, lines, idx))
             {
                 FinalizeNotes(current, notesBuilder);
                 inTable = false;
+
+                // Check for superset notation: "Exercise A + Exercise B"
+                var plusParts = line.Split('+');
+                if (plusParts.Length == 2 && plusParts[0].Trim().Length >= 3 && plusParts[1].Trim().Length >= 3)
+                {
+                    var nameA = ToTitleCase(CleanExerciseName(plusParts[0].Trim()));
+                    var rawB = Regex.Replace(plusParts[1].Trim(), @"^super\s+serie\s+", "", RegexOptions.IgnoreCase).Trim();
+                    var nameB = ToTitleCase(CleanExerciseName(rawB));
+
+                    if (nameB.Length >= 3)
+                    {
+                        var exA = new PdfExercise
+                        {
+                            Name = nameA,
+                            MuscleGroup = dayMuscleGroups.FirstOrDefault() ?? "Pecho",
+                            SupersetWith = nameB,
+                        };
+                        var exB = new PdfExercise
+                        {
+                            Name = nameB,
+                            MuscleGroup = dayMuscleGroups.FirstOrDefault() ?? "Pecho",
+                            SupersetWith = nameA,
+                        };
+                        exercises.Add(exA);
+                        exercises.Add(exB);
+                        current = exB;
+                        continue;
+                    }
+                }
 
                 current = new PdfExercise
                 {
@@ -660,10 +728,33 @@ public static class LocalPdfParser
             }
 
             // Individual pattern matchers (for non-table formats)
-            // Reps shorthand: "4*15*12*10*8"
-            if (Regex.IsMatch(line, @"\d+\s*\*\s*\d+"))
+
+            // "N series de N" or "N series de N,N,N"
+            var seriesDeMatch = Regex.Match(line, @"(\d+)\s+series?\s+(?:de\s+)?(\d[\d\s,]*)",
+                RegexOptions.IgnoreCase);
+            if (seriesDeMatch.Success && current != null)
             {
-                var nums = Regex.Matches(line, @"\d+").Select(m => int.Parse(m.Value)).ToList();
+                var count = int.Parse(seriesDeMatch.Groups[1].Value);
+                var repsNums = Regex.Matches(seriesDeMatch.Groups[2].Value, @"\d+")
+                    .Select(m => int.Parse(m.Value)).ToList();
+                current.Sets.Clear();
+                if (repsNums.Count == 1)
+                {
+                    for (int i = 0; i < Math.Min(count, 10); i++)
+                        current.Sets.Add(new PdfSet { Reps = repsNums[0] });
+                }
+                else
+                {
+                    foreach (var r in repsNums)
+                        current.Sets.Add(new PdfSet { Reps = r });
+                }
+                continue;
+            }
+
+            // Reps shorthand: "4*15*12*10*8" or "4x15"
+            if (Regex.IsMatch(line, @"\d+\s*[*x×]\s*\d+", RegexOptions.IgnoreCase))
+            {
+                var nums = Regex.Matches(line, @"\d+").Select(m => int.Parse(m.Value)).Where(n => n > 0).ToList();
                 if (nums.Count >= 2)
                 {
                     current.Sets.Clear();
@@ -791,16 +882,18 @@ public static class LocalPdfParser
         };
     }
 
-    private static bool IsExerciseName(string line)
+    /// <summary>
+    /// Multi-tier exercise name detection:
+    /// Tier 1: Mostly UPPERCASE (Days 1-2 format: "PRESS BANCA INCLINADO")
+    /// Tier 2: Mixed case ending with ":" (Days 3-5: "Extensión de cuadriceps:")
+    /// Tier 3: Mixed case with exercise keyword or table lookahead ("Curl predicador en máquina")
+    /// </summary>
+    private static bool IsExerciseName(string line, List<string> allLines, int currentIndex)
     {
-        if (line.Length < 5 || line.Length > 100) return false;
+        if (line.Length < 4 || line.Length > 120) return false;
 
         var letterCount = line.Count(char.IsLetter);
         if (letterCount == 0) return false;
-
-        var upperCount = line.Count(char.IsUpper);
-        var upperRatio = (double)upperCount / letterCount;
-        if (upperRatio <= 0.5) return false;
 
         // Skip lines that are mostly numbers
         if (line.Count(char.IsDigit) > letterCount) return false;
@@ -811,7 +904,7 @@ public static class LocalPdfParser
         var words = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (words.Length == 0) return false;
 
-        var firstWord = words[0].TrimEnd(':', ',', '.', 'º', '°');
+        var firstWord = words[0].TrimEnd(':', ',', '.', 'º', '°', '+');
 
         // Skip lines starting with table/note keywords
         if (NonExerciseWords.Contains(firstWord)) return false;
@@ -824,18 +917,55 @@ public static class LocalPdfParser
         if (words.All(w => NonExerciseWords.Contains(w.TrimEnd(':', ',', '.', 'º', '°'))))
             return false;
 
-        // Skip lines that are muscle group descriptions (≥2 muscle group keywords)
+        // Skip muscle group description lines (≥2 muscle group keywords, high ratio)
         var mgHits = CountMuscleGroupKeywords(line);
         var cleanWords = Regex.Split(line, @"[\+\-–—,/\\&\s:()]+")
             .Where(w => w.Length >= 3).ToList();
         if (mgHits >= 2 && cleanWords.Count > 0 && mgHits >= cleanWords.Count * 0.5)
             return false;
 
-        // For single-word lines, require ≥7 chars and not a muscle group
-        if (words.Length == 1)
-            return line.Length >= 7 && !MuscleGroupMap.ContainsKey(line.Trim());
+        // --- TIER 1: Mostly UPPERCASE (days 1-2 format) ---
+        var upperCount = line.Count(char.IsUpper);
+        var upperRatio = (double)upperCount / letterCount;
+        if (upperRatio > 0.5)
+        {
+            if (words.Length == 1)
+                return line.TrimEnd(':', '.', ',').Length >= 7
+                    && !MuscleGroupMap.ContainsKey(line.TrimEnd(':', '.', ','));
+            return words.Length >= 2;
+        }
 
-        return words.Length >= 2;
+        // --- From here: mixed-case lines (days 3-5 format) ---
+        // Must start with uppercase letter
+        if (!char.IsUpper(line[0])) return false;
+
+        // --- TIER 2: Ends with ":" (common format: "Extensión de cuadriceps:") ---
+        if (line.TrimEnd().EndsWith(':') && line.Length <= 60 && words.Length <= 10)
+        {
+            if (!InstructionStartWords.Contains(firstWord))
+                return true;
+        }
+
+        // --- TIER 3: Mixed case without colon ---
+        if (words.Length > 10 || line.Length > 80) return false;
+
+        // Reject if starts with instruction/article/preposition word
+        if (InstructionStartWords.Contains(firstWord)) return false;
+
+        // Accept if contains exercise keyword (equipment, movement, etc.)
+        if (ContainsExerciseKeyword(line)) return true;
+
+        // Accept if followed by a table header within 5 lines (lookahead)
+        for (int i = currentIndex + 1; i < Math.Min(currentIndex + 6, allLines.Count); i++)
+        {
+            var ahead = allLines[i].Trim();
+            if (string.IsNullOrWhiteSpace(ahead) || ahead.StartsWith("---")) continue;
+            if (IsTableHeader(ahead)) return true;
+            if (Regex.IsMatch(ahead, @"D[IÍ]A", RegexOptions.IgnoreCase)) break;
+            if (RestLine.IsMatch(ahead)) break;
+        }
+
+        return false;
     }
 
     private static int CountMuscleGroupKeywords(string line)
@@ -854,16 +984,52 @@ public static class LocalPdfParser
         return count;
     }
 
+    private static bool ContainsExerciseKeyword(string line)
+    {
+        var words = Regex.Split(line, @"[\s\+\-–—,/\\&:()]+");
+        foreach (var word in words)
+        {
+            if (word.Length < 3) continue;
+            if (ExerciseKeywords.Contains(word)) return true;
+            // Try without trailing 's' for plural forms
+            var trimmed = word.TrimEnd('s', 'S');
+            if (trimmed.Length >= 3 && ExerciseKeywords.Contains(trimmed)) return true;
+        }
+        return false;
+    }
+
     /// <summary>
-    /// Cleans exercise name: remove trailing punctuation, numbering prefixes
+    /// Cleans exercise name: remove numbering, trailing punctuation, truncate long names
     /// </summary>
     private static string CleanExerciseName(string name)
     {
         // Remove leading numbering like "1." or "1-"
         name = Regex.Replace(name, @"^\d+[\.\-\)]\s*", "").Trim();
-        // Remove trailing colons, periods
-        name = name.TrimEnd(':', '.', ',', '-');
-        return name;
+        // Remove trailing colons, periods, dashes
+        name = name.TrimEnd(':', '.', ',', '-', ' ');
+
+        // Truncate at parenthesis if name is already substantial
+        var parenIdx = name.IndexOf('(');
+        if (parenIdx > 10)
+            name = name[..parenIdx].TrimEnd(' ', '-', ',');
+
+        // Truncate long names at "- " break points (instruction after dash)
+        if (name.Length > 50)
+        {
+            var dashIdx = name.IndexOf("- ", 20);
+            if (dashIdx > 0 && dashIdx < name.Length - 3)
+                name = name[..dashIdx].TrimEnd(' ', '-');
+        }
+
+        // Final length cap with word boundary
+        if (name.Length > 60)
+        {
+            var lastSpace = name.LastIndexOf(' ', 60);
+            if (lastSpace > 20)
+                name = name[..lastSpace];
+        }
+
+        return name.TrimEnd(':', '.', ',', '-', ' ');
     }
 
     private static string ToTitleCase(string text)
