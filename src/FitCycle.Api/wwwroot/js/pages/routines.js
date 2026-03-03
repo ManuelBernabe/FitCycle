@@ -243,23 +243,31 @@ async function showImportModal() {
 
       const result = await api.postForm('/routines/import-pdf', formData);
 
+      console.log('PDF import result:', JSON.stringify(result, null, 2));
+
       if (result?.success) {
         const daysSummary = (result.days || []).map(d =>
           `${d.dayName}: ${d.exerciseCount} ej.${d.newExercisesCreated > 0 ? ' (+' + d.newExercisesCreated + ' nuevos)' : ''}`
         ).join('\n');
 
+        // Show debug info (DÍA lines found in extracted text)
+        const diaInfo = (result.debugDiaLines || []).map(l => `  ${l}`).join('\n');
+        const debugInfo = diaInfo ? `\n\nLíneas DÍA encontradas:\n${diaInfo}` : '';
+
         if (statusEl) {
           statusEl.style.color = '#28a745';
-          statusEl.innerHTML = `<strong>${t('ImportSuccess')}</strong><br><pre style="text-align:left;font-size:11px;margin-top:4px;white-space:pre-wrap;">${daysSummary}</pre>`;
+          statusEl.innerHTML = `<strong>${t('ImportSuccess')}</strong><br><pre style="text-align:left;font-size:10px;margin-top:4px;white-space:pre-wrap;max-height:300px;overflow-y:auto;">${daysSummary}${debugInfo}\n\nMsg: ${result.message || ''}</pre>`;
         }
 
-        // Reload routines after 2s
+        // Reload routines after 5s (more time to read debug)
         setTimeout(() => {
           overlay.remove();
           loadRoutines();
-        }, 2500);
+        }, 8000);
       } else {
-        if (statusEl) { statusEl.style.color = '#dc3545'; statusEl.textContent = result?.message || t('ImportError'); }
+        const errDebug = (result?.debugDiaLines || []).join(' | ');
+        const errMsg = result?.message || t('ImportError');
+        if (statusEl) { statusEl.style.color = '#dc3545'; statusEl.textContent = `${errMsg}${errDebug ? ' [DÍA: ' + errDebug + ']' : ''}`; }
         if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = t('ImportPdf'); }
       }
     } catch (err) {
