@@ -106,16 +106,23 @@ public class PdfImportService : IPdfImportService
 
         if (extraction?.Routines == null || extraction.Routines.Count == 0)
         {
-            // Include first lines of extracted text for debugging
-            var debugLines = pdfText.Split('\n').Where(l => !string.IsNullOrWhiteSpace(l)).Take(30);
-            var debugText = string.Join(" | ", debugLines.Select(l => l.Trim().Length > 60 ? l.Trim()[..60] : l.Trim()));
-            return new PdfImportResult { Success = false, Message = $"No se encontraron rutinas en el PDF. Texto extraído: {debugText[..Math.Min(debugText.Length, 500)]}" };
+            // Include extracted text lines containing "DÍA" for debugging
+            var allLines = pdfText.Split('\n').Where(l => !string.IsNullOrWhiteSpace(l)).ToList();
+            var diaLines = allLines.Where(l => l.Contains("DÍA", StringComparison.OrdinalIgnoreCase) || l.Contains("DIA", StringComparison.OrdinalIgnoreCase))
+                .Select(l => l.Trim().Length > 80 ? l.Trim()[..80] : l.Trim()).Take(10);
+            var firstLines = allLines.Take(15).Select(l => l.Trim().Length > 60 ? l.Trim()[..60] : l.Trim());
+            var debugText = $"Líneas con DÍA: [{string.Join(" | ", diaLines)}]. Primeras líneas: [{string.Join(" | ", firstLines)}]";
+            return new PdfImportResult { Success = false, Message = $"No se encontraron rutinas. {debugText[..Math.Min(debugText.Length, 600)]}" };
         }
 
         // 4. Get all muscle groups and exercises
         var allMuscleGroups = _repo.GetAllMuscleGroups();
         var allExercises = _repo.GetExercises();
-        var result = new PdfImportResult { Success = true, Message = "Rutinas importadas correctamente." };
+
+        // Debug: include found days in success message
+        var foundDays = extraction.Routines.Select(r => $"Día{r.DayOfWeek}({r.Exercises.Count}ej)").ToList();
+        var debugMsg = $"Rutinas encontradas: {string.Join(", ", foundDays)}";
+        var result = new PdfImportResult { Success = true, Message = debugMsg };
 
         // 5. Process each day
         foreach (var dayRoutine in extraction.Routines)
