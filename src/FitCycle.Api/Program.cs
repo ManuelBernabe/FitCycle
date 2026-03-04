@@ -676,15 +676,14 @@ app.MapPost("/webhook/deploy", async (HttpRequest req, IEmailService emailServic
 .AllowAnonymous();
 
 // -- Descargar base de datos (solo Superuser) --
-app.MapGet("/admin/download-db", () =>
+app.MapGet("/admin/download-db", (FitCycleDbContext db) =>
 {
-    var dataDir = Environment.GetEnvironmentVariable("DATA_DIR");
-    var dbPath = !string.IsNullOrEmpty(dataDir)
-        ? Path.Combine(dataDir, "fitcycle.db")
-        : "fitcycle.db";
+    var connStr = db.Database.GetConnectionString() ?? "";
+    var match = System.Text.RegularExpressions.Regex.Match(connStr, @"Data Source=(.+?)(?:;|$)");
+    var dbPath = match.Success ? match.Groups[1].Value : "fitcycle.db";
 
     if (!File.Exists(dbPath))
-        return Results.NotFound(new { error = "Base de datos no encontrada." });
+        return Results.NotFound(new { error = $"BD no encontrada en: {dbPath} (conn: {connStr})" });
 
     var bytes = File.ReadAllBytes(dbPath);
     return Results.File(bytes, "application/octet-stream", "fitcycle.db");
