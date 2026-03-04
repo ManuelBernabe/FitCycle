@@ -489,6 +489,8 @@ public static class LocalPdfParser
         "RECUERDA", "IMPORTANTE", "NOTA", "NOTAS", "REALIZA", "MANTÉN",
         "INTENTA", "ASEGÚRATE", "CUIDADO", "EVITA", "NO", "SI", "CUANDO",
         "TIEMPO", "DESCANSO",
+        "BUSCAMOS", "PROCURA", "SUPER", "CALENTAREMOS", "ARRANCAMOS",
+        "REALIZAREMOS", "FIN",
     };
 
     // Exercise-related keywords (equipment, movements, body parts used as exercise names)
@@ -501,7 +503,7 @@ public static class LocalPdfParser
         "PRESS", "CURL", "EXTENSIÓN", "EXTENSION", "PRENSA", "REMO", "ELEVACIÓN", "ELEVACION",
         "FONDOS", "APERTURA", "APERTURAS", "PULL", "JALÓN", "JALON", "DOMINADA", "DOMINADAS",
         "SENTADILLA", "SENTADILLAS", "BÚLGARA", "BULGARA", "PATADA", "CRUCE", "CRUCES",
-        "PESO", // "peso muerto"
+        "MUERTO", // for "peso muerto"
         // Types/modifiers
         "UNILATERAL", "BILATERAL", "INCLINADO", "INCLINADA", "PREDICADOR", "GIRONDA",
         "MARTILLO", "FRONTAL", "MILITAR", "TUMBADO", "TUMBADA",
@@ -522,8 +524,9 @@ public static class LocalPdfParser
         // Imperative verbs
         "POSICIONA", "COGE", "AGARRA", "TIRA", "EMPUJA", "GIRA", "COLOCA", "AJUSTA",
         "APRIETA", "CONTRAE", "ESTIRA", "FLEXIONA", "LEVANTA", "MUEVE", "SUBE", "BAJA",
+        "ABRIMOS", "FLEXIONAMOS", "INICIO",
         // Instructional
-        "PRIMERO", "DESPUÉS", "DESPUES", "LUEGO", "AHORA", "TAMBIÉN", "TAMBIEN",
+        "PRIMERO", "PRIMER", "DESPUÉS", "DESPUES", "LUEGO", "AHORA", "TAMBIÉN", "TAMBIEN",
         "ADEMÁS", "ADEMAS", "AQUÍ", "AQUI", "COMO",
         // Demonstratives / pronouns
         "ESTE", "ESTA", "ESTOS", "ESTAS", "ESE", "ESA",
@@ -659,6 +662,30 @@ public static class LocalPdfParser
                 FinalizeNotes(current, notesBuilder);
                 inTable = false;
                 continue;
+            }
+
+            // Handle "Exercise name: N series x N reps" inline pattern
+            var inlineMatch = Regex.Match(line, @"^(.+?):\s*(\d+)\s+series?\s*[x×]\s*(\d+)\s*reps?",
+                RegexOptions.IgnoreCase);
+            if (inlineMatch.Success)
+            {
+                var exName = inlineMatch.Groups[1].Value.Trim();
+                if (exName.Length >= 3 && char.IsUpper(exName[0]))
+                {
+                    FinalizeNotes(current, notesBuilder);
+                    inTable = false;
+                    var seriesCount = int.Parse(inlineMatch.Groups[2].Value);
+                    var reps = int.Parse(inlineMatch.Groups[3].Value);
+                    current = new PdfExercise
+                    {
+                        Name = ToTitleCase(CleanExerciseName(exName)),
+                        MuscleGroup = dayMuscleGroups.FirstOrDefault() ?? "Pecho",
+                    };
+                    for (int i = 0; i < Math.Min(seriesCount, 10); i++)
+                        current.Sets.Add(new PdfSet { Reps = reps });
+                    exercises.Add(current);
+                    continue;
+                }
             }
 
             // Check for exercise name FIRST (before table parsing)
@@ -846,6 +873,10 @@ public static class LocalPdfParser
     private static bool IsTableHeader(string line)
     {
         var lower = line.ToLowerInvariant();
+        // Reject inline rep schemes: "3 series x 20 reps", "4 series de 15"
+        if (Regex.IsMatch(lower, @"\d+\s+series?\s+(?:x|de)\s+\d+")) return false;
+        // Reject lines that are too long to be table headers (likely exercise+instruction)
+        if (lower.Length > 80) return false;
         int hits = 0;
         if (lower.Contains("serie")) hits++;
         if (lower.Contains("reps") || lower.Contains("repeticion")) hits++;
@@ -906,9 +937,10 @@ public static class LocalPdfParser
 
         var firstWord = words[0].TrimEnd(':', ',', '.', 'º', '°', '+');
 
-        // Skip lines starting with table/note keywords
+        // Skip lines starting with table/note/instruction keywords
         if (NonExerciseWords.Contains(firstWord)) return false;
         if (NoteStartWords.Contains(firstWord)) return false;
+        if (InstructionStartWords.Contains(firstWord)) return false;
 
         // Skip ordinals: "1º.", "2º."
         if (Regex.IsMatch(words[0], @"^\d+[º°]")) return false;
@@ -940,17 +972,21 @@ public static class LocalPdfParser
         if (!char.IsUpper(line[0])) return false;
 
         // --- TIER 2: Ends with ":" (common format: "Extensión de cuadriceps:") ---
-        if (line.TrimEnd().EndsWith(':') && line.Length <= 60 && words.Length <= 10)
+        // Also match "exercise: N series x N" where colon is mid-line
+        var colonIdx = line.IndexOf(':');
+        var endsWithColon = line.TrimEnd().EndsWith(':');
+        var hasInlineReps = colonIdx > 0 && colonIdx < line.Length - 1
+            && Regex.IsMatch(line[(colonIdx + 1)..], @"^\s*\d+\s+series?", RegexOptions.IgnoreCase);
+        if ((endsWithColon || hasInlineReps) && words.Length <= 15)
         {
-            if (!InstructionStartWords.Contains(firstWord))
-                return true;
+            return true;
         }
 
         // --- TIER 3: Mixed case without colon ---
-        if (words.Length > 10 || line.Length > 80) return false;
-
-        // Reject if starts with instruction/article/preposition word
-        if (InstructionStartWords.Contains(firstWord)) return false;
+        // Superset lines (with +) tend to be longer
+        var isSupersetLine = line.Contains('+');
+        if (words.Length > (isSupersetLine ? 16 : 10)) return false;
+        if (line.Length > (isSupersetLine ? 120 : 80)) return false;
 
         // Accept if contains exercise keyword (equipment, movement, etc.)
         if (ContainsExerciseKeyword(line)) return true;
@@ -1008,9 +1044,22 @@ public static class LocalPdfParser
         // Remove trailing colons, periods, dashes
         name = name.TrimEnd(':', '.', ',', '-', ' ');
 
+        // Truncate at instruction connectors (Spanish)
+        foreach (var connector in new[] {
+            " en la que ", " en el que ", " con la que ", " con el que ",
+            " para que ", " donde ", " ya que " })
+        {
+            var ci = name.IndexOf(connector, StringComparison.OrdinalIgnoreCase);
+            if (ci > 5)
+            {
+                name = name[..ci].TrimEnd(' ', '-', ',');
+                break;
+            }
+        }
+
         // Truncate at parenthesis if name is already substantial
         var parenIdx = name.IndexOf('(');
-        if (parenIdx > 10)
+        if (parenIdx > 5)
             name = name[..parenIdx].TrimEnd(' ', '-', ',');
 
         // Truncate long names at "- " break points (instruction after dash)
