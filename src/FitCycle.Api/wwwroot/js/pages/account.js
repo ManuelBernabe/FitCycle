@@ -209,11 +209,10 @@ function renderUsers(container) {
           <div class="user-row-name">${uName} <span class="tag tag-sm">${uRole}</span></div>
           <div class="user-row-email">${uEmail}</div>
         </div>
-        <div class="user-row-actions">
-          <button class="btn btn-sm btn-ghost" style="color:#512BD4;" data-login-as="${uId}" data-username="${uName}">${t('LoginAs')}</button>
-          <button class="btn btn-sm btn-ghost" data-edit-user="${uId}">${t('Edit')}</button>
-          <button class="btn btn-sm btn-ghost" style="color:#ff8c00;" data-change-pw="${uId}" data-username="${uName}">${t('PasswordKey')}</button>
-          <button class="btn btn-sm btn-ghost" style="color:var(--danger,#dc3545);" data-delete-user="${uId}" data-username="${uName}">${t('DeleteUserBtn')}</button>
+        <div class="user-row-actions" style="flex-wrap:wrap;gap:2px;">
+          <button class="btn btn-sm btn-ghost" style="color:#512BD4;font-size:11px;padding:4px 6px;" data-login-as="${uId}" data-username="${uName}">${t('LoginAs')}</button>
+          <button class="btn btn-sm btn-ghost" style="font-size:11px;padding:4px 6px;" data-edit-user="${uId}">${t('Edit')}</button>
+          <button class="btn btn-sm btn-ghost" style="color:var(--danger,#dc3545);font-size:11px;padding:4px 6px;" data-delete-user="${uId}" data-username="${uName}">${t('DeleteUserBtn')}</button>
         </div>
       </div>
     `;
@@ -225,15 +224,6 @@ function renderUsers(container) {
       const userId = parseInt(e.currentTarget.dataset.editUser);
       const user = allUsers.find(u => (u.id || u.Id) === userId);
       if (user) showEditUserModal(user);
-    });
-  });
-
-  // Change password
-  container.querySelectorAll('[data-change-pw]').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      const userId = parseInt(e.currentTarget.dataset.changePw);
-      const username = e.currentTarget.dataset.username;
-      showChangePasswordModal(userId, username);
     });
   });
 
@@ -366,6 +356,12 @@ function showEditUserModal(user) {
           <option value="Superuser" ${uRole === 'Superuser' ? 'selected' : ''}>Superuser</option>
         </select>
       </div>
+      <div class="divider" style="margin:12px 0;"></div>
+      <div class="form-group">
+        <label class="form-label">${t('ChangePassword')}</label>
+        <input id="edit-password" class="form-input" type="password" placeholder="${t('PasswordMinLength')}">
+        <div class="form-hint" style="font-size:11px;margin-top:4px;">${t('LeaveEmptyNoChange')}</div>
+      </div>
       <button id="edit-user-submit" class="btn btn-primary btn-block">${t('Save')}</button>
     </div>
   `;
@@ -377,6 +373,7 @@ function showEditUserModal(user) {
     const username = overlay.querySelector('#edit-username')?.value?.trim();
     const email = overlay.querySelector('#edit-email')?.value?.trim();
     const role = overlay.querySelector('#edit-role')?.value;
+    const newPw = overlay.querySelector('#edit-password')?.value;
     const statusEl = document.getElementById('account-status');
 
     if (!username) return;
@@ -388,6 +385,12 @@ function showEditUserModal(user) {
         email: email !== uEmail ? email : undefined,
         role: role !== uRole ? role : undefined,
       });
+
+      // Change password if provided
+      if (newPw && newPw.length > 0) {
+        await api.put(`/users/${uId}/password`, { newPassword: newPw });
+      }
+
       overlay.remove();
       if (statusEl) statusEl.textContent = t('UserUpdated');
       await loadUsers();

@@ -190,6 +190,7 @@ const Strings = {
   // === Impersonate ===
   LoginAs:           { es: 'Login',                                      en: 'Login',                             fr: 'Connexion' },
   ConfirmLoginAs:    { es: '¿Iniciar sesión como {0}? Se cerrará tu sesión actual.', en: 'Log in as {0}? Your current session will end.', fr: 'Se connecter en tant que {0} ? Votre session actuelle sera fermée.' },
+  LeaveEmptyNoChange: { es: 'Dejar vacío para no cambiar',              en: 'Leave empty to keep current',       fr: 'Laisser vide pour ne pas changer' },
 
   // === Password ===
   PwdMinLength:  { es: 'Mínimo 8 caracteres',             en: 'At least 8 characters',           fr: 'Au moins 8 caractères' },
