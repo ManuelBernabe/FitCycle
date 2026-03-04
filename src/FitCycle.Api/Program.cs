@@ -396,6 +396,40 @@ app.MapPost("/routines/debug-pdf", async (HttpRequest request, IPdfImportService
 .RequireAuthorization("SuperuserOnly")
 .DisableAntiforgery();
 
+// -- Copiar rutinas de un usuario a otro (solo Superuser) --
+app.MapPost("/routines/copy", (CopyRoutinesRequest req, IRoutineRepository repo) =>
+{
+    if (req.SourceUserId == req.TargetUserId)
+        return Results.BadRequest(new { error = "El usuario origen y destino no pueden ser el mismo." });
+
+    var sourceWeek = repo.GetWeekRoutine(req.SourceUserId);
+    var days = sourceWeek?.Days ?? [];
+
+    if (days.Count == 0)
+        return Results.BadRequest(new { error = "El usuario origen no tiene rutinas." });
+
+    int copiedDays = 0;
+    foreach (var day in days)
+    {
+        var muscleGroupIds = day.MuscleGroups.Select(g => g.Id).ToList();
+        var exercises = day.Exercises.Select(e => new RoutineExerciseInput(
+            e.ExerciseId, e.Sets, e.Reps, e.Weight,
+            e.SetDetails ?? "", e.SupersetGroup, e.Notes ?? ""
+        )).ToList();
+
+        if (muscleGroupIds.Count > 0 || exercises.Count > 0)
+        {
+            repo.SetDayRoutine(day.Day, muscleGroupIds, exercises, req.TargetUserId);
+            copiedDays++;
+        }
+    }
+
+    return Results.Ok(new { success = true, message = $"Se copiaron {copiedDays} días de rutinas." });
+})
+.WithName("CopyRoutines")
+.WithOpenApi()
+.RequireAuthorization("SuperuserOnly");
+
 // -- Historial de entrenamientos --
 app.MapPost("/workouts", (SaveWorkoutRequest request, FitCycleDbContext db, ClaimsPrincipal user) =>
 {
@@ -633,6 +667,7 @@ record ExerciseInput(int ExerciseId, int Sets, int Reps);
 record UpdateDayRoutineRequest(List<int> MuscleGroupIds, List<RoutineExerciseInput>? Exercises);
 record SaveWorkoutExerciseInput(int ExerciseId, string ExerciseName, int Sets, int Reps, decimal Weight, string MuscleGroupName, string SetDetails = "");
 record SaveWorkoutRequest(DayOfWeek Day, DateTime StartedAt, DateTime CompletedAt, List<SaveWorkoutExerciseInput> Exercises);
+record CopyRoutinesRequest(int SourceUserId, int TargetUserId);
 record SaveMeasurementRequest(
     DateTime? MeasuredAt = null,
     decimal? Weight = null, decimal? Height = null,

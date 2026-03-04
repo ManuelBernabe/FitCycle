@@ -178,6 +178,15 @@ const Strings = {
   ImportSuccess:   { es: 'Rutinas importadas correctamente',      en: 'Routines imported successfully',   fr: 'Routines importées avec succès' },
   ImportError:     { es: 'Error al importar',                     en: 'Import error',                     fr: "Erreur d'importation" },
 
+  // === Copy Routines ===
+  CopyRoutines:        { es: 'Copiar Rutinas',                          en: 'Copy Routines',                    fr: 'Copier Routines' },
+  SourceUser:          { es: 'Usuario origen',                          en: 'Source User',                      fr: 'Utilisateur source' },
+  TargetUser:          { es: 'Usuario destino',                         en: 'Target User',                      fr: 'Utilisateur cible' },
+  CopyingRoutines:     { es: 'Copiando rutinas...',                     en: 'Copying routines...',              fr: 'Copie des routines...' },
+  CopySuccess:         { es: 'Rutinas copiadas correctamente',          en: 'Routines copied successfully',     fr: 'Routines copiées avec succès' },
+  SameUserError:       { es: 'El usuario origen y destino deben ser diferentes', en: 'Source and target users must be different', fr: 'Les utilisateurs source et cible doivent être différents' },
+  ConfirmCopyRoutines: { es: '¿Copiar todas las rutinas? Las rutinas actuales del usuario destino serán reemplazadas.', en: 'Copy all routines? The target user current routines will be replaced.', fr: "Copier toutes les routines ? Les routines actuelles de l'utilisateur cible seront remplacées." },
+
   // === Password ===
   PwdMinLength:  { es: 'Mínimo 8 caracteres',             en: 'At least 8 characters',           fr: 'Au moins 8 caractères' },
   PwdUppercase:  { es: 'Una letra mayúscula',              en: 'One uppercase letter',            fr: 'Une lettre majuscule' },

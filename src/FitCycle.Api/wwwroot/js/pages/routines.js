@@ -12,7 +12,7 @@ export function render() {
       <div class="page-content">
         <div class="flex items-center justify-between">
           <div class="section-title">${t('MyWeeklyRoutine')}</div>
-          ${auth.isSuperuser() ? `<button id="import-pdf-btn" class="btn btn-sm btn-outline" style="color:#512BD4;font-size:12px;">&#128196; ${t('ImportPdf')}</button>` : ''}
+          ${auth.isSuperuser() ? `<div style="display:flex;gap:6px;"><button id="import-pdf-btn" class="btn btn-sm btn-outline" style="color:#512BD4;font-size:12px;">&#128196; ${t('ImportPdf')}</button><button id="copy-routines-btn" class="btn btn-sm btn-outline" style="color:#512BD4;font-size:12px;">&#128203; ${t('CopyRoutines')}</button></div>` : ''}
         </div>
         <div class="section-subtitle">${t('ConfigureWeekly')}</div>
         <div id="routines-list">
@@ -26,6 +26,7 @@ export function render() {
 export async function mount() {
   await loadRoutines();
   document.getElementById('import-pdf-btn')?.addEventListener('click', showImportModal);
+  document.getElementById('copy-routines-btn')?.addEventListener('click', showCopyModal);
 }
 
 export function destroy() {}
@@ -273,6 +274,89 @@ async function showImportModal() {
     } catch (err) {
       if (statusEl) { statusEl.style.color = '#dc3545'; statusEl.textContent = t('ErrorFmt', err.message); }
       if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = t('ImportPdf'); }
+    }
+  });
+}
+
+async function showCopyModal() {
+  let users;
+  try {
+    users = await api.get('/users');
+  } catch (e) {
+    alert(t('ErrorFmt', e.message));
+    return;
+  }
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay modal-centered';
+
+  const userOptions = (users || []).map(u => {
+    const uid = u.id || u.Id;
+    const uname = u.username || u.Username;
+    const uemail = u.email || u.Email;
+    return `<option value="${uid}">${uname} (${uemail})</option>`;
+  }).join('');
+
+  overlay.innerHTML = `
+    <div class="modal-content" style="max-width:400px;">
+      <div class="modal-header">
+        <div class="modal-title">&#128203; ${t('CopyRoutines')}</div>
+        <button class="modal-close" id="copy-modal-close">&times;</button>
+      </div>
+      <div class="form-group">
+        <label class="form-label">${t('SourceUser')}</label>
+        <select id="copy-source-user" class="form-input">${userOptions}</select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">${t('TargetUser')}</label>
+        <select id="copy-target-user" class="form-input">${userOptions}</select>
+      </div>
+      <button id="copy-submit" class="btn btn-primary btn-block">${t('CopyRoutines')}</button>
+      <div id="copy-status" style="margin-top:8px;font-size:13px;text-align:center;"></div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  overlay.querySelector('#copy-modal-close')?.addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+  overlay.querySelector('#copy-submit')?.addEventListener('click', async () => {
+    const sourceSelect = overlay.querySelector('#copy-source-user');
+    const targetSelect = overlay.querySelector('#copy-target-user');
+    const statusEl = overlay.querySelector('#copy-status');
+    const submitBtn = overlay.querySelector('#copy-submit');
+
+    const sourceUserId = parseInt(sourceSelect?.value);
+    const targetUserId = parseInt(targetSelect?.value);
+
+    if (sourceUserId === targetUserId) {
+      if (statusEl) { statusEl.style.color = '#dc3545'; statusEl.textContent = t('SameUserError'); }
+      return;
+    }
+
+    if (!confirm(t('ConfirmCopyRoutines'))) return;
+
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = t('CopyingRoutines'); }
+    if (statusEl) { statusEl.style.color = '#512BD4'; statusEl.textContent = t('CopyingRoutines'); }
+
+    try {
+      const result = await api.post('/routines/copy', { sourceUserId, targetUserId });
+
+      if (result?.success) {
+        if (statusEl) { statusEl.style.color = '#28a745'; statusEl.textContent = t('CopySuccess') + ' — ' + (result.message || ''); }
+        setTimeout(() => {
+          overlay.remove();
+          loadRoutines();
+        }, 3000);
+      } else {
+        const errMsg = result?.error || result?.message || t('ImportError');
+        if (statusEl) { statusEl.style.color = '#dc3545'; statusEl.textContent = errMsg; }
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = t('CopyRoutines'); }
+      }
+    } catch (err) {
+      if (statusEl) { statusEl.style.color = '#dc3545'; statusEl.textContent = t('ErrorFmt', err.message); }
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = t('CopyRoutines'); }
     }
   });
 }
