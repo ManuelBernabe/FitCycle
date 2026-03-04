@@ -1,8 +1,10 @@
 using System.Reflection;
 using System.Security.Claims;
 using System.Text;
+using System.Text.Json;
 using FitCycle.Core.Models;
 using FitCycle.Infrastructure.Data;
+using FitCycle.Infrastructure.Entities;
 using FitCycle.Infrastructure.Repositories;
 using FitCycle.Infrastructure.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -447,6 +449,116 @@ app.MapPost("/routines/copy", (CopyRoutinesRequest req, IRoutineRepository repo)
 .WithOpenApi()
 .RequireAuthorization("SuperuserOnly");
 
+// -- Plantillas de rutinas (solo Superuser) --
+app.MapGet("/templates", (FitCycleDbContext db) =>
+{
+    var templates = db.RoutineTemplates
+        .OrderByDescending(t => t.CreatedAt)
+        .Select(t => new
+        {
+            t.Id, t.Name, t.Description, t.CreatedAt, t.CreatedByUserId,
+            t.RoutineDataJson
+        })
+        .ToList();
+    return Results.Ok(templates);
+})
+.WithName("GetTemplates")
+.WithOpenApi()
+.RequireAuthorization("SuperuserOnly");
+
+app.MapPost("/templates", (SaveTemplateRequest req, IRoutineRepository repo, FitCycleDbContext db, ClaimsPrincipal user) =>
+{
+    var currentUserId = int.Parse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+    var week = repo.GetWeekRoutine(req.SourceUserId);
+    var days = week?.Days ?? [];
+
+    if (days.Count == 0)
+        return Results.BadRequest(new { error = "El usuario no tiene rutinas." });
+
+    var json = JsonSerializer.Serialize(week);
+
+    var template = new RoutineTemplateEntity
+    {
+        Name = req.Name,
+        Description = req.Description ?? "",
+        CreatedAt = DateTime.UtcNow,
+        CreatedByUserId = currentUserId,
+        RoutineDataJson = json
+    };
+
+    db.RoutineTemplates.Add(template);
+    db.SaveChanges();
+
+    return Results.Ok(new { success = true, id = template.Id, message = "Plantilla guardada." });
+})
+.WithName("SaveTemplate")
+.WithOpenApi()
+.RequireAuthorization("SuperuserOnly");
+
+app.MapDelete("/templates/{id}", (int id, FitCycleDbContext db) =>
+{
+    var template = db.RoutineTemplates.Find(id);
+    if (template is null)
+        return Results.NotFound(new { error = "Plantilla no encontrada." });
+
+    db.RoutineTemplates.Remove(template);
+    db.SaveChanges();
+    return Results.Ok(new { success = true, message = "Plantilla eliminada." });
+})
+.WithName("DeleteTemplate")
+.WithOpenApi()
+.RequireAuthorization("SuperuserOnly");
+
+app.MapPost("/templates/{id}/apply", (int id, ApplyTemplateRequest req, FitCycleDbContext db, IRoutineRepository repo) =>
+{
+    var template = db.RoutineTemplates.Find(id);
+    if (template is null)
+        return Results.NotFound(new { error = "Plantilla no encontrada." });
+
+    var week = JsonSerializer.Deserialize<WeekRoutine>(template.RoutineDataJson);
+    if (week?.Days is null || week.Days.Count == 0)
+        return Results.BadRequest(new { error = "La plantilla no contiene rutinas." });
+
+    int copiedDays = 0;
+    foreach (var day in week.Days)
+    {
+        var muscleGroupIds = day.MuscleGroups.Select(g => g.Id).ToList();
+        var exercises = day.Exercises.Select(e =>
+        {
+            // Ensure exercise exists in DB, find by name or create
+            var exerciseId = e.ExerciseId;
+            if (!db.Exercises.Any(ex => ex.Id == exerciseId))
+            {
+                var existing = db.Exercises.FirstOrDefault(ex => ex.Name == e.ExerciseName);
+                if (existing != null)
+                {
+                    exerciseId = existing.Id;
+                }
+                else
+                {
+                    var mgId = muscleGroupIds.FirstOrDefault();
+                    if (mgId == 0) mgId = 1;
+                    var newEx = repo.AddExercise(e.ExerciseName, mgId);
+                    exerciseId = newEx.Id;
+                }
+            }
+            return new RoutineExerciseInput(exerciseId, e.Sets, e.Reps, e.Weight,
+                e.SetDetails ?? "", e.SupersetGroup, e.Notes ?? "");
+        }).ToList();
+
+        if (muscleGroupIds.Count > 0 || exercises.Count > 0)
+        {
+            repo.SetDayRoutine(day.Day, muscleGroupIds, exercises, req.TargetUserId);
+            copiedDays++;
+        }
+    }
+
+    return Results.Ok(new { success = true, message = $"Plantilla aplicada: {copiedDays} días." });
+})
+.WithName("ApplyTemplate")
+.WithOpenApi()
+.RequireAuthorization("SuperuserOnly");
+
 // -- Historial de entrenamientos --
 app.MapPost("/workouts", (SaveWorkoutRequest request, FitCycleDbContext db, ClaimsPrincipal user) =>
 {
@@ -705,6 +817,8 @@ record UpdateDayRoutineRequest(List<int> MuscleGroupIds, List<RoutineExerciseInp
 record SaveWorkoutExerciseInput(int ExerciseId, string ExerciseName, int Sets, int Reps, decimal Weight, string MuscleGroupName, string SetDetails = "");
 record SaveWorkoutRequest(DayOfWeek Day, DateTime StartedAt, DateTime CompletedAt, List<SaveWorkoutExerciseInput> Exercises);
 record CopyRoutinesRequest(int SourceUserId, int TargetUserId);
+record SaveTemplateRequest(string Name, string? Description, int SourceUserId);
+record ApplyTemplateRequest(int TargetUserId);
 record SaveMeasurementRequest(
     DateTime? MeasuredAt = null,
     decimal? Weight = null, decimal? Height = null,

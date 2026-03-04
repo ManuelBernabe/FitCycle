@@ -194,6 +194,25 @@ const Strings = {
   DownloadDb:        { es: 'Descargar BD',                               en: 'Download DB',                       fr: 'Télécharger BD' },
   Downloading:       { es: 'Descargando...',                             en: 'Downloading...',                    fr: 'Téléchargement...' },
 
+  // === Templates ===
+  TabTemplates:          { es: 'Plantillas',                                 en: 'Templates',                         fr: 'Modèles' },
+  RoutineTemplates:      { es: 'Plantillas de Rutinas',                      en: 'Routine Templates',                 fr: 'Modèles de Routines' },
+  SaveTemplate:          { es: 'Guardar Plantilla',                          en: 'Save Template',                     fr: 'Enregistrer Modèle' },
+  TemplateName:          { es: 'Nombre de la plantilla',                     en: 'Template name',                     fr: 'Nom du modèle' },
+  TemplateDescription:   { es: 'Descripción (opcional)',                     en: 'Description (optional)',             fr: 'Description (optionnel)' },
+  ApplyTemplate:         { es: 'Aplicar',                                    en: 'Apply',                             fr: 'Appliquer' },
+  DeleteTemplate:        { es: 'Eliminar',                                   en: 'Delete',                            fr: 'Supprimer' },
+  ConfirmDeleteTemplate: { es: '¿Eliminar esta plantilla?',                  en: 'Delete this template?',             fr: 'Supprimer ce modèle ?' },
+  ConfirmApplyTemplate:  { es: '¿Aplicar esta plantilla a {0}? Sus rutinas actuales serán reemplazadas.', en: 'Apply this template to {0}? Their current routines will be replaced.', fr: 'Appliquer ce modèle à {0} ? Ses routines actuelles seront remplacées.' },
+  SavingTemplate:        { es: 'Guardando...',                               en: 'Saving...',                         fr: 'Enregistrement...' },
+  TemplateSaved:         { es: 'Plantilla guardada',                         en: 'Template saved',                    fr: 'Modèle enregistré' },
+  TemplateApplied:       { es: 'Plantilla aplicada correctamente',           en: 'Template applied successfully',     fr: 'Modèle appliqué avec succès' },
+  TemplateDeleted:       { es: 'Plantilla eliminada',                        en: 'Template deleted',                  fr: 'Modèle supprimé' },
+  NoTemplates:           { es: 'No hay plantillas guardadas',                en: 'No saved templates',                fr: 'Aucun modèle enregistré' },
+  ViewDetails:           { es: 'Ver',                                        en: 'View',                              fr: 'Voir' },
+  SelectSourceUser:      { es: 'Seleccionar usuario origen',                 en: 'Select source user',                fr: "Sélectionner l'utilisateur source" },
+  Exercises:             { es: 'ejercicios',                                 en: 'exercises',                         fr: 'exercices' },
+
   // === Password ===
   PwdMinLength:  { es: 'Mínimo 8 caracteres',             en: 'At least 8 characters',           fr: 'Au moins 8 caractères' },
   PwdUppercase:  { es: 'Una letra mayúscula',              en: 'One uppercase letter',            fr: 'Une lettre majuscule' },

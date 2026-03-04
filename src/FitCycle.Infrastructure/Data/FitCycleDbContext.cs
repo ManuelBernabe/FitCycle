@@ -16,6 +16,7 @@ public class FitCycleDbContext : DbContext
     public DbSet<WorkoutSession> WorkoutSessions => Set<WorkoutSession>();
     public DbSet<WorkoutExerciseLog> WorkoutExerciseLogs => Set<WorkoutExerciseLog>();
     public DbSet<BodyMeasurement> BodyMeasurements => Set<BodyMeasurement>();
+    public DbSet<RoutineTemplateEntity> RoutineTemplates => Set<RoutineTemplateEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -88,6 +89,15 @@ public class FitCycleDbContext : DbContext
             e.Property(u => u.PasswordHash).IsRequired();
             e.Property(u => u.Role).HasConversion<int>();
             e.Property(u => u.RefreshToken).HasMaxLength(256);
+        });
+
+        // RoutineTemplate
+        modelBuilder.Entity<RoutineTemplateEntity>(e =>
+        {
+            e.HasKey(t => t.Id);
+            e.Property(t => t.Name).IsRequired().HasMaxLength(200);
+            e.Property(t => t.Description).HasMaxLength(500);
+            e.Property(t => t.RoutineDataJson).IsRequired();
         });
 
         // Seed muscle groups

@@ -12,6 +12,7 @@ import * as summaryPage from './pages/summary.js';
 import * as statsPage from './pages/stats.js';
 import * as accountPage from './pages/account.js';
 import * as measurementsPage from './pages/measurements.js';
+import * as templatesPage from './pages/templates.js';
 
 // ─── Init ───────────────────────────────────────────────────────────
 l10nInit();
@@ -28,6 +29,7 @@ const routes = {
   summary:  { mod: summaryPage,  header: true,  tabs: false },
   account:      { mod: accountPage,      header: true,  tabs: false },
   measurements: { mod: measurementsPage, header: true,  tabs: true },
+  templates:    { mod: templatesPage,    header: true,  tabs: true },
 };
 
 // ─── Router ─────────────────────────────────────────────────────────
@@ -90,6 +92,7 @@ function renderShell(route, routeName, params) {
     const isRoutines = routeName === 'routines';
     const isStats = routeName === 'stats';
     const isMeas = routeName === 'measurements';
+    const isTmpl = routeName === 'templates';
 
     html += `
       <div class="tab-bar">
@@ -105,6 +108,12 @@ function renderShell(route, routeName, params) {
           <span class="tab-icon">&#128207;</span>
           <span>${t('TabMeasurements')}</span>
         </button>
+        ${auth.isSuperuser() ? `
+        <button class="tab ${isTmpl ? 'active' : ''}" data-tab="templates">
+          <span class="tab-icon">&#128218;</span>
+          <span>${t('TabTemplates')}</span>
+        </button>
+        ` : ''}
       </div>
     `;
   }
