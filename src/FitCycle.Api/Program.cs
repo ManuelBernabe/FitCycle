@@ -685,6 +685,9 @@ app.MapGet("/admin/download-db", (FitCycleDbContext db) =>
     if (!File.Exists(dbPath))
         return Results.NotFound(new { error = $"BD no encontrada en: {dbPath} (conn: {connStr})" });
 
+    // Flush WAL to main DB file so download includes all data
+    db.Database.ExecuteSqlRaw("PRAGMA wal_checkpoint(TRUNCATE);");
+
     var bytes = File.ReadAllBytes(dbPath);
     return Results.File(bytes, "application/octet-stream", "fitcycle.db");
 })
