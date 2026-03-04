@@ -182,6 +182,23 @@ app.MapGet("/auth/me", async (ClaimsPrincipal user, IAuthService auth) =>
 .WithOpenApi()
 .RequireAuthorization();
 
+// -- Impersonar usuario (solo Superuser) --
+app.MapPost("/auth/impersonate/{userId}", async (int userId, IAuthService auth) =>
+{
+    try
+    {
+        var result = await auth.ImpersonateAsync(userId);
+        return Results.Ok(result);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+})
+.WithName("ImpersonateUser")
+.WithOpenApi()
+.RequireAuthorization("SuperuserOnly");
+
 // -- Gestión de usuarios (Superuser) --
 app.MapGet("/users", async (IAuthService auth) =>
 {

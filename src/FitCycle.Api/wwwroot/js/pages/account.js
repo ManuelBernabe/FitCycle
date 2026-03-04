@@ -19,9 +19,7 @@ export function render() {
   return `
     <div class="page no-tabs">
       <div class="page-content">
-        <div class="flex items-center gap-8 mb-16">
-          <button id="account-back" class="btn btn-ghost">${t('BackToRoutinesBtn')}</button>
-        </div>
+        <button id="account-back" class="floating-back-btn">${t('BackToRoutinesBtn')}</button>
 
         <!-- User info card -->
         <div class="account-header">
@@ -212,6 +210,7 @@ function renderUsers(container) {
           <div class="user-row-email">${uEmail}</div>
         </div>
         <div class="user-row-actions">
+          <button class="btn btn-sm btn-ghost" style="color:#512BD4;" data-login-as="${uId}" data-username="${uName}">${t('LoginAs')}</button>
           <button class="btn btn-sm btn-ghost" data-edit-user="${uId}">${t('Edit')}</button>
           <button class="btn btn-sm btn-ghost" style="color:#ff8c00;" data-change-pw="${uId}" data-username="${uName}">${t('PasswordKey')}</button>
           <button class="btn btn-sm btn-ghost" style="color:var(--danger,#dc3545);" data-delete-user="${uId}" data-username="${uName}">${t('DeleteUserBtn')}</button>
@@ -253,6 +252,24 @@ function renderUsers(container) {
         await loadUsers();
       } catch (err) {
         if (statusEl) statusEl.textContent = t('ErrorFmt', err.message);
+      }
+    });
+  });
+
+  // Login as user (impersonate)
+  container.querySelectorAll('[data-login-as]').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const userId = parseInt(e.currentTarget.dataset.loginAs);
+      const username = e.currentTarget.dataset.username;
+      if (!confirm(t('ConfirmLoginAs', username))) return;
+
+      try {
+        const result = await api.post(`/auth/impersonate/${userId}`);
+        auth.store(result);
+        location.hash = '#routines';
+        location.reload();
+      } catch (err) {
+        alert(t('ErrorFmt', err.message));
       }
     });
   });

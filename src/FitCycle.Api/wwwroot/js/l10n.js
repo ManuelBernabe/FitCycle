@@ -187,6 +187,10 @@ const Strings = {
   SameUserError:       { es: 'El usuario origen y destino deben ser diferentes', en: 'Source and target users must be different', fr: 'Les utilisateurs source et cible doivent être différents' },
   ConfirmCopyRoutines: { es: '¿Copiar todas las rutinas? Las rutinas actuales del usuario destino serán reemplazadas.', en: 'Copy all routines? The target user current routines will be replaced.', fr: "Copier toutes les routines ? Les routines actuelles de l'utilisateur cible seront remplacées." },
 
+  // === Impersonate ===
+  LoginAs:           { es: 'Login',                                      en: 'Login',                             fr: 'Connexion' },
+  ConfirmLoginAs:    { es: '¿Iniciar sesión como {0}? Se cerrará tu sesión actual.', en: 'Log in as {0}? Your current session will end.', fr: 'Se connecter en tant que {0} ? Votre session actuelle sera fermée.' },
+
   // === Password ===
   PwdMinLength:  { es: 'Mínimo 8 caracteres',             en: 'At least 8 characters',           fr: 'Au moins 8 caractères' },
   PwdUppercase:  { es: 'Una letra mayúscula',              en: 'One uppercase letter',            fr: 'Une lettre majuscule' },

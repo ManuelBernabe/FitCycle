@@ -178,6 +178,15 @@ public class AuthService : IAuthService
         await _db.SaveChangesAsync();
     }
 
+    public async Task<AuthResponse> ImpersonateAsync(int userId)
+    {
+        var user = await _db.Users.FindAsync(userId);
+        if (user is null)
+            throw new ArgumentException("Usuario no encontrado.");
+
+        return GenerateTokens(user);
+    }
+
     private static void ValidatePasswordStrength(string password)
     {
         if (string.IsNullOrWhiteSpace(password) || password.Length < 8)

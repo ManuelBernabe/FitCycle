@@ -13,4 +13,5 @@ public interface IAuthService
     Task<UserInfo> UpdateUserAsync(int id, UpdateUserRequest request);
     Task<bool> DeleteUserAsync(int id, int currentUserId);
     Task ResetPasswordAsync(int id, string newPassword);
+    Task<AuthResponse> ImpersonateAsync(int userId);
 }
