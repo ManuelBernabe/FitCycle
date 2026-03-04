@@ -675,6 +675,24 @@ app.MapPost("/webhook/deploy", async (HttpRequest req, IEmailService emailServic
 .WithOpenApi()
 .AllowAnonymous();
 
+// -- Descargar base de datos (solo Superuser) --
+app.MapGet("/admin/download-db", () =>
+{
+    var dataDir = Environment.GetEnvironmentVariable("DATA_DIR");
+    var dbPath = !string.IsNullOrEmpty(dataDir)
+        ? Path.Combine(dataDir, "fitcycle.db")
+        : "fitcycle.db";
+
+    if (!File.Exists(dbPath))
+        return Results.NotFound(new { error = "Base de datos no encontrada." });
+
+    var bytes = File.ReadAllBytes(dbPath);
+    return Results.File(bytes, "application/octet-stream", "fitcycle.db");
+})
+.WithName("DownloadDatabase")
+.WithOpenApi()
+.RequireAuthorization("SuperuserOnly");
+
 app.MapFallbackToFile("index.html");
 
 app.Run();

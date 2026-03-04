@@ -71,7 +71,10 @@ export function render() {
         <div class="divider"></div>
         <div class="account-section" id="user-management">
           <div class="account-section-title">${t('UserManagement')}</div>
-          <button id="create-user-btn" class="btn btn-outline btn-block mb-8">${t('CreateUser')}</button>
+          <div style="display:flex;gap:8px;margin-bottom:8px;">
+            <button id="create-user-btn" class="btn btn-outline" style="flex:1;">${t('CreateUser')}</button>
+            <button id="download-db-btn" class="btn btn-outline" style="flex:1;color:#ff8c00;border-color:#ff8c00;">${t('DownloadDb')}</button>
+          </div>
           <div id="users-list">
             <div class="loading-page"><div class="spinner"></div></div>
           </div>
@@ -110,6 +113,19 @@ export async function mount() {
 
   // Superuser: create user
   document.getElementById('create-user-btn')?.addEventListener('click', showCreateUserModal);
+
+  // Superuser: download database
+  document.getElementById('download-db-btn')?.addEventListener('click', async () => {
+    const btn = document.getElementById('download-db-btn');
+    if (btn) { btn.disabled = true; btn.textContent = t('Downloading'); }
+    try {
+      await api.downloadBlob('/admin/download-db', 'fitcycle.db');
+    } catch (err) {
+      alert(t('ErrorFmt', err.message));
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = t('DownloadDb'); }
+    }
+  });
 
   // Load current user info from API
   try {

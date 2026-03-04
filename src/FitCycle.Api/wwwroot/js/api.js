@@ -100,12 +100,32 @@ async function requestForm(path, formData, isRetry = false) {
   return JSON.parse(text);
 }
 
+async function downloadBlob(path, filename) {
+  const headers = {};
+  const token = auth.getAccessToken();
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const res = await fetch(`${BASE}${path}`, { headers });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 const api = {
   get(path)         { return request('GET',    path); },
   post(path, body)  { return request('POST',   path, body); },
   put(path, body)   { return request('PUT',    path, body); },
   del(path)         { return request('DELETE', path); },
   postForm(path, formData) { return requestForm(path, formData); },
+  downloadBlob(path, filename) { return downloadBlob(path, filename); },
 };
 
 export { api };
