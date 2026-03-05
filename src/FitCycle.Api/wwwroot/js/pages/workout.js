@@ -203,97 +203,96 @@ function renderExercise() {
   }).join('');
 
   container.innerHTML = `
-    <div class="page-content">
-      <div class="flex items-center justify-between mb-8">
-        <button id="workout-back" class="btn btn-ghost">${t('Back')}</button>
-        <button id="toggle-exercise-list" class="btn btn-ghost" style="font-size:13px;color:#512BD4;">
+    <div class="page-content" style="padding-top:8px;">
+      <div class="flex items-center justify-between" style="margin-bottom:4px;">
+        <button id="workout-back" class="btn btn-ghost" style="padding:4px 8px;font-size:13px;">${t('Back')}</button>
+        <button id="toggle-exercise-list" class="btn btn-ghost" style="font-size:12px;color:#512BD4;padding:4px 8px;">
           ${showExerciseList ? '&#9650; ' + t('Exercises') : '&#9660; ' + t('Exercises')} (${exercises.length})
         </button>
-        <div class="status-text">${dayName(dayNum)}</div>
+        <div class="status-text" style="font-size:12px;">${dayName(dayNum)}</div>
       </div>
 
-      <div id="exercise-list-panel" style="display:${showExerciseList ? 'block' : 'none'};margin-bottom:12px;">
+      <div id="exercise-list-panel" style="display:${showExerciseList ? 'block' : 'none'};margin-bottom:8px;">
         <div style="background:var(--card-bg);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;">
           ${buildExerciseList()}
         </div>
       </div>
 
-      <div class="text-center mb-4" style="font-size:15px;color:gray;">
-        ${t('ExerciseProgress', currentIndex + 1, exercises.length)}
-      </div>
-      <div class="progress-bar mb-16">
+      <div class="progress-bar" style="margin-bottom:6px;">
         <div class="fill" style="width:${progressPct}%"></div>
       </div>
 
-      <div class="card workout-exercise" style="text-align:center;padding:16px;">
-        <div class="workout-exercise-image" style="margin-bottom:10px;">
-          ${exImage
-            ? `<img src="${exImage}" alt="${exName}" style="max-height:180px;max-width:100%;object-fit:contain;border-radius:8px;" onerror="this.onerror=null;this.parentElement.innerHTML='<div style=&quot;font-size:64px;opacity:0.3;&quot;>&#127947;</div>'">`
-            : `<div style="font-size:64px;opacity:0.3;">&#127947;</div>`
-          }
+      <div class="card workout-exercise">
+        <div style="display:flex;align-items:center;gap:12px;text-align:left;margin-bottom:6px;">
+          <div class="workout-exercise-image" style="margin:0;flex-shrink:0;">
+            ${exImage
+              ? `<img src="${exImage}" alt="${exName}" onerror="this.onerror=null;this.parentElement.innerHTML='<div style=&quot;font-size:40px;opacity:0.3;&quot;>&#127947;</div>'">`
+              : `<div style="font-size:40px;opacity:0.3;">&#127947;</div>`
+            }
+          </div>
+          <div style="min-width:0;">
+            <div style="font-size:12px;color:#512BD4;font-weight:600;">${t('ExerciseProgress', currentIndex + 1, exercises.length)}</div>
+            <div class="workout-exercise-name">${exName}</div>
+            <div style="font-size:13px;color:gray;">${mgTranslate(exMuscle)}</div>
+            ${ssPartnerName ? `<div style="margin-top:3px;font-size:11px;color:#e67e22;font-weight:600;">&#8644; ${t('Superset')}: ${ssPartnerName}</div>` : ''}
+          </div>
         </div>
-        <div class="workout-exercise-name" style="font-size:22px;font-weight:bold;">${exName}</div>
-        <div style="font-size:15px;color:gray;margin-top:4px;">${mgTranslate(exMuscle)}</div>
-        ${ssPartnerName ? `<div style="margin-top:6px;padding:4px 12px;background:#fff3e0;border-radius:8px;font-size:13px;color:#e67e22;font-weight:600;">&#8644; ${t('Superset')}: ${ssPartnerName}</div>` : ''}
 
-        <div class="set-indicator" style="margin:12px 0;">${setDots}</div>
+        <div class="set-indicator" style="margin:6px 0;">${setDots}</div>
 
-        <div style="background:#f5f5f5;border-radius:12px;padding:12px 16px;margin:8px auto;max-width:300px;">
-          <div style="font-size:13px;color:#512BD4;font-weight:700;margin-bottom:6px;">
+        <div style="background:#f5f5f5;border-radius:10px;padding:8px 12px;margin:0 auto;max-width:300px;">
+          <div style="font-size:12px;color:#512BD4;font-weight:700;margin-bottom:4px;">
             ${t('SetN', currentSet + 1, totalSets)}
           </div>
-          <div style="display:flex;align-items:center;justify-content:center;gap:12px;">
+          <div style="display:flex;align-items:center;justify-content:center;gap:10px;">
             <div>
-              <div style="font-size:11px;color:gray;">${t('Reps')}</div>
+              <div style="font-size:10px;color:gray;">${t('Reps')}</div>
               <input type="number" id="workout-reps" value="${currentSetData.reps}" min="1" max="100"
-                style="width:60px;font-size:20px;font-weight:bold;text-align:center;border:1px solid #ddd;border-radius:8px;padding:6px;">
+                style="width:56px;font-size:18px;font-weight:bold;text-align:center;border:1px solid #ddd;border-radius:8px;padding:5px;">
             </div>
-            <div style="font-size:24px;font-weight:bold;color:#ccc;">x</div>
+            <div style="font-size:20px;font-weight:bold;color:#ccc;">x</div>
             <div>
-              <div style="font-size:11px;color:gray;">kg</div>
+              <div style="font-size:10px;color:gray;">kg</div>
               <input type="number" id="workout-weight" value="${currentSetData.weight > 0 ? currentSetData.weight : ''}" placeholder="0" step="0.5" min="0"
-                style="width:70px;font-size:20px;font-weight:bold;text-align:center;border:1px solid #ddd;border-radius:8px;padding:6px;">
+                style="width:66px;font-size:18px;font-weight:bold;text-align:center;border:1px solid #ddd;border-radius:8px;padding:5px;">
             </div>
           </div>
           ${(currentSetData.tempoPos > 0 || currentSetData.tempoNeg > 0 || currentSetData.grip) ? `
-            <div style="margin-top:8px;display:flex;justify-content:center;gap:12px;flex-wrap:wrap;">
-              ${currentSetData.tempoPos > 0 || currentSetData.tempoNeg > 0 ? `<span style="font-size:13px;color:#512BD4;">&#9201; ${currentSetData.tempoPos}s&#8593; / ${currentSetData.tempoNeg}s&#8595;</span>` : ''}
-              ${currentSetData.grip ? `<span style="font-size:13px;color:#e67e22;">&#9994; ${currentSetData.grip}</span>` : ''}
+            <div style="margin-top:4px;display:flex;justify-content:center;gap:10px;flex-wrap:wrap;">
+              ${currentSetData.tempoPos > 0 || currentSetData.tempoNeg > 0 ? `<span style="font-size:11px;color:#512BD4;">&#9201; ${currentSetData.tempoPos}s&#8593; / ${currentSetData.tempoNeg}s&#8595;</span>` : ''}
+              ${currentSetData.grip ? `<span style="font-size:11px;color:#e67e22;">&#9994; ${currentSetData.grip}</span>` : ''}
             </div>
           ` : ''}
         </div>
         ${exNotes ? `
-          <div style="background:#fff3e0;border-radius:8px;padding:8px 12px;margin:8px auto;max-width:300px;text-align:left;">
-            <div style="font-size:11px;color:#e67e22;font-weight:600;margin-bottom:2px;">&#128221; ${t('ExerciseNotes')}</div>
-            <div style="font-size:12px;color:#333;white-space:pre-wrap;">${exNotes}</div>
+          <div style="background:#fff3e0;border-radius:8px;padding:6px 10px;margin:6px auto 0;max-width:300px;text-align:left;">
+            <div style="font-size:10px;color:#e67e22;font-weight:600;">&#128221; ${t('ExerciseNotes')}</div>
+            <div style="font-size:11px;color:#333;white-space:pre-wrap;">${exNotes}</div>
           </div>
         ` : ''}
 
-        <div style="border-top:1px solid #eee;margin-top:16px;padding-top:12px;">
-          <div style="font-size:12px;color:#512BD4;font-weight:bold;letter-spacing:2px;">${t('Rest')}</div>
-          <div style="background:#f5f5f5;border-radius:16px;padding:8px 16px;display:inline-block;margin:6px 0;">
-            <div id="timer-display" style="font-size:40px;font-weight:bold;color:#333;">01:30</div>
-          </div>
-          <div id="timer-picker-row" class="flex items-center justify-center gap-8" style="margin:6px 0;">
-            <span style="font-size:13px;color:gray;">${t('Min')}</span>
-            <select id="timer-min" class="picker-select" style="width:65px;font-size:14px;">${minOptions}</select>
-            <span style="font-size:13px;color:gray;">${t('Sec')}</span>
-            <select id="timer-sec" class="picker-select" style="width:65px;font-size:14px;">${secOptions}</select>
-          </div>
-          <div class="flex items-center justify-center gap-10" style="margin-top:6px;">
-            <button id="timer-start" class="btn btn-sm" style="background:#512BD4;color:#fff;padding:6px 16px;border-radius:8px;">${t('Start')}</button>
-            <button id="timer-reset" class="btn btn-sm" style="background:#6c757d;color:#fff;padding:6px 16px;border-radius:8px;">${t('Reset')}</button>
+        <div style="border-top:1px solid #eee;margin-top:8px;padding-top:6px;">
+          <div style="display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;">
+            <span style="font-size:11px;color:#512BD4;font-weight:bold;letter-spacing:1px;">${t('Rest')}</span>
+            <div id="timer-display" style="font-size:24px;font-weight:bold;color:#333;background:#f5f5f5;border-radius:10px;padding:2px 12px;">01:30</div>
+            <div id="timer-picker-row" class="flex items-center gap-4" style="font-size:12px;">
+              <select id="timer-min" class="picker-select" style="width:50px;font-size:12px;padding:3px;">${minOptions}</select>
+              <span style="color:gray;">:</span>
+              <select id="timer-sec" class="picker-select" style="width:50px;font-size:12px;padding:3px;">${secOptions}</select>
+            </div>
+            <button id="timer-start" class="btn btn-sm" style="background:#512BD4;color:#fff;padding:4px 12px;border-radius:8px;font-size:12px;">${t('Start')}</button>
+            <button id="timer-reset" class="btn btn-sm" style="background:#6c757d;color:#fff;padding:4px 12px;border-radius:8px;font-size:12px;">${t('Reset')}</button>
           </div>
         </div>
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;">
-        <button id="workout-prev" class="btn btn-outline" ${currentIndex === 0 && currentSet === 0 ? 'disabled' : ''}>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
+        <button id="workout-prev" class="btn btn-outline" style="padding:10px;" ${currentIndex === 0 && currentSet === 0 ? 'disabled' : ''}>
           ${currentSet > 0 ? t('PrevSet') : t('Previous')}
         </button>
         ${isLastExercise && isLastSet
-          ? `<button id="workout-finish" class="btn btn-success">${t('Finish')}</button>`
-          : `<button id="workout-next" class="btn btn-primary">${isLastSet ? t('Next') : t('NextSet')}</button>`
+          ? `<button id="workout-finish" class="btn btn-success" style="padding:10px;">${t('Finish')}</button>`
+          : `<button id="workout-next" class="btn btn-primary" style="padding:10px;">${isLastSet ? t('Next') : t('NextSet')}</button>`
         }
       </div>
     </div>

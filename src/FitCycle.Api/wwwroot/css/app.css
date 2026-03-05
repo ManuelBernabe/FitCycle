@@ -973,14 +973,14 @@ body {
 /* ===== Workout Page ===== */
 .workout-exercise {
   text-align: center;
-  padding: 16px;
+  padding: 10px 16px;
 }
 
 .workout-exercise-image {
-  width: 200px;
-  height: 200px;
-  margin: 0 auto 16px;
-  border-radius: 12px;
+  width: 120px;
+  height: 120px;
+  margin: 0 auto 8px;
+  border-radius: 10px;
   overflow: hidden;
   background: var(--primary-light);
   display: flex;
@@ -995,9 +995,9 @@ body {
 }
 
 .workout-exercise-name {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 700;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .workout-exercise-detail {
