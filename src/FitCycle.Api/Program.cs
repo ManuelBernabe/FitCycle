@@ -63,9 +63,11 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("AdminOrAbove", policy =>
-        policy.RequireRole("Admin", "Superuser"));
+        policy.RequireRole("Admin", "Superuser", "SuperUserMaster"));
     options.AddPolicy("SuperuserOnly", policy =>
-        policy.RequireRole("Superuser"));
+        policy.RequireRole("Superuser", "SuperUserMaster"));
+    options.AddPolicy("SuperUserMasterOnly", policy =>
+        policy.RequireRole("SuperUserMaster"));
 });
 
 var app = builder.Build();
@@ -95,6 +97,14 @@ using (var scope = app.Services.CreateScope())
     catch { /* Table may not exist yet — Migrate() will handle it */ }
 
     db.Database.Migrate();
+
+    // Promote seeded admin (id=1) to SuperUserMaster if still Superuser
+    var adminUser = db.Users.FirstOrDefault(u => u.Id == 1 && u.Role == UserRole.Superuser);
+    if (adminUser != null)
+    {
+        adminUser.Role = UserRole.SuperUserMaster;
+        db.SaveChanges();
+    }
 
     // Update placeholder images to real ones for known exercises
     var repo = scope.ServiceProvider.GetRequiredService<IRoutineRepository>();
@@ -252,9 +262,9 @@ app.MapPost("/auth/impersonate/{userId}", async (int userId, IAuthService auth) 
 })
 .WithName("ImpersonateUser")
 .WithOpenApi()
-.RequireAuthorization("SuperuserOnly");
+.RequireAuthorization("SuperUserMasterOnly");
 
-// -- Gestión de usuarios (Superuser) --
+// -- Gestión de usuarios (SuperUserMaster only) --
 app.MapGet("/users", async (IAuthService auth) =>
 {
     var users = await auth.GetAllUsersAsync();
@@ -262,7 +272,7 @@ app.MapGet("/users", async (IAuthService auth) =>
 })
 .WithName("GetUsers")
 .WithOpenApi()
-.RequireAuthorization("SuperuserOnly");
+.RequireAuthorization("SuperUserMasterOnly");
 
 app.MapPost("/users", async (CreateUserRequest request, IAuthService auth) =>
 {
@@ -278,7 +288,7 @@ app.MapPost("/users", async (CreateUserRequest request, IAuthService auth) =>
 })
 .WithName("CreateUser")
 .WithOpenApi()
-.RequireAuthorization("SuperuserOnly");
+.RequireAuthorization("SuperUserMasterOnly");
 
 app.MapPut("/users/{id}", async (int id, UpdateUserRequest request, IAuthService auth) =>
 {
@@ -294,7 +304,7 @@ app.MapPut("/users/{id}", async (int id, UpdateUserRequest request, IAuthService
 })
 .WithName("UpdateUser")
 .WithOpenApi()
-.RequireAuthorization("SuperuserOnly");
+.RequireAuthorization("SuperUserMasterOnly");
 
 app.MapDelete("/users/{id}", async (int id, ClaimsPrincipal user, IAuthService auth) =>
 {
@@ -314,7 +324,7 @@ app.MapDelete("/users/{id}", async (int id, ClaimsPrincipal user, IAuthService a
 })
 .WithName("DeleteUser")
 .WithOpenApi()
-.RequireAuthorization("SuperuserOnly");
+.RequireAuthorization("SuperUserMasterOnly");
 
 app.MapPut("/users/{id}/password", async (int id, ResetPasswordRequest request, IAuthService auth) =>
 {
@@ -330,7 +340,7 @@ app.MapPut("/users/{id}/password", async (int id, ResetPasswordRequest request, 
 })
 .WithName("ResetPassword")
 .WithOpenApi()
-.RequireAuthorization("SuperuserOnly");
+.RequireAuthorization("SuperUserMasterOnly");
 
 // -- Grupos musculares --
 app.MapGet("/musclegroups", (IRoutineRepository repo) =>

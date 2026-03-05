@@ -70,11 +70,15 @@ const auth = {
   },
 
   isSuperuser() {
-    return this.hasRole('Superuser');
+    return this.hasRole('Superuser', 'SuperUserMaster');
   },
 
   isAdmin() {
-    return this.hasRole('Admin', 'Superuser');
+    return this.hasRole('Admin', 'Superuser', 'SuperUserMaster');
+  },
+
+  isSuperUserMaster() {
+    return this.hasRole('SuperUserMaster');
   }
 };
 

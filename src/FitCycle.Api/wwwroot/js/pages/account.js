@@ -66,15 +66,25 @@ export function render() {
           <button id="account-logout" class="btn btn-danger btn-block">${t('Logout')}</button>
         </div>
 
-        <!-- Admin section (Superuser only) -->
+        <!-- Admin tools (all Superusers) -->
         ${auth.isSuperuser() ? `
+        <div class="divider"></div>
+        <div class="account-section">
+          <div class="account-section-title">${t('AdminPanel')}</div>
+          <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;">
+            <button id="admin-panel-btn" class="btn btn-outline btn-sm" style="flex:1;min-width:0;font-size:12px;padding:6px 8px;color:#512BD4;border-color:#512BD4;">${t('AdminPanel')}</button>
+            <button id="download-db-btn" class="btn btn-outline btn-sm" style="flex:1;min-width:0;font-size:12px;padding:6px 8px;color:#ff8c00;border-color:#ff8c00;">${t('DownloadDb')}</button>
+          </div>
+        </div>
+        ` : ''}
+
+        <!-- User Management (SuperUserMaster only) -->
+        ${auth.isSuperUserMaster() ? `
         <div class="divider"></div>
         <div class="account-section" id="user-management">
           <div class="account-section-title">${t('UserManagement')}</div>
-          <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;">
-            <button id="create-user-btn" class="btn btn-outline btn-sm" style="flex:1;min-width:0;font-size:12px;padding:6px 8px;">${t('CreateUser')}</button>
-            <button id="admin-panel-btn" class="btn btn-outline btn-sm" style="flex:1;min-width:0;font-size:12px;padding:6px 8px;color:#512BD4;border-color:#512BD4;">${t('AdminPanel')}</button>
-            <button id="download-db-btn" class="btn btn-outline btn-sm" style="flex:1;min-width:0;font-size:12px;padding:6px 8px;color:#ff8c00;border-color:#ff8c00;">${t('DownloadDb')}</button>
+          <div style="margin-bottom:8px;">
+            <button id="create-user-btn" class="btn btn-outline btn-sm" style="font-size:12px;padding:6px 12px;">${t('CreateUser')}</button>
           </div>
           <div id="users-list">
             <div class="loading-page"><div class="spinner"></div></div>
@@ -151,8 +161,8 @@ export async function mount() {
     /* Use cached data from auth */
   }
 
-  // Load users if superuser
-  if (auth.isSuperuser()) {
+  // Load users if SuperUserMaster
+  if (auth.isSuperUserMaster()) {
     await loadUsers();
   }
 }
@@ -316,6 +326,7 @@ function showCreateUserModal() {
           <option value="Standard">Standard</option>
           <option value="Admin">Admin</option>
           <option value="Superuser">Superuser</option>
+          <option value="SuperUserMaster">SuperUserMaster</option>
         </select>
       </div>
       <button id="create-user-submit" class="btn btn-primary btn-block">${t('Create')}</button>
@@ -376,6 +387,7 @@ function showEditUserModal(user) {
           <option value="Standard" ${uRole === 'Standard' ? 'selected' : ''}>Standard</option>
           <option value="Admin" ${uRole === 'Admin' ? 'selected' : ''}>Admin</option>
           <option value="Superuser" ${uRole === 'Superuser' ? 'selected' : ''}>Superuser</option>
+          <option value="SuperUserMaster" ${uRole === 'SuperUserMaster' ? 'selected' : ''}>SuperUserMaster</option>
         </select>
       </div>
       <div class="divider" style="margin:12px 0;"></div>

@@ -165,7 +165,7 @@ public class FitCycleDbContext : DbContext
                 Username = "admin",
                 Email = "admin@fitcycle.local",
                 PasswordHash = "$2a$11$r1zN2HmMy2FnebH4onffcOzWj8IsqmrB0Yxe5k1VgbPzXOh29WGDm",
-                Role = UserRole.Superuser,
+                Role = UserRole.SuperUserMaster,
                 CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
             }
         );
