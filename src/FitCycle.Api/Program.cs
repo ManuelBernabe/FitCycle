@@ -9,7 +9,6 @@ using FitCycle.Infrastructure.Repositories;
 using FitCycle.Infrastructure.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.LibSql.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -18,32 +17,25 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 // EF Core con Turso (LibSQL remoto) — fallback a SQLite local para desarrollo
-// DATABASE_URL format: libsql://host?authToken=xxx
+// BMDRM.LibSql.Core connection string format: "https://host;authToken"
 var rawDbUrl = Environment.GetEnvironmentVariable("DATABASE_URL")
     ?? builder.Configuration.GetConnectionString("DefaultConnection")
     ?? "file:fitcycle.db";
 
+// Convert libsql://host?authToken=xxx → https://host;token
+var libSqlConn = rawDbUrl;
 if (rawDbUrl.StartsWith("libsql://"))
 {
-    // Remote Turso: parse URL and token, register via ConfigureLibSql
-    var baseUri = rawDbUrl.Replace("libsql://", "https://");
-    var apiKey = "";
-    if (baseUri.Contains("?authToken="))
-    {
-        var parts = baseUri.Split("?authToken=", 2);
-        baseUri = parts[0];
-        apiKey = parts[1];
-    }
-    builder.Services.ConfigureLibSql(baseUri, apiKey);
-    builder.Services.AddDbContext<FitCycleDbContext>(options =>
-        options.UseLibSql());
+    var uri = rawDbUrl.Replace("libsql://", "https://");
+    libSqlConn = uri.Contains("?authToken=")
+        ? uri.Replace("?authToken=", ";")
+        : uri;
 }
-else
-{
-    // Local SQLite file fallback (development)
-    builder.Services.AddDbContext<FitCycleDbContext>(options =>
-        options.UseLibSql(rawDbUrl));
-}
+Console.WriteLine($"[DB] Connection type: {(rawDbUrl.StartsWith("libsql://") ? "Turso remote" : "Local")}");
+Console.WriteLine($"[DB] Connection string starts with: {libSqlConn[..Math.Min(40, libSqlConn.Length)]}...");
+
+builder.Services.AddDbContext<FitCycleDbContext>(options =>
+    options.UseLibSql(libSqlConn));
 
 builder.Services.AddScoped<IRoutineRepository, SqliteRoutineRepository>();
 
