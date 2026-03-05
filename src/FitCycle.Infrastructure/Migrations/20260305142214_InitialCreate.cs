@@ -14,6 +14,34 @@ namespace FitCycle.Infrastructure.Migrations
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.CreateTable(
+                name: "BodyMeasurements",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "INTEGER", nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true),
+                    UserId = table.Column<int>(type: "INTEGER", nullable: false),
+                    MeasuredAt = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    Weight = table.Column<decimal>(type: "TEXT", nullable: true),
+                    Height = table.Column<decimal>(type: "TEXT", nullable: true),
+                    Chest = table.Column<decimal>(type: "TEXT", nullable: true),
+                    Waist = table.Column<decimal>(type: "TEXT", nullable: true),
+                    Hips = table.Column<decimal>(type: "TEXT", nullable: true),
+                    BicepLeft = table.Column<decimal>(type: "TEXT", nullable: true),
+                    BicepRight = table.Column<decimal>(type: "TEXT", nullable: true),
+                    ThighLeft = table.Column<decimal>(type: "TEXT", nullable: true),
+                    ThighRight = table.Column<decimal>(type: "TEXT", nullable: true),
+                    CalfLeft = table.Column<decimal>(type: "TEXT", nullable: true),
+                    CalfRight = table.Column<decimal>(type: "TEXT", nullable: true),
+                    Neck = table.Column<decimal>(type: "TEXT", nullable: true),
+                    BodyFat = table.Column<decimal>(type: "TEXT", nullable: true),
+                    Notes = table.Column<string>(type: "TEXT", maxLength: 500, nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_BodyMeasurements", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "MuscleGroups",
                 columns: table => new
                 {
@@ -27,11 +55,48 @@ namespace FitCycle.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "RoutineTemplates",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "INTEGER", nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true),
+                    Name = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
+                    Description = table.Column<string>(type: "TEXT", maxLength: 500, nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    CreatedByUserId = table.Column<int>(type: "INTEGER", nullable: false),
+                    RoutineDataJson = table.Column<string>(type: "TEXT", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_RoutineTemplates", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Users",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "INTEGER", nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true),
+                    Username = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
+                    Email = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
+                    PasswordHash = table.Column<string>(type: "TEXT", nullable: false),
+                    Role = table.Column<int>(type: "INTEGER", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    RefreshToken = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
+                    RefreshTokenExpiresAt = table.Column<DateTime>(type: "TEXT", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Users", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "WorkoutSessions",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "INTEGER", nullable: false)
                         .Annotation("Sqlite:Autoincrement", true),
+                    UserId = table.Column<int>(type: "INTEGER", nullable: false),
                     Day = table.Column<int>(type: "INTEGER", nullable: false),
                     StartedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
                     CompletedAt = table.Column<DateTime>(type: "TEXT", nullable: false)
@@ -47,6 +112,7 @@ namespace FitCycle.Infrastructure.Migrations
                 {
                     Id = table.Column<int>(type: "INTEGER", nullable: false)
                         .Annotation("Sqlite:Autoincrement", true),
+                    UserId = table.Column<int>(type: "INTEGER", nullable: false),
                     Day = table.Column<int>(type: "INTEGER", nullable: false),
                     MuscleGroupId = table.Column<int>(type: "INTEGER", nullable: false)
                 },
@@ -93,7 +159,9 @@ namespace FitCycle.Infrastructure.Migrations
                     ExerciseName = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
                     Sets = table.Column<int>(type: "INTEGER", nullable: false),
                     Reps = table.Column<int>(type: "INTEGER", nullable: false),
-                    MuscleGroupName = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false)
+                    Weight = table.Column<decimal>(type: "TEXT", nullable: false),
+                    MuscleGroupName = table.Column<string>(type: "TEXT", maxLength: 100, nullable: false),
+                    SetDetails = table.Column<string>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -112,10 +180,15 @@ namespace FitCycle.Infrastructure.Migrations
                 {
                     Id = table.Column<int>(type: "INTEGER", nullable: false)
                         .Annotation("Sqlite:Autoincrement", true),
+                    UserId = table.Column<int>(type: "INTEGER", nullable: false),
                     Day = table.Column<int>(type: "INTEGER", nullable: false),
                     ExerciseId = table.Column<int>(type: "INTEGER", nullable: false),
                     Sets = table.Column<int>(type: "INTEGER", nullable: false),
-                    Reps = table.Column<int>(type: "INTEGER", nullable: false)
+                    Reps = table.Column<int>(type: "INTEGER", nullable: false),
+                    Weight = table.Column<decimal>(type: "TEXT", nullable: false),
+                    SetDetails = table.Column<string>(type: "TEXT", nullable: false),
+                    SupersetGroup = table.Column<int>(type: "INTEGER", nullable: false),
+                    Notes = table.Column<string>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -142,6 +215,11 @@ namespace FitCycle.Infrastructure.Migrations
                     { 7, "Abdominales" },
                     { 8, "Glúteos" }
                 });
+
+            migrationBuilder.InsertData(
+                table: "Users",
+                columns: new[] { "Id", "CreatedAt", "Email", "PasswordHash", "RefreshToken", "RefreshTokenExpiresAt", "Role", "Username" },
+                values: new object[] { 1, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "admin@fitcycle.local", "$2a$11$r1zN2HmMy2FnebH4onffcOzWj8IsqmrB0Yxe5k1VgbPzXOh29WGDm", null, null, 2, "admin" });
 
             migrationBuilder.InsertData(
                 table: "Exercises",
@@ -184,9 +262,9 @@ namespace FitCycle.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateIndex(
-                name: "IX_DayExercises_Day_ExerciseId",
-                table: "DayExercises",
-                columns: new[] { "Day", "ExerciseId" });
+                name: "IX_BodyMeasurements_UserId_MeasuredAt",
+                table: "BodyMeasurements",
+                columns: new[] { "UserId", "MeasuredAt" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_DayExercises_ExerciseId",
@@ -194,10 +272,9 @@ namespace FitCycle.Infrastructure.Migrations
                 column: "ExerciseId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_DayMuscleGroups_Day_MuscleGroupId",
-                table: "DayMuscleGroups",
-                columns: new[] { "Day", "MuscleGroupId" },
-                unique: true);
+                name: "IX_DayExercises_UserId_Day_ExerciseId",
+                table: "DayExercises",
+                columns: new[] { "UserId", "Day", "ExerciseId" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_DayMuscleGroups_MuscleGroupId",
@@ -205,9 +282,27 @@ namespace FitCycle.Infrastructure.Migrations
                 column: "MuscleGroupId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_DayMuscleGroups_UserId_Day_MuscleGroupId",
+                table: "DayMuscleGroups",
+                columns: new[] { "UserId", "Day", "MuscleGroupId" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Exercises_MuscleGroupId",
                 table: "Exercises",
                 column: "MuscleGroupId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Users_Email",
+                table: "Users",
+                column: "Email",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Users_Username",
+                table: "Users",
+                column: "Username",
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_WorkoutExerciseLogs_WorkoutSessionId",
@@ -219,10 +314,19 @@ namespace FitCycle.Infrastructure.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(
+                name: "BodyMeasurements");
+
+            migrationBuilder.DropTable(
                 name: "DayExercises");
 
             migrationBuilder.DropTable(
                 name: "DayMuscleGroups");
+
+            migrationBuilder.DropTable(
+                name: "RoutineTemplates");
+
+            migrationBuilder.DropTable(
+                name: "Users");
 
             migrationBuilder.DropTable(
                 name: "WorkoutExerciseLogs");

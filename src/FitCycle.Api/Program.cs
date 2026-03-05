@@ -16,14 +16,12 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// EF Core SQLite — support Railway volume mount via DATA_DIR env var
-var dataDir = Environment.GetEnvironmentVariable("DATA_DIR");
-if (!string.IsNullOrEmpty(dataDir) && !Directory.Exists(dataDir))
-    Directory.CreateDirectory(dataDir);
-
-var defaultDb = !string.IsNullOrEmpty(dataDir) ? $"Data Source={Path.Combine(dataDir, "fitcycle.db")}" : "Data Source=fitcycle.db";
+// EF Core con Turso (LibSQL remoto) — fallback a SQLite local para desarrollo
+var dbUrl = Environment.GetEnvironmentVariable("DATABASE_URL")
+    ?? builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? "file:fitcycle.db";
 builder.Services.AddDbContext<FitCycleDbContext>(options =>
-    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection") ?? defaultDb));
+    options.UseLibSql(dbUrl));
 
 builder.Services.AddScoped<IRoutineRepository, SqliteRoutineRepository>();
 
@@ -786,26 +784,6 @@ app.MapPost("/webhook/deploy", async (HttpRequest req, IEmailService emailServic
 .WithName("DeployWebhook")
 .WithOpenApi()
 .AllowAnonymous();
-
-// -- Descargar base de datos (solo Superuser) --
-app.MapGet("/admin/download-db", (FitCycleDbContext db) =>
-{
-    var connStr = db.Database.GetConnectionString() ?? "";
-    var match = System.Text.RegularExpressions.Regex.Match(connStr, @"Data Source=(.+?)(?:;|$)");
-    var dbPath = match.Success ? match.Groups[1].Value : "fitcycle.db";
-
-    if (!File.Exists(dbPath))
-        return Results.NotFound(new { error = $"BD no encontrada en: {dbPath} (conn: {connStr})" });
-
-    // Flush WAL to main DB file so download includes all data
-    db.Database.ExecuteSqlRaw("PRAGMA wal_checkpoint(TRUNCATE);");
-
-    var bytes = File.ReadAllBytes(dbPath);
-    return Results.File(bytes, "application/octet-stream", "fitcycle.db");
-})
-.WithName("DownloadDatabase")
-.WithOpenApi()
-.RequireAuthorization("SuperuserOnly");
 
 app.MapFallbackToFile("index.html");
 

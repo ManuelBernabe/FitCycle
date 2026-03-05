@@ -11,14 +11,76 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace FitCycle.Infrastructure.Migrations
 {
     [DbContext(typeof(FitCycleDbContext))]
-    [Migration("20260228170152_AddUserIdToRoutinesAndWorkouts")]
-    partial class AddUserIdToRoutinesAndWorkouts
+    [Migration("20260305142214_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "8.0.11");
+
+            modelBuilder.Entity("FitCycle.Core.Models.BodyMeasurement", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal?>("BicepLeft")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal?>("BicepRight")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal?>("BodyFat")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal?>("CalfLeft")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal?>("CalfRight")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal?>("Chest")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal?>("Height")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal?>("Hips")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("MeasuredAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal?>("Neck")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal?>("ThighLeft")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal?>("ThighRight")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal?>("Waist")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal?>("Weight")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "MeasuredAt");
+
+                    b.ToTable("BodyMeasurements");
+                });
 
             modelBuilder.Entity("FitCycle.Core.Models.Exercise", b =>
                 {
@@ -414,6 +476,10 @@ namespace FitCycle.Infrastructure.Migrations
                     b.Property<int>("Reps")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("SetDetails")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("Sets")
                         .HasColumnType("INTEGER");
 
@@ -465,10 +531,21 @@ namespace FitCycle.Infrastructure.Migrations
                     b.Property<int>("ExerciseId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("Notes")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("Reps")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("SetDetails")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("Sets")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("SupersetGroup")
                         .HasColumnType("INTEGER");
 
                     b.Property<int>("UserId")
@@ -509,6 +586,37 @@ namespace FitCycle.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("DayMuscleGroups");
+                });
+
+            modelBuilder.Entity("FitCycle.Infrastructure.Entities.RoutineTemplateEntity", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RoutineDataJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("RoutineTemplates");
                 });
 
             modelBuilder.Entity("FitCycle.Core.Models.Exercise", b =>
