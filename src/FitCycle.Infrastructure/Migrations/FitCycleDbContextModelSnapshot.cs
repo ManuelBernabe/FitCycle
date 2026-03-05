@@ -402,13 +402,6 @@ namespace FitCycle.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
-                    b.Property<string>("ActivationToken")
-                        .HasMaxLength(128)
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("ActivationTokenExpiresAt")
-                        .HasColumnType("TEXT");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
 
@@ -416,11 +409,6 @@ namespace FitCycle.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("TEXT");
-
-                    b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER")
-                        .HasDefaultValue(true);
 
                     b.Property<string>("PasswordHash")
                         .IsRequired()
@@ -457,9 +445,8 @@ namespace FitCycle.Infrastructure.Migrations
                             Id = 1,
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Email = "admin@fitcycle.local",
-                            IsActive = true,
                             PasswordHash = "$2a$11$r1zN2HmMy2FnebH4onffcOzWj8IsqmrB0Yxe5k1VgbPzXOh29WGDm",
-                            Role = 3,
+                            Role = 2,
                             Username = "admin"
                         });
                 });

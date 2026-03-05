@@ -113,41 +113,16 @@ async function handleSubmit() {
   if (loadingEl) loadingEl.classList.remove('hidden');
 
   try {
+    let result;
     if (isRegister) {
-      await api.post('/auth/register', { username, email, password });
-      // Show activation message
-      const card = document.querySelector('.login-card');
-      if (card) {
-        card.innerHTML = `
-          <div style="text-align:center;padding:16px 0;">
-            <div style="font-size:48px;margin-bottom:12px;">&#9993;</div>
-            <h2 style="margin-bottom:8px;font-size:20px;">${t('CheckYourEmail')}</h2>
-            <p style="color:#666;font-size:14px;margin-bottom:16px;">${t('ActivationEmailSent')}</p>
-            <button id="back-to-login" class="btn btn-outline btn-block">${t('BackToLogin')}</button>
-            <button id="resend-activation" class="btn btn-ghost btn-block" style="margin-top:8px;font-size:13px;color:#512BD4;">${t('ResendActivation')}</button>
-          </div>
-        `;
-        document.getElementById('back-to-login')?.addEventListener('click', () => {
-          sessionStorage.setItem('login_mode', 'login');
-          window.dispatchEvent(new Event('app-rerender'));
-        });
-        document.getElementById('resend-activation')?.addEventListener('click', async () => {
-          try {
-            await api.post('/auth/resend-activation', { email });
-            alert(t('ActivationResent'));
-          } catch (e) { /* ignore */ }
-        });
-      }
-      if (loadingEl) loadingEl.classList.add('hidden');
-      return;
+      result = await api.post('/auth/register', { username, email, password });
     } else {
-      const result = await api.post('/auth/login', { username, password });
-      auth.store(result);
-      location.hash = '#home';
+      result = await api.post('/auth/login', { username, password });
     }
+    auth.store(result);
+    location.hash = '#home';
   } catch (err) {
-    const msg = err.message || t('UnknownError');
-    errorEl.textContent = msg;
+    errorEl.textContent = err.message || t('UnknownError');
     errorEl.classList.remove('hidden');
     submitBtn.disabled = false;
     submitBtn.textContent = isRegister ? t('Register') : t('SignIn');

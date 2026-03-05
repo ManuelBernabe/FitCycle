@@ -28,13 +28,6 @@ const Strings = {
   ErrorFmt:           { es: 'Error: {0}',              en: 'Error: {0}',           fr: 'Erreur : {0}' },
   Saving:             { es: 'Guardando...',             en: 'Saving...',            fr: 'Enregistrement...' },
   UnknownError:       { es: 'Error desconocido',        en: 'Unknown error',        fr: 'Erreur inconnue' },
-  CheckYourEmail:     { es: 'Revisa tu email',           en: 'Check your email',     fr: 'Vérifiez votre e-mail' },
-  ActivationEmailSent:{ es: 'Te hemos enviado un enlace de activación. Revisa tu bandeja de entrada.', en: 'We sent you an activation link. Check your inbox.', fr: 'Nous vous avons envoyé un lien d\'activation.' },
-  ResendActivation:   { es: 'Reenviar email de activación', en: 'Resend activation email', fr: 'Renvoyer l\'e-mail d\'activation' },
-  ActivationResent:   { es: 'Email de activación reenviado', en: 'Activation email resent', fr: 'E-mail d\'activation renvoyé' },
-  BackToLogin:        { es: 'Volver a iniciar sesión',   en: 'Back to sign in',      fr: 'Retour à la connexion' },
-  Active:             { es: 'Activo',                    en: 'Active',               fr: 'Actif' },
-  Inactive:           { es: 'Inactivo',                  en: 'Inactive',             fr: 'Inactif' },
 
   // === Buttons ===
   Save:     { es: 'Guardar',        en: 'Save',     fr: 'Enregistrer' },

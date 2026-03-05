@@ -89,8 +89,6 @@ public class FitCycleDbContext : DbContext
             e.Property(u => u.PasswordHash).IsRequired();
             e.Property(u => u.Role).HasConversion<int>();
             e.Property(u => u.RefreshToken).HasMaxLength(256);
-            e.Property(u => u.IsActive).HasDefaultValue(true);
-            e.Property(u => u.ActivationToken).HasMaxLength(128);
         });
 
         // RoutineTemplate
@@ -168,8 +166,7 @@ public class FitCycleDbContext : DbContext
                 Email = "admin@fitcycle.local",
                 PasswordHash = "$2a$11$r1zN2HmMy2FnebH4onffcOzWj8IsqmrB0Yxe5k1VgbPzXOh29WGDm",
                 Role = UserRole.SuperUserMaster,
-                CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-                IsActive = true
+                CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
             }
         );
     }

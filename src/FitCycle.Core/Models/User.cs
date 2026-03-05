@@ -15,9 +15,4 @@ public class User
     public string? RefreshToken { get; set; }
     [JsonIgnore]
     public DateTime? RefreshTokenExpiresAt { get; set; }
-    public bool IsActive { get; set; } = true;
-    [JsonIgnore]
-    public string? ActivationToken { get; set; }
-    [JsonIgnore]
-    public DateTime? ActivationTokenExpiresAt { get; set; }
 }
