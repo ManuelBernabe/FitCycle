@@ -11,6 +11,39 @@ let startedAt = null;
 let timerSeconds = 90;
 let timerRunning = false;
 let timerInterval = null;
+let showExerciseList = false;
+
+const STORAGE_KEY = 'workout_progress';
+
+// ── Persistence ──
+
+function saveProgress() {
+  const data = {
+    dayNum,
+    currentIndex,
+    currentSet,
+    startedAt: startedAt?.toISOString(),
+    exercises: exercises.map(ex => ({
+      exerciseId: ex.exerciseId || ex.ExerciseId || ex.id || ex.Id,
+      setDetails: ex.setDetails,
+    })),
+  };
+  sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+}
+
+function loadProgress() {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch { return null; }
+}
+
+function clearProgress() {
+  sessionStorage.removeItem(STORAGE_KEY);
+}
+
+// ── Render / Mount ──
 
 export function render(params) {
   dayNum = parseInt(params);
@@ -25,9 +58,6 @@ export function render(params) {
 
 export async function mount(params) {
   dayNum = parseInt(params);
-  startedAt = new Date();
-  currentIndex = 0;
-  currentSet = 0;
 
   try {
     const dayData = await api.get(`/routines/${dayNum}`);
@@ -68,6 +98,31 @@ export async function mount(params) {
       return;
     }
 
+    // Restore saved progress if same day
+    const saved = loadProgress();
+    if (saved && saved.dayNum === dayNum && saved.exercises) {
+      startedAt = saved.startedAt ? new Date(saved.startedAt) : new Date();
+      currentIndex = Math.min(saved.currentIndex || 0, exercises.length - 1);
+      currentSet = saved.currentSet || 0;
+      // Restore saved weights/reps into exercises
+      for (const savedEx of saved.exercises) {
+        const match = exercises.find(ex =>
+          (ex.exerciseId || ex.ExerciseId || ex.id || ex.Id) === savedEx.exerciseId
+        );
+        if (match && savedEx.setDetails) {
+          for (let i = 0; i < match.setDetails.length && i < savedEx.setDetails.length; i++) {
+            if (savedEx.setDetails[i].weight > 0) match.setDetails[i].weight = savedEx.setDetails[i].weight;
+            if (savedEx.setDetails[i].reps > 0) match.setDetails[i].reps = savedEx.setDetails[i].reps;
+          }
+        }
+      }
+      if (currentSet >= exercises[currentIndex].setDetails.length) currentSet = 0;
+    } else {
+      startedAt = new Date();
+      currentIndex = 0;
+      currentSet = 0;
+    }
+
     renderExercise();
   } catch (err) {
     document.getElementById('workout-content').innerHTML = `
@@ -80,10 +135,34 @@ export async function mount(params) {
 
 export function destroy() {
   stopTimer();
-  exercises = [];
-  currentIndex = 0;
-  currentSet = 0;
 }
+
+// ── Exercise List ──
+
+function buildExerciseList() {
+  return exercises.map((ex, idx) => {
+    const name = ex.exerciseName || ex.ExerciseName || ex.name || ex.Name || '';
+    const muscle = ex.muscleGroupName || ex.MuscleGroupName || '';
+    const totalSets = ex.setDetails.length;
+    const maxWeight = Math.max(...ex.setDetails.map(s => s.weight), 0);
+    const isCurrent = idx === currentIndex;
+    const isDone = idx < currentIndex;
+
+    return `
+      <div class="exercise-list-item ${isCurrent ? 'current' : ''} ${isDone ? 'done' : ''}" data-go-exercise="${idx}">
+        <div class="exercise-list-num">${idx + 1}</div>
+        <div class="exercise-list-info">
+          <div class="exercise-list-name">${name}</div>
+          <div class="exercise-list-meta">${mgTranslate(muscle)} · ${totalSets}s${maxWeight > 0 ? ` · ${maxWeight}kg` : ''}</div>
+        </div>
+        ${isDone ? '<div style="color:#28a745;font-size:16px;">&#10003;</div>' : ''}
+        ${isCurrent ? '<div style="color:#512BD4;font-size:12px;font-weight:600;">&#9654;</div>' : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+// ── Render Exercise ──
 
 function renderExercise() {
   const container = document.getElementById('workout-content');
@@ -95,6 +174,11 @@ function renderExercise() {
   const exImage = ex.imageUrl || ex.ImageUrl || '';
   const totalSets = ex.setDetails.length;
   const currentSetData = ex.setDetails[currentSet] || { reps: 12, weight: 0, tempoPos: 0, tempoNeg: 0, grip: '' };
+  // Pre-fill weight from previous set if current set has no weight yet
+  if (currentSetData.weight === 0 && currentSet > 0) {
+    const prevSet = ex.setDetails[currentSet - 1];
+    if (prevSet && prevSet.weight > 0) currentSetData.weight = prevSet.weight;
+  }
   const exNotes = ex.notes || '';
   const progressPct = ((currentIndex + 1) / exercises.length * 100).toFixed(0);
   const isLastExercise = currentIndex === exercises.length - 1;
@@ -122,8 +206,18 @@ function renderExercise() {
     <div class="page-content">
       <div class="flex items-center justify-between mb-8">
         <button id="workout-back" class="btn btn-ghost">${t('Back')}</button>
+        <button id="toggle-exercise-list" class="btn btn-ghost" style="font-size:13px;color:#512BD4;">
+          ${showExerciseList ? '&#9650; ' + t('Exercises') : '&#9660; ' + t('Exercises')} (${exercises.length})
+        </button>
         <div class="status-text">${dayName(dayNum)}</div>
       </div>
+
+      <div id="exercise-list-panel" style="display:${showExerciseList ? 'block' : 'none'};margin-bottom:12px;">
+        <div style="background:var(--card-bg);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;">
+          ${buildExerciseList()}
+        </div>
+      </div>
+
       <div class="text-center mb-4" style="font-size:15px;color:gray;">
         ${t('ExerciseProgress', currentIndex + 1, exercises.length)}
       </div>
@@ -205,13 +299,44 @@ function renderExercise() {
     </div>
   `;
 
-  document.getElementById('workout-back')?.addEventListener('click', () => { stopTimer(); location.hash = '#routines'; });
+  // ── Event Bindings ──
+
+  document.getElementById('workout-back')?.addEventListener('click', () => {
+    saveCurrentSetValues();
+    saveProgress();
+    stopTimer();
+    location.hash = '#routines';
+  });
+
+  document.getElementById('toggle-exercise-list')?.addEventListener('click', () => {
+    showExerciseList = !showExerciseList;
+    const panel = document.getElementById('exercise-list-panel');
+    const btn = document.getElementById('toggle-exercise-list');
+    if (panel) panel.style.display = showExerciseList ? 'block' : 'none';
+    if (btn) btn.innerHTML = `${showExerciseList ? '&#9650; ' : '&#9660; '}${t('Exercises')} (${exercises.length})`;
+  });
+
+  // Click exercise in list to jump to it
+  document.querySelectorAll('[data-go-exercise]').forEach(el => {
+    el.addEventListener('click', () => {
+      saveCurrentSetValues();
+      const idx = parseInt(el.dataset.goExercise);
+      if (idx >= 0 && idx < exercises.length) {
+        currentIndex = idx;
+        currentSet = 0;
+        saveProgress();
+        stopTimer();
+        renderExercise();
+      }
+    });
+  });
 
   document.getElementById('workout-prev')?.addEventListener('click', () => {
     saveCurrentSetValues();
     stopTimer();
     if (currentSet > 0) { currentSet--; }
     else if (currentIndex > 0) { currentIndex--; currentSet = exercises[currentIndex].setDetails.length - 1; }
+    saveProgress();
     renderExercise();
   });
 
@@ -227,22 +352,19 @@ function renderExercise() {
       if (partnerIdx >= 0) {
         const isFirstInPair = currentIndex < partnerIdx;
         if (isFirstInPair) {
-          // After A's set → go to B's same set (no rest)
           currentIndex = partnerIdx;
-          // currentSet stays the same
           if (currentSet >= exercises[partnerIdx].setDetails.length) currentSet = exercises[partnerIdx].setDetails.length - 1;
         } else {
-          // After B's set → go to A's next set (rest here)
           currentIndex = partnerIdx;
           currentSet++;
           if (currentSet >= exercises[partnerIdx].setDetails.length) {
-            // All sets done for superset pair → move past both
             const maxIdx = Math.max(currentIndex, partnerIdx);
             currentIndex = maxIdx + 1;
             currentSet = 0;
-            if (currentIndex < exercises.length) { renderExercise(); return; }
+            if (currentIndex < exercises.length) { saveProgress(); renderExercise(); return; }
           }
         }
+        saveProgress();
         renderExercise();
         return;
       }
@@ -251,10 +373,15 @@ function renderExercise() {
     // Normal flow
     if (currentSet < ex2.setDetails.length - 1) { currentSet++; }
     else if (currentIndex < exercises.length - 1) { currentIndex++; currentSet = 0; }
+    saveProgress();
     renderExercise();
   });
 
   document.getElementById('workout-finish')?.addEventListener('click', () => { saveCurrentSetValues(); finishWorkout(); });
+
+  // Auto-save on weight/reps input change
+  document.getElementById('workout-weight')?.addEventListener('change', () => { saveCurrentSetValues(); saveProgress(); });
+  document.getElementById('workout-reps')?.addEventListener('change', () => { saveCurrentSetValues(); saveProgress(); });
 
   document.getElementById('timer-start')?.addEventListener('click', onTimerStartClicked);
   document.getElementById('timer-reset')?.addEventListener('click', onTimerResetClicked);
@@ -312,7 +439,15 @@ function onTimerStartClicked() {
       if (pickerRow) pickerRow.style.display = '';
       const display = document.getElementById('timer-display');
       if (display) display.style.color = '#28a745';
-      try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch (e) { /* */ }
+      // Visual + audio alert instead of vibrate (vibrate triggers iOS "undo" dialog)
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        osc.frequency.value = 880;
+        osc.connect(ctx.destination);
+        osc.start();
+        setTimeout(() => { osc.stop(); ctx.close(); }, 300);
+      } catch (e) { /* */ }
     }
   }, 1000);
 }
@@ -367,6 +502,9 @@ async function finishWorkout() {
       exercises: exerciseLogs,
     });
   } catch (e) { /* Don't block finish */ }
+
+  // Clear saved progress after successful finish
+  clearProgress();
 
   sessionStorage.setItem('workout_summary', JSON.stringify({
     day: dayNum,

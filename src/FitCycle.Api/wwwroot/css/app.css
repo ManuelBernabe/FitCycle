@@ -1524,3 +1524,74 @@ body {
   gap: 2px;
   flex-shrink: 0;
 }
+
+/* ===== Exercise List (Workout) ===== */
+.exercise-list-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-light);
+  cursor: pointer;
+  transition: background var(--transition);
+}
+
+.exercise-list-item:last-child {
+  border-bottom: none;
+}
+
+.exercise-list-item:active {
+  background: var(--bg);
+}
+
+.exercise-list-item.current {
+  background: var(--primary-faint);
+  border-left: 3px solid var(--primary);
+}
+
+.exercise-list-item.done {
+  opacity: 0.6;
+}
+
+.exercise-list-num {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--border);
+  color: var(--text-light);
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.exercise-list-item.current .exercise-list-num {
+  background: var(--primary);
+  color: #fff;
+}
+
+.exercise-list-item.done .exercise-list-num {
+  background: var(--success);
+  color: #fff;
+}
+
+.exercise-list-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.exercise-list-name {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.exercise-list-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 1px;
+}

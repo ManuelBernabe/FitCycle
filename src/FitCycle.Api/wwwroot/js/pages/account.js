@@ -71,10 +71,10 @@ export function render() {
         <div class="divider"></div>
         <div class="account-section" id="user-management">
           <div class="account-section-title">${t('UserManagement')}</div>
-          <div style="display:flex;gap:8px;margin-bottom:8px;">
-            <button id="create-user-btn" class="btn btn-outline" style="flex:1;">${t('CreateUser')}</button>
-            <button id="admin-panel-btn" class="btn btn-outline" style="flex:1;color:#512BD4;border-color:#512BD4;">${t('AdminPanel')}</button>
-            <button id="download-db-btn" class="btn btn-outline" style="flex:1;color:#ff8c00;border-color:#ff8c00;">${t('DownloadDb')}</button>
+          <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;">
+            <button id="create-user-btn" class="btn btn-outline btn-sm" style="flex:1;min-width:0;font-size:12px;padding:6px 8px;">${t('CreateUser')}</button>
+            <button id="admin-panel-btn" class="btn btn-outline btn-sm" style="flex:1;min-width:0;font-size:12px;padding:6px 8px;color:#512BD4;border-color:#512BD4;">${t('AdminPanel')}</button>
+            <button id="download-db-btn" class="btn btn-outline btn-sm" style="flex:1;min-width:0;font-size:12px;padding:6px 8px;color:#ff8c00;border-color:#ff8c00;">${t('DownloadDb')}</button>
           </div>
           <div id="users-list">
             <div class="loading-page"><div class="spinner"></div></div>
