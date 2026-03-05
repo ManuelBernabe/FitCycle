@@ -91,7 +91,7 @@ export function render() {
 export async function mount() {
   // Back button
   document.getElementById('account-back')?.addEventListener('click', () => {
-    location.hash = '#routines';
+    location.hash = '#home';
   });
 
   // Logout
@@ -278,7 +278,7 @@ function renderUsers(container) {
       try {
         const result = await api.post(`/auth/impersonate/${userId}`);
         auth.store(result);
-        location.hash = '#routines';
+        location.hash = '#home';
         location.reload();
       } catch (err) {
         alert(t('ErrorFmt', err.message));
