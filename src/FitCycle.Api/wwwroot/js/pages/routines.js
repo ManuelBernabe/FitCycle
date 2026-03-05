@@ -12,7 +12,7 @@ export function render() {
       <div class="page-content">
         <div class="flex items-center justify-between">
           <div class="section-title">${t('MyWeeklyRoutine')}</div>
-          ${auth.isSuperuser() ? `<div style="display:flex;gap:6px;"><button id="import-pdf-btn" class="btn btn-sm btn-outline" style="color:#512BD4;font-size:12px;">&#128196; ${t('ImportPdf')}</button><button id="copy-routines-btn" class="btn btn-sm btn-outline" style="color:#512BD4;font-size:12px;">&#128203; ${t('CopyRoutines')}</button></div>` : ''}
+          ${auth.isAdmin() ? `<div style="display:flex;gap:6px;"><button id="import-pdf-btn" class="btn btn-sm btn-outline" style="color:#512BD4;font-size:12px;">&#128196; ${t('ImportPdf')}</button><button id="copy-routines-btn" class="btn btn-sm btn-outline" style="color:#512BD4;font-size:12px;">&#128203; ${t('CopyRoutines')}</button></div>` : ''}
         </div>
         <div class="section-subtitle">${t('ConfigureWeekly')}</div>
         <div id="routines-list">

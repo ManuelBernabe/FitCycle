@@ -112,7 +112,7 @@ function renderShell(route, routeName, params) {
           <span class="tab-icon">&#128207;</span>
           <span>${t('TabMeasurements')}</span>
         </button>
-        ${auth.isSuperuser() ? `
+        ${auth.isAdmin() ? `
         <button class="tab ${isTmpl ? 'active' : ''}" data-tab="templates">
           <span class="tab-icon">&#128218;</span>
           <span>${t('TabTemplates')}</span>

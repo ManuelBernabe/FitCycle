@@ -272,7 +272,7 @@ app.MapGet("/users", async (IAuthService auth) =>
 })
 .WithName("GetUsers")
 .WithOpenApi()
-.RequireAuthorization("SuperUserMasterOnly");
+.RequireAuthorization("AdminOrAbove");
 
 app.MapPost("/users", async (CreateUserRequest request, IAuthService auth) =>
 {
@@ -445,7 +445,7 @@ app.MapPost("/routines/import-pdf", async (HttpRequest request, IPdfImportServic
 })
 .WithName("ImportPdfRoutine")
 .WithOpenApi()
-.RequireAuthorization("SuperuserOnly")
+.RequireAuthorization("AdminOrAbove")
 .DisableAntiforgery();
 
 // -- Debug: ver texto extraído del PDF --
@@ -475,7 +475,7 @@ app.MapPost("/routines/debug-pdf", async (HttpRequest request, IPdfImportService
 })
 .WithName("DebugPdfText")
 .WithOpenApi()
-.RequireAuthorization("SuperuserOnly")
+.RequireAuthorization("AdminOrAbove")
 .DisableAntiforgery();
 
 // -- Copiar rutinas de un usuario a otro (solo Superuser) --
@@ -510,7 +510,7 @@ app.MapPost("/routines/copy", (CopyRoutinesRequest req, IRoutineRepository repo)
 })
 .WithName("CopyRoutines")
 .WithOpenApi()
-.RequireAuthorization("SuperuserOnly");
+.RequireAuthorization("AdminOrAbove");
 
 // -- Plantillas de rutinas (solo Superuser) --
 app.MapGet("/templates", (FitCycleDbContext db) =>
@@ -527,7 +527,7 @@ app.MapGet("/templates", (FitCycleDbContext db) =>
 })
 .WithName("GetTemplates")
 .WithOpenApi()
-.RequireAuthorization("SuperuserOnly");
+.RequireAuthorization("AdminOrAbove");
 
 app.MapPost("/templates", (SaveTemplateRequest req, IRoutineRepository repo, FitCycleDbContext db, ClaimsPrincipal user) =>
 {
@@ -556,7 +556,7 @@ app.MapPost("/templates", (SaveTemplateRequest req, IRoutineRepository repo, Fit
 })
 .WithName("SaveTemplate")
 .WithOpenApi()
-.RequireAuthorization("SuperuserOnly");
+.RequireAuthorization("AdminOrAbove");
 
 app.MapDelete("/templates/{id}", (int id, FitCycleDbContext db) =>
 {
@@ -570,7 +570,7 @@ app.MapDelete("/templates/{id}", (int id, FitCycleDbContext db) =>
 })
 .WithName("DeleteTemplate")
 .WithOpenApi()
-.RequireAuthorization("SuperuserOnly");
+.RequireAuthorization("AdminOrAbove");
 
 app.MapPost("/templates/{id}/apply", (int id, ApplyTemplateRequest req, FitCycleDbContext db, IRoutineRepository repo) =>
 {
@@ -620,7 +620,7 @@ app.MapPost("/templates/{id}/apply", (int id, ApplyTemplateRequest req, FitCycle
 })
 .WithName("ApplyTemplate")
 .WithOpenApi()
-.RequireAuthorization("SuperuserOnly");
+.RequireAuthorization("AdminOrAbove");
 
 // -- Historial de entrenamientos --
 app.MapPost("/workouts", (SaveWorkoutRequest request, FitCycleDbContext db, ClaimsPrincipal user) =>
