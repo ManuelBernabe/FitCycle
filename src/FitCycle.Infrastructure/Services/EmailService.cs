@@ -44,6 +44,79 @@ public class EmailService : IEmailService
         _logger.LogInformation("Welcome email sent to {Email}", toEmail);
     }
 
+    public async Task SendActivationEmailAsync(string toEmail, string username, string activationUrl)
+    {
+        if (string.IsNullOrWhiteSpace(_settings.SmtpUser) || string.IsNullOrWhiteSpace(_settings.SmtpPassword))
+        {
+            _logger.LogWarning("Email not configured — skipping activation email for {Email}", toEmail);
+            return;
+        }
+
+        var displayName = string.IsNullOrWhiteSpace(username) ? "usuario" : username;
+
+        var message = new MimeMessage();
+        message.From.Add(new MailboxAddress(_settings.FromName, _settings.FromEmail));
+        message.To.Add(new MailboxAddress(displayName, toEmail));
+        message.Subject = "Activa tu cuenta de FitCycle";
+
+        var bodyBuilder = new BodyBuilder
+        {
+            HtmlBody = $@"<!DOCTYPE html>
+<html>
+<head><meta charset=""UTF-8""><meta name=""viewport"" content=""width=device-width,initial-scale=1.0""></head>
+<body style=""margin:0;padding:0;background:#f3f0fc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;"">
+  <table width=""100%"" cellpadding=""0"" cellspacing=""0"" style=""max-width:600px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;margin-top:32px;margin-bottom:32px;"">
+    <tr>
+      <td style=""background:#512BD4;padding:32px;text-align:center;"">
+        <div style=""font-size:48px;font-weight:bold;color:#ffffff;letter-spacing:2px;"">FC</div>
+        <div style=""font-size:24px;color:#ffffff;margin-top:8px;font-weight:600;"">FitCycle</div>
+      </td>
+    </tr>
+    <tr>
+      <td style=""padding:32px;"">
+        <h1 style=""color:#333;font-size:22px;margin:0 0 16px;"">Bienvenido/a, {displayName}!</h1>
+        <p style=""color:#555;font-size:16px;line-height:1.6;margin:0 0 16px;"">
+          Tu cuenta en <strong style=""color:#512BD4;"">FitCycle</strong> ha sido creada. Solo falta un paso para activarla.
+        </p>
+        <p style=""color:#555;font-size:16px;line-height:1.6;margin:0 0 24px;"">
+          Haz clic en el boton de abajo para activar tu cuenta y empezar a entrenar:
+        </p>
+        <div style=""text-align:center;margin:24px 0;"">
+          <a href=""{activationUrl}"" style=""display:inline-block;background:#512BD4;color:#ffffff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:16px;"">
+            Activar mi cuenta
+          </a>
+        </div>
+        <p style=""color:#999;font-size:13px;line-height:1.6;margin:16px 0 0;"">
+          Si el boton no funciona, copia y pega este enlace en tu navegador:
+        </p>
+        <p style=""color:#512BD4;font-size:12px;word-break:break-all;margin:4px 0 0;"">{activationUrl}</p>
+        <p style=""color:#999;font-size:12px;margin:16px 0 0;"">
+          Este enlace expira en 24 horas.
+        </p>
+      </td>
+    </tr>
+    <tr>
+      <td style=""background:#f9f9f9;padding:20px 32px;text-align:center;border-top:1px solid #eee;"">
+        <p style=""color:#999;font-size:13px;margin:0;"">
+          Equipo FitCycle &middot; Tu entrenamiento, tu ritmo
+        </p>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>"
+        };
+        message.Body = bodyBuilder.ToMessageBody();
+
+        using var client = new SmtpClient();
+        await client.ConnectAsync(_settings.SmtpHost, _settings.SmtpPort, SecureSocketOptions.StartTls);
+        await client.AuthenticateAsync(_settings.SmtpUser, _settings.SmtpPassword);
+        await client.SendAsync(message);
+        await client.DisconnectAsync(true);
+
+        _logger.LogInformation("Activation email sent to {Email}", toEmail);
+    }
+
     public async Task SendDeployNotificationAsync(string status, string? environment = null)
     {
         if (string.IsNullOrWhiteSpace(_settings.SmtpUser) || string.IsNullOrWhiteSpace(_settings.SmtpPassword))

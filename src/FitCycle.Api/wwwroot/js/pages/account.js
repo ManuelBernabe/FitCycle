@@ -232,13 +232,17 @@ function renderUsers(container) {
     const uEmail = u.email || u.Email || '';
     const uRole = u.role || u.Role || '';
     const uId = u.id || u.Id;
+    const uActive = u.isActive !== undefined ? u.isActive : true;
     const initial = uName.charAt(0).toUpperCase();
+    const statusDot = uActive
+      ? '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#28a745;margin-right:4px;" title="Activo"></span>'
+      : '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#ff8c00;margin-right:4px;" title="Inactivo"></span>';
 
     return `
       <div class="user-row">
         <div class="avatar avatar-sm">${initial}</div>
         <div class="user-row-info">
-          <div class="user-row-name">${uName} <span class="tag tag-sm">${uRole}</span></div>
+          <div class="user-row-name">${statusDot}${uName} <span class="tag tag-sm">${uRole}</span></div>
           <div class="user-row-email">${uEmail}</div>
         </div>
         <div class="user-row-actions" style="flex-wrap:wrap;gap:2px;">
@@ -364,6 +368,7 @@ function showEditUserModal(user) {
   const uEmail = user.email || user.Email || '';
   const uRole = user.role || user.Role || '';
   const uId = user.id || user.Id;
+  const uActive = user.isActive !== undefined ? user.isActive : true;
 
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay modal-centered';
@@ -390,6 +395,13 @@ function showEditUserModal(user) {
           <option value="SuperUserMaster" ${uRole === 'SuperUserMaster' ? 'selected' : ''}>SuperUserMaster</option>
         </select>
       </div>
+      <div class="form-group" style="margin-top:8px;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+          <input id="edit-active" type="checkbox" ${uActive ? 'checked' : ''} style="width:18px;height:18px;accent-color:#28a745;">
+          <span class="form-label" style="margin:0;">${t('Active')}</span>
+          <span style="font-size:11px;color:${uActive ? '#28a745' : '#ff8c00'};">(${uActive ? t('Active') : t('Inactive')})</span>
+        </label>
+      </div>
       <div class="divider" style="margin:12px 0;"></div>
       <div class="form-group">
         <label class="form-label">${t('ChangePassword')}</label>
@@ -407,6 +419,7 @@ function showEditUserModal(user) {
     const username = overlay.querySelector('#edit-username')?.value?.trim();
     const email = overlay.querySelector('#edit-email')?.value?.trim();
     const role = overlay.querySelector('#edit-role')?.value;
+    const isActive = overlay.querySelector('#edit-active')?.checked;
     const newPw = overlay.querySelector('#edit-password')?.value;
     const statusEl = document.getElementById('account-status');
 
@@ -418,6 +431,7 @@ function showEditUserModal(user) {
         username: username !== uName ? username : undefined,
         email: email !== uEmail ? email : undefined,
         role: role !== uRole ? role : undefined,
+        isActive: isActive !== uActive ? isActive : undefined,
       });
 
       // Change password if provided

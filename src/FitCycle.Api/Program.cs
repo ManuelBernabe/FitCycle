@@ -178,20 +178,24 @@ app.MapGet("/version", () =>
 .AllowAnonymous();
 
 // -- Autenticación --
-app.MapPost("/auth/register", async (RegisterRequest request, IAuthService auth, IEmailService emailService, ILogger<Program> logger) =>
+app.MapPost("/auth/register", async (RegisterRequest request, IAuthService auth, IEmailService emailService, EmailSettings emailSettings, ILogger<Program> logger) =>
 {
     try
     {
         var result = await auth.RegisterAsync(request);
 
-        // Fire-and-forget welcome email
+        // Fire-and-forget activation email
         _ = Task.Run(async () =>
         {
-            try { await emailService.SendWelcomeEmailAsync(request.Email, request.Username); }
-            catch (Exception ex) { logger.LogError(ex, "Failed to send welcome email to {Email}", request.Email); }
+            try
+            {
+                var activationUrl = $"{emailSettings.AppBaseUrl}/auth/activate?token={result.ActivationToken}";
+                await emailService.SendActivationEmailAsync(request.Email, request.Username, activationUrl);
+            }
+            catch (Exception ex) { logger.LogError(ex, "Failed to send activation email to {Email}", request.Email); }
         });
 
-        return Results.Ok(result);
+        return Results.Ok(new { message = result.Message });
     }
     catch (ArgumentException ex)
     {
@@ -202,6 +206,50 @@ app.MapPost("/auth/register", async (RegisterRequest request, IAuthService auth,
 .WithOpenApi()
 .AllowAnonymous();
 
+app.MapGet("/auth/activate", async (string token, IAuthService auth, EmailSettings emailSettings) =>
+{
+    var success = await auth.ActivateAsync(token);
+    var appUrl = emailSettings.AppBaseUrl;
+    var html = success
+        ? $@"<!DOCTYPE html><html><head><meta charset=""UTF-8""><meta name=""viewport"" content=""width=device-width,initial-scale=1.0""></head>
+<body style=""margin:0;padding:0;background:#f3f0fc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;"">
+<table width=""100%"" cellpadding=""0"" cellspacing=""0"" style=""max-width:500px;margin:48px auto;background:#fff;border-radius:12px;overflow:hidden;"">
+<tr><td style=""background:#28a745;padding:24px;text-align:center;""><div style=""font-size:48px;"">&#9989;</div><div style=""font-size:20px;color:#fff;font-weight:700;margin-top:8px;"">Cuenta activada</div></td></tr>
+<tr><td style=""padding:32px;text-align:center;""><p style=""color:#333;font-size:16px;margin:0 0 24px;"">Tu cuenta ha sido activada exitosamente. Ya puedes iniciar sesion.</p>
+<a href=""{appUrl}/"" style=""display:inline-block;background:#512BD4;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:600;"">Ir a FitCycle</a></td></tr></table></body></html>"
+        : $@"<!DOCTYPE html><html><head><meta charset=""UTF-8""><meta name=""viewport"" content=""width=device-width,initial-scale=1.0""></head>
+<body style=""margin:0;padding:0;background:#f3f0fc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;"">
+<table width=""100%"" cellpadding=""0"" cellspacing=""0"" style=""max-width:500px;margin:48px auto;background:#fff;border-radius:12px;overflow:hidden;"">
+<tr><td style=""background:#dc3545;padding:24px;text-align:center;""><div style=""font-size:48px;"">&#10060;</div><div style=""font-size:20px;color:#fff;font-weight:700;margin-top:8px;"">Enlace invalido</div></td></tr>
+<tr><td style=""padding:32px;text-align:center;""><p style=""color:#333;font-size:16px;margin:0 0 24px;"">El enlace de activacion es invalido o ha expirado. Solicita uno nuevo desde la app.</p>
+<a href=""{appUrl}/"" style=""display:inline-block;background:#512BD4;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:600;"">Ir a FitCycle</a></td></tr></table></body></html>";
+    return Results.Content(html, "text/html");
+})
+.WithName("ActivateAccount")
+.WithOpenApi()
+.AllowAnonymous();
+
+app.MapPost("/auth/resend-activation", async (ResendActivationRequest request, IAuthService auth, IEmailService emailService, EmailSettings emailSettings, ILogger<Program> logger) =>
+{
+    var token = await auth.ResendActivationAsync(request.Email);
+    if (token is not null)
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var url = $"{emailSettings.AppBaseUrl}/auth/activate?token={token}";
+                await emailService.SendActivationEmailAsync(request.Email, "", url);
+            }
+            catch (Exception ex) { logger.LogError(ex, "Failed to resend activation email"); }
+        });
+    }
+    return Results.Ok(new { message = "Si el email existe, se ha enviado un nuevo enlace de activacion." });
+})
+.WithName("ResendActivation")
+.WithOpenApi()
+.AllowAnonymous();
+
 app.MapPost("/auth/login", async (LoginRequest request, IAuthService auth) =>
 {
     try
@@ -209,9 +257,9 @@ app.MapPost("/auth/login", async (LoginRequest request, IAuthService auth) =>
         var result = await auth.LoginAsync(request);
         return Results.Ok(result);
     }
-    catch (UnauthorizedAccessException)
+    catch (UnauthorizedAccessException ex)
     {
-        return Results.Json(new { error = "Credenciales inválidas." }, statusCode: 401);
+        return Results.Json(new { error = ex.Message }, statusCode: 401);
     }
 })
 .WithName("Login")
