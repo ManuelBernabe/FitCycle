@@ -13,6 +13,7 @@ import * as statsPage from './pages/stats.js';
 import * as accountPage from './pages/account.js';
 import * as measurementsPage from './pages/measurements.js';
 import * as templatesPage from './pages/templates.js';
+import * as adminPage from './pages/admin.js';
 
 // ─── Init ───────────────────────────────────────────────────────────
 l10nInit();
@@ -30,6 +31,7 @@ const routes = {
   account:      { mod: accountPage,      header: true,  tabs: false },
   measurements: { mod: measurementsPage, header: true,  tabs: true },
   templates:    { mod: templatesPage,    header: true,  tabs: true },
+  admin:        { mod: adminPage,       header: true,  tabs: false },
 };
 
 // ─── Router ─────────────────────────────────────────────────────────

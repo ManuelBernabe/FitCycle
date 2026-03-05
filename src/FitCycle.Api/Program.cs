@@ -71,12 +71,62 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<FitCycleDbContext>();
+
+    // If DB already has tables but migration history doesn't match (e.g. after migration reset),
+    // record the current migration as applied so Migrate() doesn't try to recreate tables.
+    try
+    {
+        var applied = db.Database.GetAppliedMigrations().ToList();
+        var pending = db.Database.GetPendingMigrations().ToList();
+        if (applied.Count > 0 && pending.Count > 0)
+        {
+            // Old migrations were applied; mark new ones as applied too
+            foreach (var migration in pending)
+            {
+                db.Database.ExecuteSqlRaw(
+                    "INSERT OR IGNORE INTO \"__EFMigrationsHistory\" (\"MigrationId\", \"ProductVersion\") VALUES ({0}, {1})",
+                    migration, "8.0.11");
+            }
+        }
+    }
+    catch { /* Table may not exist yet — Migrate() will handle it */ }
+
     db.Database.Migrate();
 
     // Update placeholder images to real ones for known exercises
     var repo = scope.ServiceProvider.GetRequiredService<IRoutineRepository>();
     if (repo is SqliteRoutineRepository sqliteRepo)
         sqliteRepo.UpdatePlaceholderImages();
+
+    // Auto-backup: create daily backup if none exists for today
+    try
+    {
+        var connStr = db.Database.GetConnectionString() ?? "";
+        var dbMatch = System.Text.RegularExpressions.Regex.Match(connStr, @"Data Source=(.+?)(?:;|$)");
+        var dbFilePath = dbMatch.Success ? dbMatch.Groups[1].Value : "fitcycle.db";
+
+        if (File.Exists(dbFilePath))
+        {
+            var backupDir = Path.Combine(Path.GetDirectoryName(dbFilePath) ?? ".", "backups");
+            Directory.CreateDirectory(backupDir);
+            var today = DateTime.UtcNow.ToString("yyyyMMdd");
+            if (!Directory.GetFiles(backupDir, $"fitcycle_{today}*.db").Any())
+            {
+                db.Database.ExecuteSqlRaw("PRAGMA wal_checkpoint(TRUNCATE);");
+                var backupPath = Path.Combine(backupDir, $"fitcycle_{today}_{DateTime.UtcNow:HHmmss}.db");
+                File.Copy(dbFilePath, backupPath);
+
+                // Keep max 10 backups
+                var allBackups = Directory.GetFiles(backupDir, "fitcycle_*.db").OrderBy(f => f).ToArray();
+                if (allBackups.Length > 10)
+                {
+                    foreach (var old in allBackups.Take(allBackups.Length - 10))
+                        File.Delete(old);
+                }
+            }
+        }
+    }
+    catch { /* Non-critical: don't prevent app from starting */ }
 }
 
 if (app.Environment.IsDevelopment())
@@ -806,10 +856,179 @@ app.MapGet("/admin/download-db", (FitCycleDbContext db) =>
 .WithOpenApi()
 .RequireAuthorization("SuperuserOnly");
 
+// -- Admin: SQL Query Console --
+app.MapPost("/admin/query", (SqlQueryRequest req, FitCycleDbContext db) =>
+{
+    var sql = req.Query?.Trim() ?? "";
+    if (string.IsNullOrEmpty(sql))
+        return Results.BadRequest(new { error = "Query vacía." });
+
+    // Only allow SELECT and PRAGMA
+    var upper = sql.ToUpperInvariant();
+    if (!upper.StartsWith("SELECT") && !upper.StartsWith("PRAGMA") && !upper.StartsWith("WITH"))
+        return Results.BadRequest(new { error = "Solo se permiten consultas SELECT, PRAGMA o WITH." });
+
+    // Block dangerous keywords even in subqueries
+    var blocked = new[] { "DROP ", "DELETE ", "UPDATE ", "INSERT ", "ALTER ", "CREATE ", "ATTACH ", "DETACH " };
+    if (blocked.Any(b => upper.Contains(b)))
+        return Results.BadRequest(new { error = "Query contiene operaciones no permitidas." });
+
+    try
+    {
+        var conn = db.Database.GetDbConnection();
+        if (conn.State != System.Data.ConnectionState.Open) conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = sql;
+        using var reader = cmd.ExecuteReader();
+
+        var columns = Enumerable.Range(0, reader.FieldCount).Select(i => reader.GetName(i)).ToList();
+        var rows = new List<List<object?>>();
+        var maxRows = 500;
+        while (reader.Read() && rows.Count < maxRows)
+        {
+            var row = new List<object?>();
+            for (int i = 0; i < reader.FieldCount; i++)
+                row.Add(reader.IsDBNull(i) ? null : reader.GetValue(i));
+            rows.Add(row);
+        }
+
+        return Results.Ok(new { columns, rows, rowCount = rows.Count, truncated = rows.Count >= maxRows });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+})
+.WithName("AdminQuery")
+.WithOpenApi()
+.RequireAuthorization("SuperuserOnly");
+
+// -- Admin: Backups --
+app.MapGet("/admin/backups", (FitCycleDbContext db) =>
+{
+    var connStr = db.Database.GetConnectionString() ?? "";
+    var dbMatch = System.Text.RegularExpressions.Regex.Match(connStr, @"Data Source=(.+?)(?:;|$)");
+    var dbFilePath = dbMatch.Success ? dbMatch.Groups[1].Value : "fitcycle.db";
+    var backupDir = Path.Combine(Path.GetDirectoryName(dbFilePath) ?? ".", "backups");
+
+    if (!Directory.Exists(backupDir))
+        return Results.Ok(new { backups = Array.Empty<object>() });
+
+    var backups = Directory.GetFiles(backupDir, "fitcycle_*.db")
+        .Select(f => new FileInfo(f))
+        .OrderByDescending(f => f.Name)
+        .Select(f => new { name = f.Name, size = f.Length, date = f.LastWriteTimeUtc })
+        .ToList();
+
+    return Results.Ok(new { backups });
+})
+.WithName("ListBackups")
+.WithOpenApi()
+.RequireAuthorization("SuperuserOnly");
+
+app.MapPost("/admin/backup", (FitCycleDbContext db) =>
+{
+    var connStr = db.Database.GetConnectionString() ?? "";
+    var dbMatch = System.Text.RegularExpressions.Regex.Match(connStr, @"Data Source=(.+?)(?:;|$)");
+    var dbFilePath = dbMatch.Success ? dbMatch.Groups[1].Value : "fitcycle.db";
+
+    if (!File.Exists(dbFilePath))
+        return Results.NotFound(new { error = "BD no encontrada." });
+
+    var backupDir = Path.Combine(Path.GetDirectoryName(dbFilePath) ?? ".", "backups");
+    Directory.CreateDirectory(backupDir);
+
+    db.Database.ExecuteSqlRaw("PRAGMA wal_checkpoint(TRUNCATE);");
+    var backupName = $"fitcycle_{DateTime.UtcNow:yyyyMMdd}_{DateTime.UtcNow:HHmmss}.db";
+    var backupPath = Path.Combine(backupDir, backupName);
+    File.Copy(dbFilePath, backupPath);
+
+    // Keep max 10 backups
+    var allBackups = Directory.GetFiles(backupDir, "fitcycle_*.db").OrderBy(f => f).ToArray();
+    if (allBackups.Length > 10)
+    {
+        foreach (var old in allBackups.Take(allBackups.Length - 10))
+            File.Delete(old);
+    }
+
+    var info = new FileInfo(backupPath);
+    return Results.Ok(new { success = true, name = backupName, size = info.Length, message = "Backup creado." });
+})
+.WithName("CreateBackup")
+.WithOpenApi()
+.RequireAuthorization("SuperuserOnly");
+
+app.MapPost("/admin/restore/{name}", (string name, FitCycleDbContext db) =>
+{
+    // Validate filename to prevent path traversal
+    if (name.Contains("..") || name.Contains('/') || name.Contains('\\') || !name.EndsWith(".db"))
+        return Results.BadRequest(new { error = "Nombre de backup inválido." });
+
+    var connStr = db.Database.GetConnectionString() ?? "";
+    var dbMatch = System.Text.RegularExpressions.Regex.Match(connStr, @"Data Source=(.+?)(?:;|$)");
+    var dbFilePath = dbMatch.Success ? dbMatch.Groups[1].Value : "fitcycle.db";
+    var backupDir = Path.Combine(Path.GetDirectoryName(dbFilePath) ?? ".", "backups");
+    var backupPath = Path.Combine(backupDir, name);
+
+    if (!File.Exists(backupPath))
+        return Results.NotFound(new { error = "Backup no encontrado." });
+
+    try
+    {
+        // Create pre-restore backup
+        db.Database.ExecuteSqlRaw("PRAGMA wal_checkpoint(TRUNCATE);");
+        var preRestoreName = $"fitcycle_prerestore_{DateTime.UtcNow:yyyyMMdd}_{DateTime.UtcNow:HHmmss}.db";
+        File.Copy(dbFilePath, Path.Combine(backupDir, preRestoreName));
+
+        // Close EF connection before overwriting
+        db.Database.CloseConnection();
+
+        // Delete WAL/SHM files if present
+        var walPath = dbFilePath + "-wal";
+        var shmPath = dbFilePath + "-shm";
+        if (File.Exists(walPath)) File.Delete(walPath);
+        if (File.Exists(shmPath)) File.Delete(shmPath);
+
+        // Overwrite DB with backup
+        File.Copy(backupPath, dbFilePath, overwrite: true);
+
+        return Results.Ok(new { success = true, message = $"BD restaurada desde {name}. Se creó backup previo: {preRestoreName}" });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = $"Error al restaurar: {ex.Message}" });
+    }
+})
+.WithName("RestoreBackup")
+.WithOpenApi()
+.RequireAuthorization("SuperuserOnly");
+
+app.MapGet("/admin/backup/download/{name}", (string name, FitCycleDbContext db) =>
+{
+    if (name.Contains("..") || name.Contains('/') || name.Contains('\\') || !name.EndsWith(".db"))
+        return Results.BadRequest(new { error = "Nombre inválido." });
+
+    var connStr = db.Database.GetConnectionString() ?? "";
+    var dbMatch = System.Text.RegularExpressions.Regex.Match(connStr, @"Data Source=(.+?)(?:;|$)");
+    var dbFilePath = dbMatch.Success ? dbMatch.Groups[1].Value : "fitcycle.db";
+    var backupDir = Path.Combine(Path.GetDirectoryName(dbFilePath) ?? ".", "backups");
+    var backupPath = Path.Combine(backupDir, name);
+
+    if (!File.Exists(backupPath))
+        return Results.NotFound(new { error = "Backup no encontrado." });
+
+    var bytes = File.ReadAllBytes(backupPath);
+    return Results.File(bytes, "application/octet-stream", name);
+})
+.WithName("DownloadBackup")
+.WithOpenApi()
+.RequireAuthorization("SuperuserOnly");
+
 app.MapFallbackToFile("index.html");
 
 app.Run();
 
+record SqlQueryRequest(string Query);
 record CreateExerciseRequest(string Name, int MuscleGroupId);
 record ExerciseInput(int ExerciseId, int Sets, int Reps);
 record UpdateDayRoutineRequest(List<int> MuscleGroupIds, List<RoutineExerciseInput>? Exercises);

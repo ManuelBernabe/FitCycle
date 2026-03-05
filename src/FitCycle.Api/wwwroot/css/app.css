@@ -1431,3 +1431,96 @@ body {
   display: block;
   font-size: 20px;
 }
+
+/* === Admin Panel === */
+.sql-textarea {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 13px;
+  min-height: 100px;
+  resize: vertical;
+}
+
+.sql-results-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--card-bg);
+}
+
+.sql-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-family: 'Courier New', Courier, monospace;
+  white-space: nowrap;
+}
+
+.sql-table th {
+  background: var(--primary-light);
+  color: var(--primary-dark);
+  font-weight: 700;
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 2px solid var(--primary);
+  position: sticky;
+  top: 0;
+}
+
+.sql-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sql-table tbody tr:hover {
+  background: var(--bg);
+}
+
+.sql-table .text-muted {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.quick-query-btn {
+  font-size: 11px !important;
+  padding: 4px 8px !important;
+  min-height: 28px !important;
+}
+
+.backup-row {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  gap: 8px;
+}
+
+.backup-row:last-child {
+  border-bottom: none;
+}
+
+.backup-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.backup-name {
+  font-size: 13px;
+  font-weight: 600;
+  word-break: break-all;
+}
+
+.backup-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.backup-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}

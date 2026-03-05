@@ -253,6 +253,25 @@ const Strings = {
   // === Language ===
   Language:       { es: 'Idioma',              en: 'Language',          fr: 'Langue' },
   SelectLanguage: { es: 'Seleccionar idioma',  en: 'Select language',  fr: 'Sélectionner la langue' },
+
+  // === Admin Panel ===
+  AdminPanel:          { es: 'Panel Admin',                              en: 'Admin Panel',                       fr: 'Panneau Admin' },
+  SqlConsole:          { es: 'Consola SQL',                              en: 'SQL Console',                       fr: 'Console SQL' },
+  ExecuteQuery:        { es: 'Ejecutar',                                 en: 'Execute',                           fr: 'Exécuter' },
+  NoResults:           { es: 'Sin resultados',                           en: 'No results',                        fr: 'Aucun résultat' },
+  Rows:                { es: 'filas',                                    en: 'rows',                              fr: 'lignes' },
+  Truncated:           { es: 'truncado a 500',                           en: 'truncated to 500',                  fr: 'tronqué à 500' },
+  Backups:             { es: 'Backups',                                  en: 'Backups',                           fr: 'Sauvegardes' },
+  CreateBackup:        { es: 'Crear Backup',                             en: 'Create Backup',                     fr: 'Créer Sauvegarde' },
+  CreatingBackup:      { es: 'Creando backup...',                        en: 'Creating backup...',                fr: 'Création...' },
+  BackupCreated:       { es: 'Backup creado',                            en: 'Backup created',                    fr: 'Sauvegarde créée' },
+  RestoreBackup:       { es: 'Restaurar',                                en: 'Restore',                           fr: 'Restaurer' },
+  Restoring:           { es: 'Restaurando...',                           en: 'Restoring...',                      fr: 'Restauration...' },
+  BackupRestored:      { es: 'BD restaurada correctamente',              en: 'Database restored successfully',    fr: 'Base de données restaurée' },
+  ConfirmRestore:      { es: '¿Restaurar la BD desde {0}? Se creará un backup previo automáticamente.', en: 'Restore DB from {0}? A pre-restore backup will be created automatically.', fr: 'Restaurer la BD depuis {0} ? Une sauvegarde préalable sera créée automatiquement.' },
+  ConfirmRestoreDouble:{ es: '¿Estás seguro? Esta acción reemplazará toda la base de datos.', en: 'Are you sure? This will replace the entire database.', fr: 'Êtes-vous sûr ? Cela remplacera toute la base de données.' },
+  NoBackups:           { es: 'No hay backups disponibles',               en: 'No backups available',              fr: 'Aucune sauvegarde disponible' },
+  Download:            { es: 'Descargar',                                en: 'Download',                          fr: 'Télécharger' },
 };
 
 // DayOfWeek in .NET: Sunday=0 ... Saturday=6

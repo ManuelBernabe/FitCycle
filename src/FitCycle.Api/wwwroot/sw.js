@@ -1,7 +1,8 @@
-const CACHE = 'fitcycle-v17';
+const CACHE = 'fitcycle-v19';
 const SHELL = ['/', '/css/app.css', '/js/app.js', '/js/api.js', '/js/auth.js', '/js/l10n.js', '/js/exercises.js',
   '/js/pages/login.js', '/js/pages/routines.js', '/js/pages/editday.js', '/js/pages/workout.js',
-  '/js/pages/summary.js', '/js/pages/stats.js', '/js/pages/account.js', '/js/pages/measurements.js'];
+  '/js/pages/summary.js', '/js/pages/stats.js', '/js/pages/account.js', '/js/pages/measurements.js',
+  '/js/pages/admin.js'];
 
 self.addEventListener('install', e => {
   self.skipWaiting();
@@ -21,8 +22,8 @@ self.addEventListener('fetch', e => {
   if (e.request.url.includes('/auth/') || e.request.url.includes('/routines') ||
       e.request.url.includes('/workouts') || e.request.url.includes('/exercises') ||
       e.request.url.includes('/musclegroups') || e.request.url.includes('/users') ||
-      e.request.url.includes('/measurements')) {
-    e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
+      e.request.url.includes('/measurements') || e.request.url.includes('/admin/')) {
+    e.respondWith(fetch(e.request).catch(() => caches.match(e.request).then(r => r || new Response('{"error":"offline"}', {status:503, headers:{'Content-Type':'application/json'}}))));
   } else {
     // App shell: network-first with cache fallback (ensures updates are picked up)
     e.respondWith(
@@ -30,7 +31,7 @@ self.addEventListener('fetch', e => {
         const clone = res.clone();
         caches.open(CACHE).then(c => c.put(e.request, clone));
         return res;
-      }).catch(() => caches.match(e.request))
+      }).catch(() => caches.match(e.request).then(r => r || new Response('Not found', {status:503})))
     );
   }
 });
