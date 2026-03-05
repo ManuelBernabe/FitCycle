@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace FitCycle.Infrastructure.Migrations
 {
     [DbContext(typeof(FitCycleDbContext))]
-    [Migration("20260305142214_InitialCreate")]
+    [Migration("20260305165128_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />

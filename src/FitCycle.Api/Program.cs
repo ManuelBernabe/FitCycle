@@ -9,7 +9,6 @@ using FitCycle.Infrastructure.Repositories;
 using FitCycle.Infrastructure.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.LibSql.Connection;
 using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -17,38 +16,14 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// EF Core con Turso (LibSQL remoto) — fallback a SQLite local para desarrollo
-var rawDbUrl = Environment.GetEnvironmentVariable("DATABASE_URL")
-    ?? builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? "file:fitcycle.db";
+// EF Core SQLite — support Railway volume mount via DATA_DIR env var
+var dataDir = Environment.GetEnvironmentVariable("DATA_DIR");
+if (!string.IsNullOrEmpty(dataDir) && !Directory.Exists(dataDir))
+    Directory.CreateDirectory(dataDir);
 
-// Convert libsql://host?authToken=xxx → https://host;token (HttpDbConnection format)
-var libSqlConn = rawDbUrl;
-if (rawDbUrl.StartsWith("libsql://"))
-{
-    var uri = rawDbUrl.Replace("libsql://", "https://");
-    libSqlConn = uri.Contains("?authToken=")
-        ? uri.Replace("?authToken=", ";")
-        : uri;
-}
-
-if (rawDbUrl.StartsWith("libsql://"))
-{
-    // Remote Turso: use HttpDbConnection with IHttpClientFactory
-    builder.Services.AddHttpClient();
-    builder.Services.AddDbContext<FitCycleDbContext>((sp, options) =>
-    {
-        var factory = sp.GetRequiredService<IHttpClientFactory>();
-        var connection = new HttpDbConnection(libSqlConn, factory);
-        options.UseLibSql(connection);
-    });
-}
-else
-{
-    // Local SQLite file fallback (development)
-    builder.Services.AddDbContext<FitCycleDbContext>(options =>
-        options.UseLibSql(libSqlConn));
-}
+var defaultDb = !string.IsNullOrEmpty(dataDir) ? $"Data Source={Path.Combine(dataDir, "fitcycle.db")}" : "Data Source=fitcycle.db";
+builder.Services.AddDbContext<FitCycleDbContext>(options =>
+    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection") ?? defaultDb));
 
 builder.Services.AddScoped<IRoutineRepository, SqliteRoutineRepository>();
 
@@ -811,6 +786,25 @@ app.MapPost("/webhook/deploy", async (HttpRequest req, IEmailService emailServic
 .WithName("DeployWebhook")
 .WithOpenApi()
 .AllowAnonymous();
+
+app.MapGet("/admin/download-db", (FitCycleDbContext db) =>
+{
+    var connStr = db.Database.GetConnectionString() ?? "";
+    var match = System.Text.RegularExpressions.Regex.Match(connStr, @"Data Source=(.+?)(?:;|$)");
+    var dbPath = match.Success ? match.Groups[1].Value : "fitcycle.db";
+
+    if (!File.Exists(dbPath))
+        return Results.NotFound(new { error = $"BD no encontrada en: {dbPath} (conn: {connStr})" });
+
+    // Flush WAL to main DB file so download includes all data
+    db.Database.ExecuteSqlRaw("PRAGMA wal_checkpoint(TRUNCATE);");
+
+    var bytes = File.ReadAllBytes(dbPath);
+    return Results.File(bytes, "application/octet-stream", "fitcycle.db");
+})
+.WithName("DownloadDatabase")
+.WithOpenApi()
+.RequireAuthorization("SuperuserOnly");
 
 app.MapFallbackToFile("index.html");
 
