@@ -9,6 +9,7 @@ using FitCycle.Infrastructure.Repositories;
 using FitCycle.Infrastructure.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.LibSql.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -17,32 +18,32 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 // EF Core con Turso (LibSQL remoto) — fallback a SQLite local para desarrollo
-// DATABASE_URL format: libsql://host?authToken=xxx → converted to "https://host;token"
+// DATABASE_URL format: libsql://host?authToken=xxx
 var rawDbUrl = Environment.GetEnvironmentVariable("DATABASE_URL")
     ?? builder.Configuration.GetConnectionString("DefaultConnection")
     ?? "file:fitcycle.db";
 
-string libSqlConn;
 if (rawDbUrl.StartsWith("libsql://"))
 {
-    // Parse: libsql://host?authToken=xxx → https://host;token
-    var uri = rawDbUrl.Replace("libsql://", "https://");
-    if (uri.Contains("?authToken="))
+    // Remote Turso: parse URL and token, register via ConfigureLibSql
+    var baseUri = rawDbUrl.Replace("libsql://", "https://");
+    var apiKey = "";
+    if (baseUri.Contains("?authToken="))
     {
-        var parts = uri.Split("?authToken=", 2);
-        libSqlConn = $"{parts[0]};{parts[1]}";
+        var parts = baseUri.Split("?authToken=", 2);
+        baseUri = parts[0];
+        apiKey = parts[1];
     }
-    else
-    {
-        libSqlConn = uri;
-    }
+    builder.Services.ConfigureLibSql(baseUri, apiKey);
+    builder.Services.AddDbContext<FitCycleDbContext>(options =>
+        options.UseLibSql());
 }
 else
 {
-    libSqlConn = rawDbUrl;
+    // Local SQLite file fallback (development)
+    builder.Services.AddDbContext<FitCycleDbContext>(options =>
+        options.UseLibSql(rawDbUrl));
 }
-builder.Services.AddDbContext<FitCycleDbContext>(options =>
-    options.UseLibSql(libSqlConn));
 
 builder.Services.AddScoped<IRoutineRepository, SqliteRoutineRepository>();
 
