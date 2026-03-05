@@ -17,11 +17,32 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 // EF Core con Turso (LibSQL remoto) — fallback a SQLite local para desarrollo
-var dbUrl = Environment.GetEnvironmentVariable("DATABASE_URL")
+// DATABASE_URL format: libsql://host?authToken=xxx → converted to "https://host;token"
+var rawDbUrl = Environment.GetEnvironmentVariable("DATABASE_URL")
     ?? builder.Configuration.GetConnectionString("DefaultConnection")
     ?? "file:fitcycle.db";
+
+string libSqlConn;
+if (rawDbUrl.StartsWith("libsql://"))
+{
+    // Parse: libsql://host?authToken=xxx → https://host;token
+    var uri = rawDbUrl.Replace("libsql://", "https://");
+    if (uri.Contains("?authToken="))
+    {
+        var parts = uri.Split("?authToken=", 2);
+        libSqlConn = $"{parts[0]};{parts[1]}";
+    }
+    else
+    {
+        libSqlConn = uri;
+    }
+}
+else
+{
+    libSqlConn = rawDbUrl;
+}
 builder.Services.AddDbContext<FitCycleDbContext>(options =>
-    options.UseLibSql(dbUrl));
+    options.UseLibSql(libSqlConn));
 
 builder.Services.AddScoped<IRoutineRepository, SqliteRoutineRepository>();
 
