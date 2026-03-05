@@ -120,7 +120,7 @@ async function handleSubmit() {
       result = await api.post('/auth/login', { username, password });
     }
     auth.store(result);
-    location.hash = '#routines';
+    location.hash = '#home';
   } catch (err) {
     errorEl.textContent = err.message || t('UnknownError');
     errorEl.classList.remove('hidden');
