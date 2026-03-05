@@ -254,6 +254,36 @@ const Strings = {
   Language:       { es: 'Idioma',              en: 'Language',          fr: 'Langue' },
   SelectLanguage: { es: 'Seleccionar idioma',  en: 'Select language',  fr: 'Sélectionner la langue' },
 
+  // === Home ===
+  Welcome:         { es: 'Hola, {0}!',                         en: 'Hello, {0}!',                     fr: 'Bonjour, {0} !' },
+  GoToRoutines:    { es: 'Ir a mis rutinas',                    en: 'Go to my routines',               fr: 'Aller à mes routines' },
+  ViewStats:       { es: 'Ver estadísticas',                    en: 'View statistics',                 fr: 'Voir les statistiques' },
+  LastWorkout:     { es: 'Último entreno',                      en: 'Last workout',                    fr: 'Dernier entraînement' },
+  Streak:          { es: 'Racha',                               en: 'Streak',                          fr: 'Série' },
+  Today:           { es: 'Hoy',                                 en: 'Today',                           fr: "Aujourd'hui" },
+  Yesterday:       { es: 'Ayer',                                en: 'Yesterday',                       fr: 'Hier' },
+
+  // === EditDay extras ===
+  ShowSets:        { es: 'Ver series',                          en: 'Show sets',                       fr: 'Voir séries' },
+  HideSets:        { es: 'Ocultar series',                      en: 'Hide sets',                       fr: 'Masquer séries' },
+
+  // === Templates extras ===
+  Days:            { es: 'días',                                en: 'days',                            fr: 'jours' },
+
+  // === Measurements extras ===
+  BMI:             { es: 'IMC',                                 en: 'BMI',                             fr: 'IMC' },
+  BMIValue:        { es: 'Tu IMC: {0}',                         en: 'Your BMI: {0}',                   fr: 'Votre IMC : {0}' },
+  Underweight:     { es: 'Bajo peso',                           en: 'Underweight',                     fr: 'Insuffisance pondérale' },
+  NormalWeight:    { es: 'Peso normal',                         en: 'Normal weight',                   fr: 'Poids normal' },
+  Overweight:      { es: 'Sobrepeso',                           en: 'Overweight',                      fr: 'Surpoids' },
+  Obese:           { es: 'Obesidad',                            en: 'Obese',                           fr: 'Obésité' },
+  MeasTrend:       { es: 'Tendencia',                           en: 'Trend',                           fr: 'Tendance' },
+  SelectField:     { es: 'Seleccionar campo',                   en: 'Select field',                    fr: 'Sélectionner champ' },
+
+  // === Summary extras ===
+  NewPR:           { es: 'Nuevo récord personal!',              en: 'New personal record!',            fr: 'Nouveau record personnel !' },
+  PRExercise:      { es: '{0}: {1} kg',                         en: '{0}: {1} kg',                     fr: '{0} : {1} kg' },
+
   // === Admin Panel ===
   AdminPanel:          { es: 'Panel Admin',                              en: 'Admin Panel',                       fr: 'Panneau Admin' },
   SqlConsole:          { es: 'Consola SQL',                              en: 'SQL Console',                       fr: 'Console SQL' },

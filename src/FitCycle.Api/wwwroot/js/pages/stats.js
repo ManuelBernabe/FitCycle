@@ -38,6 +38,9 @@ export async function mount() {
 
     let html = '';
 
+    // Calculate streak
+    const streak = calculateStreak(workouts);
+
     // Summary stat cards
     html += `
       <div class="stat-grid mb-16">
@@ -55,6 +58,17 @@ export async function mount() {
         </div>
       </div>
     `;
+
+    // Streak card
+    if (streak > 0) {
+      html += `
+        <div class="card mb-8" style="text-align:center;background:linear-gradient(135deg,#ff6b35,#ff8c00);color:#fff;padding:16px;">
+          <div style="font-size:32px;">&#128293;</div>
+          <div style="font-size:28px;font-weight:800;">${streak}</div>
+          <div style="font-size:13px;opacity:0.9;">${t('Streak')}</div>
+        </div>
+      `;
+    }
 
     // Weekly workouts bar chart
     if (stats.weeklyData && stats.weeklyData.length > 0) {
@@ -268,4 +282,45 @@ export function destroy() {}
 function formatNumber(n) {
   if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
   return String(n);
+}
+
+function calculateStreak(workouts) {
+  if (!workouts || workouts.length === 0) return 0;
+
+  const dates = new Set();
+  workouts.forEach(w => {
+    const d = new Date(w.completedAt || w.CompletedAt);
+    dates.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+  });
+
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+  let streak = 0;
+  let checkDate = new Date(today);
+
+  if (!dates.has(todayStr)) {
+    checkDate.setDate(checkDate.getDate() - 1);
+    const yesterdayStr = `${checkDate.getFullYear()}-${String(checkDate.getMonth() + 1).padStart(2, '0')}-${String(checkDate.getDate()).padStart(2, '0')}`;
+    if (!dates.has(yesterdayStr)) return 0;
+  }
+
+  for (let i = 0; i < 365; i++) {
+    const dateStr = `${checkDate.getFullYear()}-${String(checkDate.getMonth() + 1).padStart(2, '0')}-${String(checkDate.getDate()).padStart(2, '0')}`;
+    const dayOfWeek = checkDate.getDay();
+
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      checkDate.setDate(checkDate.getDate() - 1);
+      continue;
+    }
+
+    if (dates.has(dateStr)) {
+      streak++;
+      checkDate.setDate(checkDate.getDate() - 1);
+    } else {
+      break;
+    }
+  }
+
+  return streak;
 }

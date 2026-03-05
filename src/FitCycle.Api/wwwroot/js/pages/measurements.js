@@ -56,6 +56,50 @@ export async function mount() {
 function renderContent(container, measurements) {
   let html = '';
 
+  // BMI card (if weight + height available)
+  if (measurements.length > 0) {
+    const last = measurements[0];
+    const w = last.weight || 0;
+    const h = last.height || 0;
+    if (w > 0 && h > 0) {
+      const bmi = (w / ((h / 100) ** 2)).toFixed(1);
+      let bmiColor = '#28a745'; // normal
+      let bmiLabel = t('NormalWeight');
+      if (bmi < 18.5) { bmiColor = '#ff8c00'; bmiLabel = t('Underweight'); }
+      else if (bmi >= 25 && bmi < 30) { bmiColor = '#ff8c00'; bmiLabel = t('Overweight'); }
+      else if (bmi >= 30) { bmiColor = '#dc3545'; bmiLabel = t('Obese'); }
+
+      html += `
+        <div class="card mb-8" style="text-align:center;">
+          <div style="font-size:13px;color:var(--text-light);margin-bottom:4px;">${t('BMI')}</div>
+          <div style="font-size:32px;font-weight:800;color:${bmiColor};">${bmi}</div>
+          <div style="font-size:13px;color:${bmiColor};font-weight:600;">${bmiLabel}</div>
+        </div>
+      `;
+    }
+  }
+
+  // Trend chart
+  if (measurements.length >= 2) {
+    const trendFields = FIELDS.filter(f => {
+      return measurements.some(m => m[f.key] > 0);
+    });
+    if (trendFields.length > 0) {
+      const trendOptions = trendFields.map(f =>
+        `<option value="${f.key}">${t(f.label)}</option>`
+      ).join('');
+      html += `
+        <div class="card mb-8">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+            <div class="card-title">${t('MeasTrend')}</div>
+            <select id="meas-trend-field" style="font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;">${trendOptions}</select>
+          </div>
+          <div id="meas-trend-chart"></div>
+        </div>
+      `;
+    }
+  }
+
   // Field selector dropdown
   const fieldOptions = FIELDS.map(f =>
     `<option value="${f.key}" ${activeFields.includes(f.key) ? 'selected' : ''}>${t(f.label)}</option>`
@@ -164,6 +208,48 @@ function renderContent(container, measurements) {
     }
   });
 
+  // Trend chart
+  const trendSelect = document.getElementById('meas-trend-field');
+  if (trendSelect) {
+    const renderTrend = () => {
+      const field = trendSelect.value;
+      const chartEl = document.getElementById('meas-trend-chart');
+      if (!chartEl) return;
+      // Get data points (reverse to chronological order)
+      const points = measurements.filter(m => m[field] > 0).reverse().map(m => ({
+        value: m[field],
+        date: new Date(m.measuredAt || m.MeasuredAt),
+      }));
+      if (points.length < 2) { chartEl.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:16px;font-size:13px;">-</div>'; return; }
+
+      const maxVal = Math.max(...points.map(p => p.value));
+      const minVal = Math.min(...points.map(p => p.value));
+      const range = maxVal - minVal || 1;
+      const W = 360, H = 130, pad = 28;
+      const iW = W - pad * 2, iH = H - pad * 2;
+
+      const svgPts = points.map((p, i) => {
+        const x = pad + (points.length > 1 ? (i / (points.length - 1)) * iW : iW / 2);
+        const y = pad + iH - ((p.value - minVal) / range) * iH;
+        return { x, y, v: p.value, d: p.date };
+      });
+
+      const polyline = svgPts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+      const circles = svgPts.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="#512BD4" />`).join('');
+      const labels = svgPts.filter((_, i) => i === 0 || i === svgPts.length - 1 || points.length <= 6).map(p =>
+        `<text x="${p.x.toFixed(1)}" y="${(p.y - 7).toFixed(1)}" text-anchor="middle" font-size="10" fill="#333">${p.v}</text>`
+      ).join('');
+      const dateLbls = svgPts.filter((_, i) => i === 0 || i === svgPts.length - 1).map(p => {
+        const ds = `${p.d.getDate()}/${p.d.getMonth() + 1}`;
+        return `<text x="${p.x.toFixed(1)}" y="${(H - 4).toFixed(1)}" text-anchor="middle" font-size="9" fill="gray">${ds}</text>`;
+      }).join('');
+
+      chartEl.innerHTML = `<svg width="100%" viewBox="0 0 ${W} ${H}" style="max-width:${W}px;"><polyline points="${polyline}" fill="none" stroke="#512BD4" stroke-width="2" />${circles}${labels}${dateLbls}</svg>`;
+    };
+    trendSelect.addEventListener('change', renderTrend);
+    renderTrend();
+  }
+
   // Delete handlers
   container.querySelectorAll('.btn-delete-meas').forEach(btn => {
     btn.addEventListener('click', async (e) => {
@@ -171,7 +257,7 @@ function renderContent(container, measurements) {
       if (!confirm(t('ConfirmDeleteMeas'))) return;
       const id = btn.dataset.measId;
       try {
-        await api.delete(`/measurements/${id}`);
+        await api.del(`/measurements/${id}`);
         const updated = await api.get('/measurements');
         renderContent(container, updated || []);
       } catch (err) {

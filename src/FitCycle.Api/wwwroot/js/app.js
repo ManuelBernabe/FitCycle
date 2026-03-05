@@ -14,6 +14,7 @@ import * as accountPage from './pages/account.js';
 import * as measurementsPage from './pages/measurements.js';
 import * as templatesPage from './pages/templates.js';
 import * as adminPage from './pages/admin.js';
+import * as homePage from './pages/home.js';
 
 // ─── Init ───────────────────────────────────────────────────────────
 l10nInit();
@@ -22,6 +23,7 @@ const appEl = document.getElementById('app');
 
 // Route definitions: hash -> { page module, showHeader, showTabs }
 const routes = {
+  home:     { mod: homePage,     header: false, tabs: false },
   login:    { mod: loginPage,    header: false, tabs: false },
   routines: { mod: routinesPage, header: true,  tabs: true },
   stats:    { mod: statsPage,    header: true,  tabs: true },
@@ -50,13 +52,13 @@ function navigate() {
     return;
   }
   if (auth.isAuthenticated() && name === 'login') {
-    location.hash = '#routines';
+    location.hash = '#home';
     return;
   }
 
   // Default route
   if (!name || !routes[name]) {
-    location.hash = auth.isAuthenticated() ? '#routines' : '#login';
+    location.hash = auth.isAuthenticated() ? '#home' : '#login';
     return;
   }
 

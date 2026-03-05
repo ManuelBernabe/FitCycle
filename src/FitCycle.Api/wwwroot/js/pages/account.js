@@ -422,49 +422,6 @@ function showEditUserModal(user) {
   });
 }
 
-// ── Change Password Modal ──
-
-function showChangePasswordModal(userId, username) {
-  const overlay = document.createElement('div');
-  overlay.className = 'modal-overlay modal-centered';
-  overlay.innerHTML = `
-    <div class="modal-content">
-      <div class="modal-header">
-        <div class="modal-title">${t('ChangePassword')}</div>
-        <button class="modal-close" id="modal-close">&times;</button>
-      </div>
-      <div class="form-group">
-        <label class="form-label">${t('NewPasswordFor', username)}</label>
-        <input id="new-pw" class="form-input" type="password">
-      </div>
-      <div class="form-hint">${t('PasswordMinLength')}</div>
-      <button id="change-pw-submit" class="btn btn-primary btn-block mt-8">${t('Save')}</button>
-    </div>
-  `;
-
-  document.body.appendChild(overlay);
-  bindModalClose(overlay);
-
-  overlay.querySelector('#change-pw-submit')?.addEventListener('click', async () => {
-    const pw = overlay.querySelector('#new-pw')?.value;
-    const statusEl = document.getElementById('account-status');
-
-    if (!pw || pw.length < 6) {
-      if (statusEl) statusEl.textContent = t('PasswordMinLength');
-      return;
-    }
-
-    try {
-      if (statusEl) statusEl.textContent = t('ChangingPassword');
-      await api.put(`/users/${userId}/password`, { newPassword: pw });
-      overlay.remove();
-      if (statusEl) statusEl.textContent = t('PasswordUpdated');
-    } catch (err) {
-      if (statusEl) statusEl.textContent = t('ErrorFmt', err.message);
-    }
-  });
-}
-
 // ── Modal Helper ──
 
 function bindModalClose(overlay) {

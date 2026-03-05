@@ -1,8 +1,8 @@
-const CACHE = 'fitcycle-v21';
+const CACHE = 'fitcycle-v22';
 const SHELL = ['/', '/css/app.css', '/js/app.js', '/js/api.js', '/js/auth.js', '/js/l10n.js', '/js/exercises.js',
-  '/js/pages/login.js', '/js/pages/routines.js', '/js/pages/editday.js', '/js/pages/workout.js',
+  '/js/pages/login.js', '/js/pages/home.js', '/js/pages/routines.js', '/js/pages/editday.js', '/js/pages/workout.js',
   '/js/pages/summary.js', '/js/pages/stats.js', '/js/pages/account.js', '/js/pages/measurements.js',
-  '/js/pages/admin.js'];
+  '/js/pages/templates.js', '/js/pages/admin.js'];
 
 self.addEventListener('install', e => {
   self.skipWaiting();

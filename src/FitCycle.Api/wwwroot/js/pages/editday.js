@@ -242,7 +242,7 @@ function buildExerciseRows(group, gi) {
           <div style="display:flex;gap:4px;margin-top:3px;align-items:center;">
             <button class="btn-toggle-sets" data-gi="${gi}" data-ei="${ei}"
               style="background:${ex.expanded ? '#512BD4' : '#e9e9e9'};color:${ex.expanded ? '#fff' : '#333'};border:none;border-radius:6px;padding:2px 8px;font-size:11px;cursor:pointer;">
-              ${ex.expanded ? 'Ocultar series' : 'Ver series'}
+              ${ex.expanded ? t('HideSets') : t('ShowSets')}
             </button>
             <button class="btn-toggle-notes" data-gi="${gi}" data-ei="${ei}"
               style="background:${ex.notes ? '#e67e22' : '#e9e9e9'};color:${ex.notes ? '#fff' : '#333'};border:none;border-radius:6px;padding:2px 8px;font-size:11px;cursor:pointer;">

@@ -50,6 +50,9 @@ export function render() {
         </div>
       </div>
       <div class="page-content">
+        <!-- PR Banner -->
+        <div id="pr-banner" class="pr-banner" style="display:none;"></div>
+
         <!-- Weekly chart (loaded async) -->
         <div class="card mb-8" id="summary-weekly-card" style="display:none;">
           <div class="card-title mb-8">${t('WeeklyWorkouts')}</div>
@@ -89,8 +92,27 @@ export function render() {
 export async function mount() {
   document.getElementById('summary-back')?.addEventListener('click', () => {
     sessionStorage.removeItem('workout_summary');
-    location.hash = '#routines';
+    location.hash = '#home';
   });
+
+  // Check for PRs
+  try {
+    const raw = sessionStorage.getItem('workout_summary');
+    if (raw) {
+      const data = JSON.parse(raw);
+      const workouts = await api.get('/workouts');
+      const prs = detectPRs(data.exercises, workouts || []);
+      if (prs.length > 0) {
+        const prContainer = document.getElementById('pr-banner');
+        if (prContainer) {
+          prContainer.style.display = 'block';
+          prContainer.innerHTML = prs.map(pr =>
+            `<div style="font-size:14px;font-weight:600;">${t('PRExercise', pr.name, pr.weight)}</div>`
+          ).join('');
+        }
+      }
+    }
+  } catch (e) { /* PR detection is optional */ }
 
   // Load stats async for weekly chart
   try {
@@ -123,3 +145,46 @@ export async function mount() {
 }
 
 export function destroy() {}
+
+function detectPRs(currentExercises, pastWorkouts) {
+  const prs = [];
+  if (!currentExercises || !pastWorkouts || pastWorkouts.length <= 1) return prs;
+
+  // Build max weight per exercise from past workouts (excluding the latest which is the current one)
+  const maxWeights = {};
+  // Skip the first workout (the one we just completed)
+  pastWorkouts.slice(1).forEach(w => {
+    const logs = w.exerciseLogs || w.ExerciseLogs || [];
+    logs.forEach(log => {
+      const exId = log.exerciseId || log.ExerciseId || 0;
+      let maxW = log.weight || log.Weight || 0;
+      // Also check setDetails for max
+      try {
+        const details = typeof log.setDetails === 'string' ? JSON.parse(log.setDetails || '[]') : (log.setDetails || []);
+        if (Array.isArray(details)) {
+          details.forEach(s => { if (s.weight > maxW) maxW = s.weight; });
+        }
+      } catch (e) { /* */ }
+      if (!maxWeights[exId] || maxW > maxWeights[exId]) maxWeights[exId] = maxW;
+    });
+  });
+
+  // Check current exercises for new PRs
+  currentExercises.forEach(ex => {
+    const exId = ex.exerciseId || ex.ExerciseId || 0;
+    let currentMax = ex.weight || 0;
+    try {
+      const details = typeof ex.setDetails === 'string' ? JSON.parse(ex.setDetails || '[]') : (ex.setDetails || []);
+      if (Array.isArray(details)) {
+        details.forEach(s => { if (s.weight > currentMax) currentMax = s.weight; });
+      }
+    } catch (e) { /* */ }
+
+    const previousMax = maxWeights[exId] || 0;
+    if (currentMax > 0 && previousMax > 0 && currentMax > previousMax) {
+      prs.push({ name: ex.exerciseName || ex.ExerciseName || '', weight: currentMax });
+    }
+  });
+
+  return prs;
+}

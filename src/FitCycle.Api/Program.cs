@@ -21,9 +21,12 @@ var dataDir = Environment.GetEnvironmentVariable("DATA_DIR");
 if (!string.IsNullOrEmpty(dataDir) && !Directory.Exists(dataDir))
     Directory.CreateDirectory(dataDir);
 
-var defaultDb = !string.IsNullOrEmpty(dataDir) ? $"Data Source={Path.Combine(dataDir, "fitcycle.db")}" : "Data Source=fitcycle.db";
+// DATA_DIR takes priority over appsettings.json to ensure Railway volume is used
+var connStr = !string.IsNullOrEmpty(dataDir)
+    ? $"Data Source={Path.Combine(dataDir, "fitcycle.db")}"
+    : (builder.Configuration.GetConnectionString("DefaultConnection") ?? "Data Source=fitcycle.db");
 builder.Services.AddDbContext<FitCycleDbContext>(options =>
-    options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection") ?? defaultDb));
+    options.UseSqlite(connStr));
 
 builder.Services.AddScoped<IRoutineRepository, SqliteRoutineRepository>();
 
@@ -101,8 +104,8 @@ using (var scope = app.Services.CreateScope())
     // Auto-backup: create daily backup if none exists for today
     try
     {
-        var connStr = db.Database.GetConnectionString() ?? "";
-        var dbMatch = System.Text.RegularExpressions.Regex.Match(connStr, @"Data Source=(.+?)(?:;|$)");
+        var backupConnStr = db.Database.GetConnectionString() ?? "";
+        var dbMatch = System.Text.RegularExpressions.Regex.Match(backupConnStr, @"Data Source=(.+?)(?:;|$)");
         var dbFilePath = dbMatch.Success ? dbMatch.Groups[1].Value : "fitcycle.db";
 
         if (File.Exists(dbFilePath))
