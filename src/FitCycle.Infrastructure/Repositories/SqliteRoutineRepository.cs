@@ -1,3 +1,6 @@
+using System.Globalization;
+using System.Text;
+using System.Text.RegularExpressions;
 using FitCycle.Core.Models;
 using FitCycle.Infrastructure.Data;
 using FitCycle.Infrastructure.Entities;
@@ -138,6 +141,206 @@ public class SqliteRoutineRepository : IRoutineRepository
         ["Fire hydrant"] = "https://wger.de/media/exercise-images/1613/a851fe9d-771f-44da-82f0-799e02ae3fd1.jpg",
     };
 
+    // Common aliases — maps alternate PDF names to canonical dictionary keys
+    private static readonly Dictionary<string, string> ExerciseAliases = new(StringComparer.OrdinalIgnoreCase)
+    {
+        // Pecho
+        ["Press de banca"] = "Press banca",
+        ["Press de banca plano"] = "Press banca",
+        ["Press plano"] = "Press banca",
+        ["Press plano con barra"] = "Press banca",
+        ["Press plano con mancuernas"] = "Press con mancuernas",
+        ["Press banca plano"] = "Press banca",
+        ["Press banca inclinado"] = "Press inclinado",
+        ["Press inclinado con mancuernas"] = "Press inclinado",
+        ["Press inclinado con barra"] = "Press inclinado",
+        ["Press declinado con barra"] = "Press declinado",
+        ["Press declinado con mancuernas"] = "Press declinado",
+        ["Aperturas"] = "Aperturas con mancuernas",
+        ["Aperturas planas"] = "Aperturas con mancuernas",
+        ["Aperturas inclinadas"] = "Aperturas con mancuernas",
+        ["Cruces en polea"] = "Cruces en polea alta",
+        ["Crossover"] = "Cruces en polea alta",
+        ["Cable crossover"] = "Cruces en polea alta",
+        ["Flexiones de pecho"] = "Flexiones",
+        ["Push ups"] = "Flexiones",
+        ["Push-ups"] = "Flexiones",
+        // Espalda
+        ["Dominadas pronas"] = "Dominadas",
+        ["Pull ups"] = "Dominadas",
+        ["Pull-ups"] = "Dominadas",
+        ["Chin ups"] = "Dominadas supinas",
+        ["Chin-ups"] = "Dominadas supinas",
+        ["Remo con barra t"] = "Remo T",
+        ["Remo en barra t"] = "Remo T",
+        ["Jalón frontal"] = "Jalón al pecho",
+        ["Jalón al pecho agarre cerrado"] = "Jalón al pecho",
+        ["Jalón al pecho agarre ancho"] = "Jalón al pecho",
+        ["Jalón al pecho con agarre neutro"] = "Jalón al pecho",
+        ["Remo con mancuernas"] = "Remo con mancuerna",
+        ["Remo unilateral"] = "Remo con mancuerna",
+        ["Remo en polea"] = "Remo en polea baja",
+        ["Remo sentado en polea"] = "Remo en polea baja",
+        ["Remo gironda"] = "Remo en polea baja",
+        ["Face pulls"] = "Face pull",
+        ["Peso muerto convencional"] = "Peso muerto",
+        ["Encogimientos"] = "Encogimientos con barra",
+        ["Shrugs con barra"] = "Shrugs",
+        ["Shrugs con mancuernas"] = "Shrugs",
+        ["Hiperextensión"] = "Hiperextensiones",
+        // Hombros
+        ["Press militar con barra"] = "Press militar",
+        ["Press militar con mancuernas"] = "Press militar",
+        ["Press de hombro"] = "Press militar",
+        ["Press de hombros"] = "Press militar",
+        ["Elevación lateral"] = "Elevaciones laterales",
+        ["Elevación frontal"] = "Elevaciones frontales",
+        ["Elevaciones laterales con mancuernas"] = "Elevaciones laterales",
+        ["Pájaros con mancuernas"] = "Pájaros",
+        ["Pájaro"] = "Pájaros",
+        ["Remo al mentón con barra"] = "Remo al mentón",
+        ["Rotaciones externas"] = "Rotación externa",
+        // Bíceps
+        ["Curl de bíceps"] = "Curl con barra",
+        ["Curl de bíceps con barra"] = "Curl con barra",
+        ["Curl de bíceps con mancuernas"] = "Curl con mancuernas",
+        ["Curl alterno"] = "Curl con mancuernas",
+        ["Curl alterno con mancuernas"] = "Curl con mancuernas",
+        ["Curl tipo martillo"] = "Curl martillo",
+        ["Curl en banco predicador"] = "Curl en predicador",
+        ["Curl predicador"] = "Curl en predicador",
+        ["Curl scott"] = "Curl en predicador",
+        ["Curl con barra ez"] = "Curl con barra Z",
+        ["Curl con barra recta"] = "Curl con barra",
+        ["Curl concentración"] = "Curl concentrado",
+        // Tríceps
+        ["Extensión de tríceps"] = "Extensión con polea",
+        ["Extensión de tríceps en polea"] = "Extensión con polea",
+        ["Extensiones de tríceps"] = "Extensión con polea",
+        ["Jalón de tríceps"] = "Jalón con cuerda",
+        ["Jalón de tríceps con cuerda"] = "Jalón con cuerda",
+        ["Press francés con barra"] = "Press francés",
+        ["Press francés con mancuernas"] = "Press francés",
+        ["Fondos en banco"] = "Dips en banco",
+        ["Dips"] = "Fondos en paralelas",
+        ["Press cerrado con barra"] = "Press cerrado",
+        ["Extensión sobre la cabeza"] = "Extensión sobre cabeza",
+        ["Extensión de tríceps sobre cabeza"] = "Extensión sobre cabeza",
+        ["Patada trasera"] = "Patada de tríceps",
+        ["Kickback"] = "Patada de tríceps",
+        ["Kickback de tríceps"] = "Patada de tríceps",
+        // Piernas
+        ["Sentadillas"] = "Sentadilla",
+        ["Sentadilla con barra"] = "Sentadilla",
+        ["Sentadilla libre"] = "Sentadilla",
+        ["Sentadilla profunda"] = "Sentadilla",
+        ["Prensa de piernas"] = "Prensa",
+        ["Prensa inclinada"] = "Prensa",
+        ["Leg press"] = "Prensa",
+        ["Extensiones de cuádriceps"] = "Extensión de cuádriceps",
+        ["Extensión de pierna"] = "Extensión de cuádriceps",
+        ["Leg extension"] = "Extensión de cuádriceps",
+        ["Curl femoral tumbado"] = "Curl femoral",
+        ["Curl femoral sentado"] = "Leg curl sentado",
+        ["Leg curl"] = "Curl femoral",
+        ["Zancada"] = "Zancadas",
+        ["Lunges"] = "Zancadas",
+        ["Sentadilla búlgara con mancuernas"] = "Sentadilla búlgara",
+        ["Bulgarian split squat"] = "Sentadilla búlgara",
+        ["Peso muerto rumano con barra"] = "Peso muerto rumano",
+        ["Peso muerto rumano con mancuernas"] = "Peso muerto rumano",
+        ["Rdl"] = "Peso muerto rumano",
+        ["Elevación de talones"] = "Elevación de gemelos",
+        ["Elevaciones de gemelos"] = "Elevación de gemelos",
+        ["Calf raise"] = "Elevación de gemelos",
+        ["Sentadilla en hack"] = "Sentadilla hack",
+        ["Sentadilla en multipower"] = "Sentadilla",
+        ["Sentadilla en smith"] = "Sentadilla",
+        ["Máquina de abductores"] = "Abductores",
+        ["Máquina de aductores"] = "Aductores",
+        // Abdominales
+        ["Crunches"] = "Crunch",
+        ["Crunch abdominal"] = "Crunch",
+        ["Plancha frontal"] = "Plancha",
+        ["Plank"] = "Plancha",
+        ["Elevación de piernas tumbado"] = "Elevación de piernas",
+        ["Elevaciones de piernas"] = "Elevación de piernas",
+        ["Leg raises"] = "Elevación de piernas",
+        ["Rueda abdominal"] = "Ab wheel",
+        // Glúteos
+        ["Hip thrust con barra"] = "Hip thrust",
+        ["Patada de glúteo en polea"] = "Patada de glúteo",
+        ["Puente glúteo"] = "Puente de glúteos",
+        ["Puente de glúteo"] = "Puente de glúteos",
+        ["Glute bridge"] = "Puente de glúteos",
+    };
+
+    /// <summary>
+    /// Find the best matching image URL for an exercise name.
+    /// Tries: exact match → alias → normalized fuzzy match.
+    /// </summary>
+    private static string? FindImageUrl(string name)
+    {
+        // 1. Exact match (case-insensitive)
+        if (KnownExerciseImages.TryGetValue(name, out var url))
+            return url;
+
+        // 2. Alias match
+        if (ExerciseAliases.TryGetValue(name, out var canonical) &&
+            KnownExerciseImages.TryGetValue(canonical, out url))
+            return url;
+
+        // 3. Normalized match — remove articles/prepositions, accents, lowercase
+        var normalized = NormalizeName(name);
+        foreach (var kvp in KnownExerciseImages)
+        {
+            if (NormalizeName(kvp.Key) == normalized)
+                return kvp.Value;
+        }
+
+        // 4. Try alias normalization
+        foreach (var kvp in ExerciseAliases)
+        {
+            if (NormalizeName(kvp.Key) == normalized &&
+                KnownExerciseImages.TryGetValue(kvp.Value, out url))
+                return url;
+        }
+
+        // 5. Partial: if name contains a known exercise name (e.g. "Press banca con mancuernas" contains "Press banca")
+        foreach (var kvp in KnownExerciseImages)
+        {
+            if (normalized.Contains(NormalizeName(kvp.Key)) && NormalizeName(kvp.Key).Length >= 6)
+                return kvp.Value;
+        }
+
+        return null;
+    }
+
+    private static string NormalizeName(string name)
+    {
+        // Lowercase
+        var s = name.ToLowerInvariant();
+        // Remove accents
+        s = RemoveAccents(s);
+        // Remove common Spanish articles/prepositions
+        s = Regex.Replace(s, @"\b(de|del|con|en|el|la|los|las|al|un|una|tipo)\b", " ");
+        // Collapse whitespace
+        s = Regex.Replace(s, @"\s+", " ").Trim();
+        return s;
+    }
+
+    private static string RemoveAccents(string text)
+    {
+        var normalized = text.Normalize(NormalizationForm.FormD);
+        var sb = new StringBuilder(normalized.Length);
+        foreach (var c in normalized)
+        {
+            if (UnicodeCategory.NonSpacingMark != CharUnicodeInfo.GetUnicodeCategory(c))
+                sb.Append(c);
+        }
+        return sb.ToString().Normalize(NormalizationForm.FormC);
+    }
+
     public void UpdatePlaceholderImages()
     {
         var exercises = _db.Exercises
@@ -146,7 +349,8 @@ public class SqliteRoutineRepository : IRoutineRepository
 
         foreach (var ex in exercises)
         {
-            if (KnownExerciseImages.TryGetValue(ex.Name, out var realUrl))
+            var realUrl = FindImageUrl(ex.Name);
+            if (realUrl != null)
             {
                 ex.ImageUrl = realUrl;
             }
@@ -161,9 +365,8 @@ public class SqliteRoutineRepository : IRoutineRepository
         if (!_db.MuscleGroups.Any(mg => mg.Id == muscleGroupId))
             throw new ArgumentException("Grupo muscular no válido.");
 
-        var imageUrl = KnownExerciseImages.TryGetValue(name, out var knownUrl)
-            ? knownUrl
-            : $"https://placehold.co/400x300/EEE/31343C.png?font=montserrat&text={Uri.EscapeDataString(name)}";
+        var imageUrl = FindImageUrl(name)
+            ?? $"https://placehold.co/400x300/EEE/31343C.png?font=montserrat&text={Uri.EscapeDataString(name)}";
 
         var exercise = new Exercise
         {
