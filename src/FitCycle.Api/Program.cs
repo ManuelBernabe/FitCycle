@@ -9,6 +9,7 @@ using FitCycle.Infrastructure.Repositories;
 using FitCycle.Infrastructure.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.LibSql.Connection;
 using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -17,12 +18,11 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 // EF Core con Turso (LibSQL remoto) — fallback a SQLite local para desarrollo
-// BMDRM.LibSql.Core connection string format: "https://host;authToken"
 var rawDbUrl = Environment.GetEnvironmentVariable("DATABASE_URL")
     ?? builder.Configuration.GetConnectionString("DefaultConnection")
     ?? "file:fitcycle.db";
 
-// Convert libsql://host?authToken=xxx → https://host;token
+// Convert libsql://host?authToken=xxx → https://host;token (HttpDbConnection format)
 var libSqlConn = rawDbUrl;
 if (rawDbUrl.StartsWith("libsql://"))
 {
@@ -31,11 +31,24 @@ if (rawDbUrl.StartsWith("libsql://"))
         ? uri.Replace("?authToken=", ";")
         : uri;
 }
-Console.WriteLine($"[DB] Connection type: {(rawDbUrl.StartsWith("libsql://") ? "Turso remote" : "Local")}");
-Console.WriteLine($"[DB] Connection string starts with: {libSqlConn[..Math.Min(40, libSqlConn.Length)]}...");
 
-builder.Services.AddDbContext<FitCycleDbContext>(options =>
-    options.UseLibSql(libSqlConn));
+if (rawDbUrl.StartsWith("libsql://"))
+{
+    // Remote Turso: use HttpDbConnection with IHttpClientFactory
+    builder.Services.AddHttpClient();
+    builder.Services.AddDbContext<FitCycleDbContext>((sp, options) =>
+    {
+        var factory = sp.GetRequiredService<IHttpClientFactory>();
+        var connection = new HttpDbConnection(libSqlConn, factory);
+        options.UseLibSql(connection);
+    });
+}
+else
+{
+    // Local SQLite file fallback (development)
+    builder.Services.AddDbContext<FitCycleDbContext>(options =>
+        options.UseLibSql(libSqlConn));
+}
 
 builder.Services.AddScoped<IRoutineRepository, SqliteRoutineRepository>();
 
