@@ -80,7 +80,7 @@ function renderShell(route, routeName, params) {
 
     html += `
       <div class="header">
-        <div class="header-logo">FC</div>
+        <div class="header-logo" id="header-logo" style="cursor:pointer;">FC</div>
         <div class="header-title">FitCycle</div>
         <select class="lang-picker" id="header-lang">${langOptions}</select>
         <div class="avatar" id="header-avatar">${initial}</div>
@@ -135,6 +135,11 @@ function renderShell(route, routeName, params) {
 
     document.getElementById('header-avatar')?.addEventListener('click', () => {
       location.hash = '#account';
+    });
+
+    // Logo click -> home
+    document.getElementById('header-logo')?.addEventListener('click', () => {
+      location.hash = '#home';
     });
   }
 
