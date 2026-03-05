@@ -265,9 +265,12 @@ function renderExercise() {
           ` : ''}
         </div>
         ${exNotes ? `
-          <div style="background:#fff3e0;border-radius:8px;padding:6px 10px;margin:6px auto 0;max-width:300px;text-align:left;">
-            <div style="font-size:10px;color:#e67e22;font-weight:600;">&#128221; ${t('ExerciseNotes')}</div>
-            <div style="font-size:11px;color:#333;white-space:pre-wrap;">${exNotes}</div>
+          <div id="workout-notes-toggle" style="background:#fff3e0;border-radius:8px;padding:5px 10px;margin:6px auto 0;max-width:300px;text-align:left;cursor:pointer;user-select:none;">
+            <div style="font-size:10px;color:#e67e22;font-weight:600;display:flex;align-items:center;justify-content:space-between;">
+              <span>&#128221; ${t('ExerciseNotes')}</span>
+              <span id="notes-chevron" style="font-size:12px;">&#9660;</span>
+            </div>
+            <div id="workout-notes-body" style="display:none;font-size:11px;color:#333;white-space:pre-wrap;margin-top:4px;">${exNotes}</div>
           </div>
         ` : ''}
 
@@ -381,6 +384,16 @@ function renderExercise() {
   // Auto-save on weight/reps input change
   document.getElementById('workout-weight')?.addEventListener('change', () => { saveCurrentSetValues(); saveProgress(); });
   document.getElementById('workout-reps')?.addEventListener('change', () => { saveCurrentSetValues(); saveProgress(); });
+
+  document.getElementById('workout-notes-toggle')?.addEventListener('click', () => {
+    const body = document.getElementById('workout-notes-body');
+    const chevron = document.getElementById('notes-chevron');
+    if (body) {
+      const show = body.style.display === 'none';
+      body.style.display = show ? 'block' : 'none';
+      if (chevron) chevron.innerHTML = show ? '&#9650;' : '&#9660;';
+    }
+  });
 
   document.getElementById('timer-start')?.addEventListener('click', onTimerStartClicked);
   document.getElementById('timer-reset')?.addEventListener('click', onTimerResetClicked);
