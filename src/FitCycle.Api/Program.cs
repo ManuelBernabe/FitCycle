@@ -100,7 +100,39 @@ using (var scope = app.Services.CreateScope())
     }
     catch { /* Table may not exist yet — Migrate() will handle it */ }
 
-    db.Database.Migrate();
+    // Pre-migration backup: if there are pending migrations, backup the DB first
+    try
+    {
+        var pendingMigrations = db.Database.GetPendingMigrations().ToList();
+        if (pendingMigrations.Count > 0)
+        {
+            var pmConnStr = db.Database.GetConnectionString() ?? "";
+            var pmMatch = System.Text.RegularExpressions.Regex.Match(pmConnStr, @"Data Source=(.+?)(?:;|$)");
+            var pmDbPath = pmMatch.Success ? pmMatch.Groups[1].Value : "fitcycle.db";
+            if (File.Exists(pmDbPath))
+            {
+                db.Database.ExecuteSqlRaw("PRAGMA wal_checkpoint(TRUNCATE);");
+                var pmBackupDir = Path.Combine(Path.GetDirectoryName(pmDbPath) ?? ".", "backups");
+                Directory.CreateDirectory(pmBackupDir);
+                var pmBackupPath = Path.Combine(pmBackupDir, $"premigration_{DateTime.UtcNow:yyyyMMdd_HHmmss}.db");
+                File.Copy(pmDbPath, pmBackupPath);
+                Console.WriteLine($"[STARTUP] Pre-migration backup created: {pmBackupPath}");
+                Console.WriteLine($"[STARTUP] Pending migrations: {string.Join(", ", pendingMigrations)}");
+            }
+        }
+    }
+    catch { /* Non-critical */ }
+
+    try
+    {
+        db.Database.Migrate();
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"[STARTUP] Migration failed: {ex.Message}");
+        Console.Error.WriteLine($"[STARTUP] App will start but /health will report unhealthy if DB is broken.");
+        // Don't throw — let the app start so Railway health check can detect failure and rollback
+    }
 
     // Promote seeded admin (id=1) to SuperUserMaster if still Superuser
     var adminUser = db.Users.FirstOrDefault(u => u.Id == 1 && u.Role == UserRole.Superuser);
@@ -163,11 +195,29 @@ app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapGet("/health", () => Results.Ok(new
+app.MapGet("/health", (FitCycleDbContext db) =>
 {
-    status = "Healthy",
-    utc = DateTime.UtcNow
-}))
+    try
+    {
+        db.Database.ExecuteSqlRaw("SELECT 1");
+        return Results.Ok(new
+        {
+            status = "Healthy",
+            database = "Connected",
+            utc = DateTime.UtcNow
+        });
+    }
+    catch (Exception ex)
+    {
+        return Results.Json(new
+        {
+            status = "Unhealthy",
+            database = "Disconnected",
+            error = ex.Message,
+            utc = DateTime.UtcNow
+        }, statusCode: 503);
+    }
+})
 .WithName("Health")
 .WithOpenApi()
 .AllowAnonymous();
