@@ -258,9 +258,14 @@ function renderExercise() {
             </div>
           </div>
           ${(currentSetData.tempoPos > 0 || currentSetData.tempoNeg > 0 || currentSetData.grip) ? `
-            <div style="margin-top:4px;display:flex;justify-content:center;gap:10px;flex-wrap:wrap;">
-              ${currentSetData.tempoPos > 0 || currentSetData.tempoNeg > 0 ? `<span style="font-size:11px;color:#512BD4;">&#9201; ${currentSetData.tempoPos}s&#8593; / ${currentSetData.tempoNeg}s&#8595;</span>` : ''}
-              ${currentSetData.grip ? `<span style="font-size:11px;color:#e67e22;">&#9994; ${currentSetData.grip}</span>` : ''}
+            <div style="margin-top:6px;display:flex;justify-content:center;gap:12px;flex-wrap:wrap;">
+              ${currentSetData.tempoPos > 0 || currentSetData.tempoNeg > 0 ? `
+                <div style="display:flex;gap:8px;align-items:center;">
+                  <span style="font-size:11px;color:#512BD4;background:#f3f0fc;padding:2px 6px;border-radius:6px;">&#8593; ${currentSetData.tempoPos}s <span style="font-size:9px;">${t('TempoAsc')}</span></span>
+                  <span style="font-size:11px;color:#512BD4;background:#f3f0fc;padding:2px 6px;border-radius:6px;">&#8595; ${currentSetData.tempoNeg}s <span style="font-size:9px;">${t('TempoDesc')}</span></span>
+                </div>
+              ` : ''}
+              ${currentSetData.grip ? `<span style="font-size:11px;color:#e67e22;background:#fff3e0;padding:2px 6px;border-radius:6px;">&#9994; ${t('Grip')}: ${t('Grip' + currentSetData.grip.charAt(0).toUpperCase() + currentSetData.grip.slice(1).toLowerCase()) || currentSetData.grip}</span>` : ''}
             </div>
           ` : ''}
         </div>

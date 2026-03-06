@@ -100,7 +100,9 @@ function renderDays(container) {
       if (Array.isArray(details) && details.length > 0) {
         const tp = details[0].tempoPos || 0;
         const tn = details[0].tempoNeg || 0;
-        if (tp > 0 || tn > 0) tempoInfo = `<span style="font-size:10px;color:#512BD4;">&#9201;${tp}/${tn}s</span>`;
+        if (tp > 0 || tn > 0) tempoInfo = `<span style="font-size:10px;color:#512BD4;" title="${t('TempoAscFull')} / ${t('TempoDescFull')}">&#9201; ${tp}s&#8593;${t('TempoAsc')} ${tn}s&#8595;${t('TempoDesc')}</span>`;
+        const grip = details[0].grip || '';
+        if (grip) tempoInfo += ` <span style="font-size:10px;color:#e67e22;" title="${t('Grip')}">&#9994; ${t('Grip' + grip.charAt(0).toUpperCase() + grip.slice(1).toLowerCase()) || grip}</span>`;
       }
 
       const exNotes = e.notes || e.Notes || '';

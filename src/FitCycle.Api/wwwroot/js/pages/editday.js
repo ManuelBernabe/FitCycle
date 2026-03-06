@@ -197,13 +197,13 @@ function buildExerciseRows(group, gi) {
         <select class="picker-select set-weight-picker" data-gi="${gi}" data-ei="${ei}" data-si="${si}" style="width:56px;font-size:12px;padding:2px;">
           ${buildWeightOptions(s.weight)}
         </select><span style="font-size:10px;color:gray;">kg</span>
-        <span style="font-size:10px;color:gray;">↑</span><select class="picker-select set-tempo-pos" data-gi="${gi}" data-ei="${ei}" data-si="${si}" style="width:40px;font-size:11px;padding:1px;">
+        <span style="font-size:9px;color:#512BD4;" title="${t('TempoAscFull')}">↑${t('TempoAsc')}</span><select class="picker-select set-tempo-pos" data-gi="${gi}" data-ei="${ei}" data-si="${si}" style="width:40px;font-size:11px;padding:1px;">
           ${buildTempoOptions(s.tempoPos)}
         </select>
-        <span style="font-size:10px;color:gray;">↓</span><select class="picker-select set-tempo-neg" data-gi="${gi}" data-ei="${ei}" data-si="${si}" style="width:40px;font-size:11px;padding:1px;">
+        <span style="font-size:9px;color:#512BD4;" title="${t('TempoDescFull')}">↓${t('TempoDesc')}</span><select class="picker-select set-tempo-neg" data-gi="${gi}" data-ei="${ei}" data-si="${si}" style="width:40px;font-size:11px;padding:1px;">
           ${buildTempoOptions(s.tempoNeg)}
         </select>
-        <select class="picker-select set-grip-picker" data-gi="${gi}" data-ei="${ei}" data-si="${si}" style="width:62px;font-size:11px;padding:1px;">
+        <select class="picker-select set-grip-picker" data-gi="${gi}" data-ei="${ei}" data-si="${si}" style="width:62px;font-size:11px;padding:1px;" title="${t('Grip')}">
           ${buildGripOptions(s.grip)}
         </select>
         ${ex.setDetails.length > 1 ? `<button class="btn-remove-set" data-gi="${gi}" data-ei="${ei}" data-si="${si}"

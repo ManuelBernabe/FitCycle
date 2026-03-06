@@ -116,9 +116,29 @@ export function render() {
               ${mockSet('S3', '8', '60kg')}
               <div style="flex:1;border:1px dashed #ccc;border-radius:6px;padding:6px;text-align:center;font-size:18px;color:#aaa;cursor:pointer;">+</div>
             </div>
+            <!-- Tempo & Grip detail -->
+            <div style="background:#f3f0fc;border-radius:8px;padding:10px;margin-bottom:8px;">
+              <div style="font-size:12px;font-weight:600;color:#512BD4;margin-bottom:6px;">⏱ ${t('Tempo')} — ${t('TutTempoExplain')}</div>
+              <div style="display:flex;gap:8px;margin-bottom:6px;">
+                <div style="flex:1;background:#fff;border-radius:6px;padding:6px;text-align:center;border:1px solid #DFD8F7;">
+                  <div style="font-size:10px;color:#512BD4;font-weight:600;">↑ ${t('TempoAsc')}</div>
+                  <div style="font-size:16px;font-weight:700;color:#333;">2s</div>
+                  <div style="font-size:9px;color:#888;">${t('TempoAscFull')}</div>
+                </div>
+                <div style="flex:1;background:#fff;border-radius:6px;padding:6px;text-align:center;border:1px solid #DFD8F7;">
+                  <div style="font-size:10px;color:#512BD4;font-weight:600;">↓ ${t('TempoDesc')}</div>
+                  <div style="font-size:16px;font-weight:700;color:#333;">3s</div>
+                  <div style="font-size:9px;color:#888;">${t('TempoDescFull')}</div>
+                </div>
+              </div>
+              <div style="font-size:12px;font-weight:600;color:#e67e22;margin-bottom:4px;">✊ ${t('Grip')} — ${t('TutGripExplain')}</div>
+              <div style="display:flex;gap:6px;">
+                <span style="background:#fff;border:1px solid #e67e22;color:#e67e22;padding:3px 8px;border-radius:6px;font-size:11px;">${t('GripProne')}</span>
+                <span style="background:#fff;border:1px solid #ddd;color:#666;padding:3px 8px;border-radius:6px;font-size:11px;">${t('GripSupine')}</span>
+                <span style="background:#fff;border:1px solid #ddd;color:#666;padding:3px 8px;border-radius:6px;font-size:11px;">${t('GripNeutral')}</span>
+              </div>
+            </div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
-              ${featureTag('⏱', 'Tempo: 3-1-2')}
-              ${featureTag('🤚', t('TutGrip') + ': ' + t('TutGripProne'))}
               ${featureTag('🔗', 'Superset')}
               ${featureTag('📝', t('Notes'))}
             </div>
@@ -129,6 +149,7 @@ export function render() {
           ${tip(t('TutExercisesTip'))}
           ${tip(t('TutExercisesTip2'), '#fff3e0', '#e65100')}
           ${tip(t('TutExercisesTip3'), '#e3f2fd', '#1565c0')}
+          ${tip(t('TutExercisesTip4'), '#f3f0fc', '#512BD4')}
         `)}
 
         <!-- 6. Entrenar -->
@@ -162,9 +183,10 @@ export function render() {
                 <div style="font-size:20px;font-weight:700;color:#333;">50kg</div>
               </div>
             </div>
-            <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;">
-              ${featureTag('⏱', 'Tempo: 3↓ 1⏸ 2↑')}
-              ${featureTag('🤚', t('TutGripProne'))}
+            <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;justify-content:center;">
+              <span style="background:#f3f0fc;color:#512BD4;padding:3px 8px;border-radius:6px;font-size:11px;">↑ 2s ${t('TempoAsc')}</span>
+              <span style="background:#f3f0fc;color:#512BD4;padding:3px 8px;border-radius:6px;font-size:11px;">↓ 3s ${t('TempoDesc')}</span>
+              <span style="background:#fff3e0;color:#e67e22;padding:3px 8px;border-radius:6px;font-size:11px;">✊ ${t('Grip')}: ${t('GripProne')}</span>
             </div>
             <div style="background:#512BD4;color:#fff;border-radius:8px;padding:10px;text-align:center;font-weight:600;font-size:14px;">✓ ${t('TutLogSet')}</div>
             <div style="margin-top:8px;text-align:center;padding:10px;background:#f3f0fc;border-radius:8px;">
