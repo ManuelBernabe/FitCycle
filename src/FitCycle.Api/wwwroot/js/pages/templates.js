@@ -14,7 +14,7 @@ export function render() {
           <div class="section-title">${t('RoutineTemplates')}</div>
           <button id="save-template-btn" class="btn btn-sm btn-outline" style="color:#512BD4;font-size:12px;">+ ${t('SaveTemplate')}</button>
         </div>
-        <div class="section-subtitle">${t('NoTemplates')}</div>
+        <div class="section-subtitle" id="templates-subtitle"></div>
         <div id="templates-list">
           <div class="loading-page"><div class="spinner"></div><span>${t('Loading')}</span></div>
         </div>
@@ -36,7 +36,7 @@ async function loadTemplates() {
 
   // Preserve scroll position during reload
   const page = container.closest('.page');
-  const scrollY = page ? page.scrollTop : window.scrollY;
+  const scrollY = page ? page.scrollTop : 0;
 
   try {
     templates = await api.get('/templates');
@@ -45,18 +45,23 @@ async function loadTemplates() {
     container.innerHTML = `<div class="empty-state"><div class="empty-state-text">${t('ErrorFmt', err.message)}</div></div>`;
   }
 
-  // Restore scroll position
+  // Restore scroll position after DOM update
   requestAnimationFrame(() => {
-    if (page && page.scrollTop !== undefined) page.scrollTop = scrollY;
-    else window.scrollTo(0, scrollY);
+    requestAnimationFrame(() => {
+      if (page) page.scrollTop = scrollY;
+      window.scrollTo(0, 0);
+    });
   });
 }
 
 function renderTemplates(container) {
+  const subtitle = document.getElementById('templates-subtitle');
   if (!templates || templates.length === 0) {
+    if (subtitle) subtitle.textContent = t('NoTemplates');
     container.innerHTML = `<div class="empty-state"><div class="empty-state-text">${t('NoTemplates')}</div></div>`;
     return;
   }
+  if (subtitle) subtitle.textContent = `${templates.length} ${t('RoutineTemplates').toLowerCase()}`;
 
   container.innerHTML = templates.map(tmpl => {
     const date = new Date(tmpl.createdAt).toLocaleDateString();
