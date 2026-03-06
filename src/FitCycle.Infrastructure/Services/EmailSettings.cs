@@ -10,4 +10,5 @@ public class EmailSettings
     public string FromName { get; set; } = "FitCycle";
     public string NotifyEmail { get; set; } = "";
     public string WebhookSecret { get; set; } = "";
+    public string AppBaseUrl { get; set; } = "https://fitcycle-production.up.railway.app";
 }

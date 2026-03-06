@@ -4,12 +4,35 @@ import { t, availableLanguages, languageDisplayName, currentLanguage, setLanguag
 import { api } from '../api.js';
 import { auth } from '../auth.js';
 
+let registeredEmail = null;
+
 export function render() {
   const isRegister = (sessionStorage.getItem('login_mode') === 'register');
+  const showActivation = sessionStorage.getItem('login_show_activation') === 'true';
 
   const langOptions = availableLanguages
     .map(l => `<option value="${l}" ${l === currentLanguage() ? 'selected' : ''}>${languageDisplayName(l)}</option>`)
     .join('');
+
+  if (showActivation) {
+    return `
+      <div class="login-page" style="padding-top:0;">
+        <div class="login-lang">
+          <select id="login-lang-select">${langOptions}</select>
+        </div>
+        <div class="login-logo">FC</div>
+        <div class="login-app-name">${t('AppName')}</div>
+        <div class="login-card" style="text-align:center;">
+          <div style="font-size:48px;margin-bottom:12px;">&#9993;</div>
+          <h2 class="login-section-title">${t('CheckYourEmail')}</h2>
+          <p style="color:#555;font-size:14px;line-height:1.6;margin:12px 0;">${t('ActivationEmailSent')}</p>
+          <div id="login-error" class="login-error hidden"></div>
+          <button id="back-to-login" class="btn btn-primary btn-block btn-lg" style="margin-top:16px;">${t('BackToLogin')}</button>
+          <button id="resend-activation" class="btn btn-outline btn-block" style="margin-top:8px;color:#512BD4;border-color:#512BD4;">${t('ResendActivation')}</button>
+        </div>
+      </div>
+    `;
+  }
 
   return `
     <div class="login-page" style="padding-top:0;">
@@ -49,6 +72,8 @@ export function mount() {
   const form = document.getElementById('login-submit');
   const toggle = document.getElementById('login-toggle');
   const langSelect = document.getElementById('login-lang-select');
+  const backToLogin = document.getElementById('back-to-login');
+  const resendBtn = document.getElementById('resend-activation');
 
   form?.addEventListener('click', handleSubmit);
 
@@ -62,12 +87,48 @@ export function mount() {
   toggle?.addEventListener('click', () => {
     const isRegister = (sessionStorage.getItem('login_mode') === 'register');
     sessionStorage.setItem('login_mode', isRegister ? 'login' : 'register');
+    sessionStorage.removeItem('login_show_activation');
     window.dispatchEvent(new Event('app-rerender'));
   });
 
   langSelect?.addEventListener('change', (e) => {
     setLanguage(e.target.value);
     window.dispatchEvent(new Event('app-rerender'));
+  });
+
+  backToLogin?.addEventListener('click', () => {
+    sessionStorage.setItem('login_mode', 'login');
+    sessionStorage.removeItem('login_show_activation');
+    registeredEmail = null;
+    window.dispatchEvent(new Event('app-rerender'));
+  });
+
+  resendBtn?.addEventListener('click', async () => {
+    const errorEl = document.getElementById('login-error');
+    const email = registeredEmail || sessionStorage.getItem('login_activation_email');
+    if (!email) return;
+
+    resendBtn.disabled = true;
+    resendBtn.textContent = t('Loading');
+    try {
+      await api.post('/auth/resend-activation', { email });
+      if (errorEl) {
+        errorEl.textContent = t('ActivationResent');
+        errorEl.classList.remove('hidden');
+        errorEl.style.color = '#28a745';
+        errorEl.style.background = '#f0fff0';
+      }
+    } catch (err) {
+      if (errorEl) {
+        errorEl.textContent = err.message || t('UnknownError');
+        errorEl.classList.remove('hidden');
+        errorEl.style.color = '';
+        errorEl.style.background = '';
+      }
+    } finally {
+      resendBtn.disabled = false;
+      resendBtn.textContent = t('ResendActivation');
+    }
   });
 
   // Live password strength feedback during registration
@@ -113,20 +174,42 @@ async function handleSubmit() {
   if (loadingEl) loadingEl.classList.remove('hidden');
 
   try {
-    let result;
     if (isRegister) {
-      result = await api.post('/auth/register', { username, email, password });
+      await api.post('/auth/register', { username, email, password });
+      // Registration successful — show activation screen
+      registeredEmail = email;
+      sessionStorage.setItem('login_activation_email', email);
+      sessionStorage.setItem('login_show_activation', 'true');
+      window.dispatchEvent(new Event('app-rerender'));
     } else {
-      result = await api.post('/auth/login', { username, password });
+      const result = await api.post('/auth/login', { username, password });
+      auth.store(result);
+      location.hash = '#home';
     }
-    auth.store(result);
-    location.hash = '#home';
   } catch (err) {
-    errorEl.textContent = err.message || t('UnknownError');
+    const msg = err.message || t('UnknownError');
+    errorEl.textContent = msg;
     errorEl.classList.remove('hidden');
     submitBtn.disabled = false;
     submitBtn.textContent = isRegister ? t('Register') : t('SignIn');
     if (loadingEl) loadingEl.classList.add('hidden');
+
+    // If account not activated, show resend option
+    if (!isRegister && msg.includes('no está activada')) {
+      errorEl.innerHTML = msg + `<br><button id="login-resend-inline" style="margin-top:8px;background:none;border:1px solid #512BD4;color:#512BD4;padding:6px 16px;border-radius:6px;cursor:pointer;font-size:13px;">${t('ResendActivation')}</button>`;
+      const inlineResend = document.getElementById('login-resend-inline');
+      inlineResend?.addEventListener('click', async () => {
+        const resendEmail = prompt(t('Email') + ':');
+        if (!resendEmail) return;
+        try {
+          await api.post('/auth/resend-activation', { email: resendEmail });
+          inlineResend.textContent = t('ActivationResent');
+          inlineResend.disabled = true;
+        } catch (e) {
+          inlineResend.textContent = t('UnknownError');
+        }
+      });
+    }
   }
 }
 

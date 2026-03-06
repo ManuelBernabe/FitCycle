@@ -77,20 +77,24 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<FitCycleDbContext>();
 
-    // If DB already has tables but migration history doesn't match (e.g. after migration reset),
-    // record the current migration as applied so Migrate() doesn't try to recreate tables.
+    // If DB already has tables but the InitialCreate migration isn't recorded,
+    // mark only the InitialCreate as applied so Migrate() doesn't try to recreate tables.
+    // Subsequent migrations (adding columns, etc.) must always run normally.
     try
     {
         var applied = db.Database.GetAppliedMigrations().ToList();
-        var pending = db.Database.GetPendingMigrations().ToList();
-        if (applied.Count > 0 && pending.Count > 0)
+        if (applied.Count == 0)
         {
-            // Old migrations were applied; mark new ones as applied too
-            foreach (var migration in pending)
+            // Check if tables already exist (DB was created outside of EF migrations)
+            var tableExists = db.Database.ExecuteSqlRaw("SELECT 1 FROM Users LIMIT 1") >= 0;
+            // Mark only the InitialCreate migration as applied
+            var pending = db.Database.GetPendingMigrations().ToList();
+            var initial = pending.FirstOrDefault(m => m.Contains("InitialCreate"));
+            if (initial != null)
             {
                 db.Database.ExecuteSqlRaw(
                     "INSERT OR IGNORE INTO \"__EFMigrationsHistory\" (\"MigrationId\", \"ProductVersion\") VALUES ({0}, {1})",
-                    migration, "8.0.11");
+                    initial, "8.0.11");
             }
         }
     }
@@ -178,20 +182,21 @@ app.MapGet("/version", () =>
 .AllowAnonymous();
 
 // -- Autenticación --
-app.MapPost("/auth/register", async (RegisterRequest request, IAuthService auth, IEmailService emailService, ILogger<Program> logger) =>
+app.MapPost("/auth/register", async (RegisterRequest request, IAuthService auth, IEmailService emailService, EmailSettings emailCfg, ILogger<Program> logger) =>
 {
     try
     {
         var result = await auth.RegisterAsync(request);
 
-        // Fire-and-forget welcome email
+        // Fire-and-forget activation email
+        var activationUrl = $"{emailCfg.AppBaseUrl}/auth/activate?token={result.ActivationToken}";
         _ = Task.Run(async () =>
         {
-            try { await emailService.SendWelcomeEmailAsync(request.Email, request.Username); }
-            catch (Exception ex) { logger.LogError(ex, "Failed to send welcome email to {Email}", request.Email); }
+            try { await emailService.SendActivationEmailAsync(request.Email, request.Username, activationUrl); }
+            catch (Exception ex) { logger.LogError(ex, "Failed to send activation email to {Email}", request.Email); }
         });
 
-        return Results.Ok(result);
+        return Results.Ok(new { message = result.Message });
     }
     catch (ArgumentException ex)
     {
@@ -209,12 +214,59 @@ app.MapPost("/auth/login", async (LoginRequest request, IAuthService auth) =>
         var result = await auth.LoginAsync(request);
         return Results.Ok(result);
     }
-    catch (UnauthorizedAccessException)
+    catch (UnauthorizedAccessException ex)
     {
-        return Results.Json(new { error = "Credenciales inválidas." }, statusCode: 401);
+        return Results.Json(new { error = ex.Message }, statusCode: 401);
     }
 })
 .WithName("Login")
+.WithOpenApi()
+.AllowAnonymous();
+
+app.MapGet("/auth/activate", async (string token, IAuthService auth) =>
+{
+    var success = await auth.ActivateAsync(token);
+    var html = success
+        ? @"<!DOCTYPE html><html><head><meta charset=""UTF-8""><meta name=""viewport"" content=""width=device-width,initial-scale=1.0""><title>Cuenta Activada</title></head>
+<body style=""margin:0;padding:0;background:#f3f0fc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;"">
+<div style=""background:#fff;border-radius:16px;padding:40px;text-align:center;max-width:400px;box-shadow:0 4px 24px rgba(0,0,0,0.1);"">
+<div style=""font-size:48px;font-weight:bold;color:#512BD4;letter-spacing:2px;margin-bottom:8px;"">FC</div>
+<div style=""font-size:48px;margin:16px 0;"">&#10003;</div>
+<h1 style=""color:#28a745;font-size:24px;margin:0 0 12px;"">Cuenta activada</h1>
+<p style=""color:#555;font-size:16px;line-height:1.6;"">Tu cuenta ha sido activada correctamente. Ya puedes iniciar sesión.</p>
+<a href=""/"" style=""display:inline-block;margin-top:20px;background:#512BD4;color:#fff;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:600;"">Ir a FitCycle</a>
+</div></body></html>"
+        : @"<!DOCTYPE html><html><head><meta charset=""UTF-8""><meta name=""viewport"" content=""width=device-width,initial-scale=1.0""><title>Error de Activación</title></head>
+<body style=""margin:0;padding:0;background:#f3f0fc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;"">
+<div style=""background:#fff;border-radius:16px;padding:40px;text-align:center;max-width:400px;box-shadow:0 4px 24px rgba(0,0,0,0.1);"">
+<div style=""font-size:48px;font-weight:bold;color:#512BD4;letter-spacing:2px;margin-bottom:8px;"">FC</div>
+<div style=""font-size:48px;margin:16px 0;"">&#10007;</div>
+<h1 style=""color:#dc3545;font-size:24px;margin:0 0 12px;"">Enlace inválido o expirado</h1>
+<p style=""color:#555;font-size:16px;line-height:1.6;"">El enlace de activación no es válido o ha expirado. Solicita uno nuevo desde la pantalla de login.</p>
+<a href=""/"" style=""display:inline-block;margin-top:20px;background:#512BD4;color:#fff;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:600;"">Ir a FitCycle</a>
+</div></body></html>";
+    return Results.Content(html, "text/html");
+})
+.WithName("ActivateAccount")
+.WithOpenApi()
+.AllowAnonymous();
+
+app.MapPost("/auth/resend-activation", async (ResendActivationRequest request, IAuthService auth, IEmailService emailService, EmailSettings emailCfg, ILogger<Program> logger) =>
+{
+    var token = await auth.ResendActivationAsync(request.Email);
+    if (token != null)
+    {
+        var activationUrl = $"{emailCfg.AppBaseUrl}/auth/activate?token={token}";
+        _ = Task.Run(async () =>
+        {
+            try { await emailService.SendActivationEmailAsync(request.Email, "", activationUrl); }
+            catch (Exception ex) { logger.LogError(ex, "Failed to resend activation email to {Email}", request.Email); }
+        });
+    }
+    // Always return OK to prevent email enumeration
+    return Results.Ok(new { message = "Si el email está registrado, recibirás un enlace de activación." });
+})
+.WithName("ResendActivation")
 .WithOpenApi()
 .AllowAnonymous();
 

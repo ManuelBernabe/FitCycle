@@ -213,6 +213,16 @@ const Strings = {
   SelectSourceUser:      { es: 'Seleccionar usuario origen',                 en: 'Select source user',                fr: "Sélectionner l'utilisateur source" },
   Exercises:             { es: 'ejercicios',                                 en: 'exercises',                         fr: 'exercices' },
 
+  // === Activation ===
+  CheckYourEmail:       { es: 'Revisa tu email',                                en: 'Check your email',                   fr: 'Vérifiez votre e-mail' },
+  ActivationEmailSent:  { es: 'Te hemos enviado un email con un enlace para activar tu cuenta. Revisa tu bandeja de entrada (y spam).', en: 'We sent you an email with a link to activate your account. Check your inbox (and spam).', fr: "Nous vous avons envoyé un e-mail avec un lien pour activer votre compte. Vérifiez votre boîte de réception (et spam)." },
+  ResendActivation:     { es: 'Reenviar email de activación',                   en: 'Resend activation email',             fr: "Renvoyer l'e-mail d'activation" },
+  ActivationResent:     { es: 'Email de activación reenviado',                  en: 'Activation email resent',             fr: "E-mail d'activation renvoyé" },
+  BackToLogin:          { es: 'Volver al login',                                en: 'Back to login',                      fr: 'Retour à la connexion' },
+  Active:               { es: 'Activo',                                         en: 'Active',                             fr: 'Actif' },
+  Inactive:             { es: 'Inactivo',                                       en: 'Inactive',                           fr: 'Inactif' },
+  AccountNotActivated:  { es: 'Cuenta no activada',                             en: 'Account not activated',              fr: 'Compte non activé' },
+
   // === Password ===
   PwdMinLength:  { es: 'Mínimo 8 caracteres',             en: 'At least 8 characters',           fr: 'Au moins 8 caractères' },
   PwdUppercase:  { es: 'Una letra mayúscula',              en: 'One uppercase letter',            fr: 'Une lettre majuscule' },

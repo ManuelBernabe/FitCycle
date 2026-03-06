@@ -21,7 +21,7 @@ public class AuthService : IAuthService
         _jwt = jwt;
     }
 
-    public async Task<AuthResponse> RegisterAsync(RegisterRequest request)
+    public async Task<RegisterResponse> RegisterAsync(RegisterRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Username) || request.Username.Length < 3)
             throw new ArgumentException("El nombre de usuario debe tener al menos 3 caracteres.");
@@ -34,19 +34,25 @@ public class AuthService : IAuthService
         if (await _db.Users.AnyAsync(u => u.Email == request.Email))
             throw new ArgumentException("El email ya está registrado.");
 
+        var tokenBytes = RandomNumberGenerator.GetBytes(32);
+        var activationToken = Convert.ToHexString(tokenBytes).ToLowerInvariant();
+
         var user = new User
         {
             Username = request.Username,
             Email = request.Email,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
             Role = UserRole.Standard,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow,
+            IsActive = false,
+            ActivationToken = activationToken,
+            ActivationTokenExpiresAt = DateTime.UtcNow.AddHours(24)
         };
 
         _db.Users.Add(user);
         await _db.SaveChangesAsync();
 
-        return GenerateTokens(user);
+        return new RegisterResponse("Registro exitoso. Revisa tu email para activar tu cuenta.", activationToken);
     }
 
     public async Task<AuthResponse> LoginAsync(LoginRequest request)
@@ -55,6 +61,9 @@ public class AuthService : IAuthService
         if (user is null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
             throw new UnauthorizedAccessException("Credenciales inválidas.");
 
+        if (!user.IsActive)
+            throw new UnauthorizedAccessException("Tu cuenta no está activada. Revisa tu email para activarla.");
+
         return GenerateTokens(user);
     }
 
@@ -62,7 +71,8 @@ public class AuthService : IAuthService
     {
         var user = await _db.Users.FirstOrDefaultAsync(u =>
             u.RefreshToken == request.RefreshToken &&
-            u.RefreshTokenExpiresAt > DateTime.UtcNow);
+            u.RefreshTokenExpiresAt > DateTime.UtcNow &&
+            u.IsActive);
 
         if (user is null)
             throw new UnauthorizedAccessException("Refresh token inválido o expirado.");
@@ -74,14 +84,14 @@ public class AuthService : IAuthService
     {
         var user = await _db.Users.FindAsync(userId);
         if (user is null) return null;
-        return new UserInfo(user.Id, user.Username, user.Email, user.Role.ToString());
+        return new UserInfo(user.Id, user.Username, user.Email, user.Role.ToString(), user.IsActive);
     }
 
     public async Task<List<UserInfo>> GetAllUsersAsync()
     {
         return await _db.Users
             .OrderBy(u => u.Id)
-            .Select(u => new UserInfo(u.Id, u.Username, u.Email, u.Role.ToString()))
+            .Select(u => new UserInfo(u.Id, u.Username, u.Email, u.Role.ToString(), u.IsActive))
             .ToListAsync();
     }
 
@@ -107,13 +117,14 @@ public class AuthService : IAuthService
             Email = request.Email,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
             Role = role,
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow,
+            IsActive = true
         };
 
         _db.Users.Add(user);
         await _db.SaveChangesAsync();
 
-        return new UserInfo(user.Id, user.Username, user.Email, user.Role.ToString());
+        return new UserInfo(user.Id, user.Username, user.Email, user.Role.ToString(), user.IsActive);
     }
 
     public async Task<UserInfo> UpdateUserAsync(int id, UpdateUserRequest request)
@@ -147,9 +158,19 @@ public class AuthService : IAuthService
             user.Role = role;
         }
 
+        if (request.IsActive.HasValue)
+        {
+            user.IsActive = request.IsActive.Value;
+            if (user.IsActive)
+            {
+                user.ActivationToken = null;
+                user.ActivationTokenExpiresAt = null;
+            }
+        }
+
         await _db.SaveChangesAsync();
 
-        return new UserInfo(user.Id, user.Username, user.Email, user.Role.ToString());
+        return new UserInfo(user.Id, user.Username, user.Email, user.Role.ToString(), user.IsActive);
     }
 
     public async Task<bool> DeleteUserAsync(int id, int currentUserId)
@@ -185,6 +206,38 @@ public class AuthService : IAuthService
             throw new ArgumentException("Usuario no encontrado.");
 
         return GenerateTokens(user);
+    }
+
+    public async Task<bool> ActivateAsync(string token)
+    {
+        var user = await _db.Users.FirstOrDefaultAsync(u =>
+            u.ActivationToken == token &&
+            u.ActivationTokenExpiresAt > DateTime.UtcNow);
+
+        if (user is null) return false;
+
+        user.IsActive = true;
+        user.ActivationToken = null;
+        user.ActivationTokenExpiresAt = null;
+        await _db.SaveChangesAsync();
+        return true;
+    }
+
+    public async Task<string?> ResendActivationAsync(string email)
+    {
+        var user = await _db.Users.FirstOrDefaultAsync(u =>
+            u.Email == email && !u.IsActive);
+
+        if (user is null) return null;
+
+        var tokenBytes = RandomNumberGenerator.GetBytes(32);
+        var activationToken = Convert.ToHexString(tokenBytes).ToLowerInvariant();
+
+        user.ActivationToken = activationToken;
+        user.ActivationTokenExpiresAt = DateTime.UtcNow.AddHours(24);
+        await _db.SaveChangesAsync();
+
+        return activationToken;
     }
 
     private static void ValidatePasswordStrength(string password)
@@ -227,7 +280,7 @@ public class AuthService : IAuthService
         user.RefreshTokenExpiresAt = DateTime.UtcNow.AddDays(_jwt.RefreshTokenExpirationDays);
         _db.SaveChanges();
 
-        var userInfo = new UserInfo(user.Id, user.Username, user.Email, user.Role.ToString());
+        var userInfo = new UserInfo(user.Id, user.Username, user.Email, user.Role.ToString(), user.IsActive);
         return new AuthResponse(accessToken, refreshToken, userInfo);
     }
 }
