@@ -20,6 +20,7 @@ public class EmailService : IEmailService
         _logger = logger;
     }
 
+    private bool UseBrevo => !string.IsNullOrWhiteSpace(_settings.BrevoApiKey);
     private bool UseResend => !string.IsNullOrWhiteSpace(_settings.ResendApiKey);
 
     private bool HasSmtpCredentials =>
@@ -34,14 +35,14 @@ public class EmailService : IEmailService
 
     public async Task SendDeployNotificationAsync(string status, string? environment = null)
     {
-        if (!UseResend && !HasSmtpCredentials)
+        if (!UseBrevo && !UseResend && !HasSmtpCredentials)
         {
             _logger.LogWarning("Email not configured — skipping deploy notification");
             return;
         }
 
         var toEmail = !string.IsNullOrWhiteSpace(_settings.NotifyEmail) ? _settings.NotifyEmail : _settings.SmtpUser;
-        if (string.IsNullOrWhiteSpace(toEmail) && UseResend)
+        if (string.IsNullOrWhiteSpace(toEmail) && (UseBrevo || UseResend))
         {
             _logger.LogWarning("No NotifyEmail configured — skipping deploy notification");
             return;
@@ -81,7 +82,11 @@ public class EmailService : IEmailService
 
     private async Task SendEmailAsync(string toEmail, string toName, string subject, string html, string emailType)
     {
-        if (UseResend)
+        if (UseBrevo)
+        {
+            await SendViaBrevoAsync(toEmail, toName, subject, html, emailType);
+        }
+        else if (UseResend)
         {
             await SendViaResendAsync(toEmail, subject, html, emailType);
         }
@@ -128,6 +133,38 @@ public class EmailService : IEmailService
             _logger.LogError("Resend: failed to send {EmailType} email to {Email}. Status: {Status}, Body: {Body}",
                 emailType, toEmail, response.StatusCode, responseBody);
             throw new Exception($"Resend API error: {response.StatusCode} — {responseBody}");
+        }
+    }
+
+    private async Task SendViaBrevoAsync(string toEmail, string toName, string subject, string html, string emailType)
+    {
+        var payload = new
+        {
+            sender = new { name = _settings.FromName, email = _settings.FromEmail },
+            to = new[] { new { email = toEmail, name = toName } },
+            subject,
+            htmlContent = html
+        };
+
+        var json = JsonSerializer.Serialize(payload);
+        var request = new HttpRequestMessage(HttpMethod.Post, "https://api.brevo.com/v3/smtp/email")
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        };
+        request.Headers.Add("api-key", _settings.BrevoApiKey);
+
+        var response = await _httpClient.SendAsync(request);
+        var responseBody = await response.Content.ReadAsStringAsync();
+
+        if (response.IsSuccessStatusCode)
+        {
+            _logger.LogInformation("Brevo: {EmailType} email sent to {Email}", emailType, toEmail);
+        }
+        else
+        {
+            _logger.LogError("Brevo: failed to send {EmailType} email to {Email}. Status: {Status}, Body: {Body}",
+                emailType, toEmail, response.StatusCode, responseBody);
+            throw new Exception($"Brevo API error: {response.StatusCode} — {responseBody}");
         }
     }
 
