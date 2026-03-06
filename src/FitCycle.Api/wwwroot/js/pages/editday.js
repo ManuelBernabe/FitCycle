@@ -188,6 +188,25 @@ function buildExerciseRows(group, gi) {
     const summaryParts = ex.setDetails.map((s, i) => `S${i + 1}:${s.reps}r/${s.weight > 0 ? s.weight + 'kg' : '-'}`);
     const summaryText = summaryParts.join(' · ');
 
+    // Tempo/grip badges for summary
+    const hasTempo = ex.setDetails.some(s => s.tempoPos > 0 || s.tempoNeg > 0);
+    const hasGrip = ex.setDetails.some(s => s.grip);
+    let badgesHtml = '';
+    if (hasTempo || hasGrip) {
+      const badges = [];
+      if (hasTempo) {
+        const tp = ex.setDetails[0].tempoPos || 0;
+        const tn = ex.setDetails[0].tempoNeg || 0;
+        badges.push(`<span style="font-size:10px;color:#512BD4;background:#f3f0fc;padding:1px 6px;border-radius:4px;">↑${tp}s ${t('TempoAsc')} ↓${tn}s ${t('TempoDesc')}</span>`);
+      }
+      if (hasGrip) {
+        const gripVal = ex.setDetails[0].grip || '';
+        const gripKey = 'Grip' + gripVal.charAt(0).toUpperCase() + gripVal.slice(1).toLowerCase();
+        badges.push(`<span style="font-size:10px;color:#e67e22;background:#fff3e0;padding:1px 6px;border-radius:4px;">✊ ${t(gripKey)}</span>`);
+      }
+      badgesHtml = `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:2px;">${badges.join('')}</div>`;
+    }
+
     const setRows = ex.setDetails.map((s, si) => `
       <div style="display:flex;align-items:center;gap:4px;margin:2px 0;flex-wrap:wrap;">
         <span style="font-size:11px;color:#512BD4;font-weight:600;min-width:24px;">S${si + 1}</span>
@@ -239,6 +258,7 @@ function buildExerciseRows(group, gi) {
         ${isInSuperset ? `<div style="font-size:10px;color:#e67e22;font-weight:600;margin:2px 0 0 24px;">&#8644; ${partnerName || t('Superset')}</div>` : ''}
         <div style="margin:4px 0 0 24px;">
           <div style="font-size:10px;color:#666;word-break:break-word;">${summaryText}</div>
+          ${badgesHtml}
           <div style="display:flex;gap:4px;margin-top:3px;align-items:center;">
             <button class="btn-toggle-sets" data-gi="${gi}" data-ei="${ei}"
               style="background:${ex.expanded ? '#512BD4' : '#e9e9e9'};color:${ex.expanded ? '#fff' : '#333'};border:none;border-radius:6px;padding:2px 8px;font-size:11px;cursor:pointer;">
