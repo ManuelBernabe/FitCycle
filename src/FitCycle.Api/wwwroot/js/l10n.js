@@ -172,6 +172,9 @@ const Strings = {
   GripProne:       { es: 'Prono',             en: 'Prone',            fr: 'Pronation' },
   GripSupine:      { es: 'Supino',            en: 'Supine',           fr: 'Supination' },
   GripNeutral:     { es: 'Neutro',            en: 'Neutral',          fr: 'Neutre' },
+  GripProno:       { es: 'Prono',             en: 'Prone',            fr: 'Pronation' },
+  GripSupino:      { es: 'Supino',            en: 'Supine',           fr: 'Supination' },
+  GripNeutro:      { es: 'Neutro',            en: 'Neutral',          fr: 'Neutre' },
   ExerciseNotes:   { es: 'Notas',             en: 'Notes',            fr: 'Notes' },
 
   // === PDF Import ===
