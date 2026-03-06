@@ -200,7 +200,7 @@ function buildUI() {
         </select>
         <div style="display:flex;align-items:center;gap:4px;">
           <input id="cardio-minutes" type="number" class="form-input" style="width:60px;font-size:13px;text-align:center;" min="0" max="120" value="${cardioMinutes || ''}">
-          <span style="font-size:12px;color:var(--text-light);">${t('Min')}</span>
+          <span style="font-size:12px;color:var(--text-light);">${t('MinUnit')}</span>
         </div>
       </div>
     </div>
@@ -219,7 +219,7 @@ function buildUI() {
         </select>
         <div style="display:flex;align-items:center;gap:4px;">
           <input id="abs-minutes" type="number" class="form-input" style="width:60px;font-size:13px;text-align:center;" min="0" max="120" value="${absMinutes || ''}">
-          <span style="font-size:12px;color:var(--text-light);">${t('Min')}</span>
+          <span style="font-size:12px;color:var(--text-light);">${t('MinUnit')}</span>
         </div>
       </div>
     </div>

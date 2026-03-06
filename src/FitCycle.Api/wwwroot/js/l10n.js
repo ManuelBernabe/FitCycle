@@ -462,7 +462,7 @@ const Strings = {
   RussianTwist:        { es: 'Russian twist',                             en: 'Russian Twist',                     fr: 'Russian Twist' },
   AbWheel:             { es: 'Ab Wheel',                                  en: 'Ab Wheel',                          fr: 'Ab Wheel' },
   Other:               { es: 'Otro',                                      en: 'Other',                             fr: 'Autre' },
-  Min:                 { es: 'min',                                       en: 'min',                               fr: 'min' },
+  MinUnit:             { es: 'min',                                       en: 'min',                               fr: 'min' },
 };
 
 // DayOfWeek in .NET: Sunday=0 ... Saturday=6

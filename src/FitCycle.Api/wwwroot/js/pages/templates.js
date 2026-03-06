@@ -151,8 +151,8 @@ function renderTemplates(container) {
         const dAbs = d.absExercise || d.AbsExercise || '';
         const dAbsMin = d.absMinutes || d.AbsMinutes || 0;
         let dayExtras = '';
-        if (dCardio && dCardioMin > 0) dayExtras += `<span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:#e67e22;background:#fff3e0;padding:1px 6px;border-radius:8px;margin-right:4px;">&#127939; ${dCardio} ${dCardioMin}${t('Min')}</span>`;
-        if (dAbs && dAbsMin > 0) dayExtras += `<span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:#512BD4;background:#f3f0fc;padding:1px 6px;border-radius:8px;">&#128170; ${dAbs} ${dAbsMin}${t('Min')}</span>`;
+        if (dCardio && dCardioMin > 0) dayExtras += `<span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:#e67e22;background:#fff3e0;padding:1px 6px;border-radius:8px;margin-right:4px;">&#127939; ${dCardio} ${dCardioMin}${t('MinUnit')}</span>`;
+        if (dAbs && dAbsMin > 0) dayExtras += `<span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:#512BD4;background:#f3f0fc;padding:1px 6px;border-radius:8px;">&#128170; ${dAbs} ${dAbsMin}${t('MinUnit')}</span>`;
 
         return `
           <div style="margin-bottom:8px;">
