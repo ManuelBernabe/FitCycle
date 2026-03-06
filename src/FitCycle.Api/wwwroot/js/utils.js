@@ -1,6 +1,47 @@
-// FitCycle Shared Utilities — escapeHtml, calculateStreak, modal dialogs
+// FitCycle Shared Utilities — escapeHtml, calculateStreak, modal dialogs, theme
 
 import { t } from './l10n.js';
+
+// ── Theme Management ──
+
+const THEME_KEY = 'fitcycle_theme'; // 'auto' | 'light' | 'dark'
+
+/** Get the saved theme preference (defaults to 'auto'). */
+export function getTheme() {
+  return localStorage.getItem(THEME_KEY) || 'auto';
+}
+
+/** Set theme preference and apply it immediately. */
+export function setTheme(mode) {
+  localStorage.setItem(THEME_KEY, mode);
+  applyTheme();
+}
+
+/** Apply the current theme to <html>. Call on startup and on change. */
+export function applyTheme() {
+  const mode = getTheme();
+  const html = document.documentElement;
+  html.classList.remove('dark');
+
+  if (mode === 'dark') {
+    html.classList.add('dark');
+  } else if (mode === 'auto') {
+    if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      html.classList.add('dark');
+    }
+  }
+  // 'light' — no .dark class
+}
+
+// Listen for system theme changes (for auto mode)
+if (typeof window !== 'undefined' && window.matchMedia) {
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if (getTheme() === 'auto') applyTheme();
+  });
+}
+
+// Apply theme immediately on module load (before first paint)
+applyTheme();
 
 /**
  * Escape HTML to prevent XSS.

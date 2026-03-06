@@ -271,6 +271,12 @@ const Strings = {
   Language:       { es: 'Idioma',              en: 'Language',          fr: 'Langue' },
   SelectLanguage: { es: 'Seleccionar idioma',  en: 'Select language',  fr: 'Sélectionner la langue' },
 
+  // === Theme ===
+  Theme:      { es: 'Tema',        en: 'Theme',      fr: 'Thème' },
+  ThemeAuto:  { es: 'Auto',        en: 'Auto',        fr: 'Auto' },
+  ThemeLight: { es: 'Claro',       en: 'Light',       fr: 'Clair' },
+  ThemeDark:  { es: 'Oscuro',      en: 'Dark',        fr: 'Sombre' },
+
   // === Home ===
   Welcome:         { es: 'Hola, {0}!',                         en: 'Hello, {0}!',                     fr: 'Bonjour, {0} !' },
   GoToRoutines:    { es: 'Ir a mis rutinas',                    en: 'Go to my routines',               fr: 'Aller à mes routines' },

@@ -10,6 +10,10 @@
   <link rel="apple-touch-icon" href="/icons/icon-192.svg">
   <title>FitCycle</title>
   <link rel="stylesheet" href="/css/app.css">
+  <script>
+    // Apply theme before first paint to prevent flash
+    (function(){var t=localStorage.getItem('fitcycle_theme')||'auto';if(t==='dark'||(t==='auto'&&matchMedia('(prefers-color-scheme:dark)').matches))document.documentElement.classList.add('dark');})();
+  </script>
 </head>
 <body>
   <div id="app">

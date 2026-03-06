@@ -2,6 +2,7 @@
 
 import { t, init as l10nInit, currentLanguage, setLanguage, availableLanguages, languageDisplayName } from './l10n.js';
 import { auth } from './auth.js';
+import { applyTheme } from './utils.js';
 
 // Page modules (lazy-ish imports — all bundled but only rendered on demand)
 import * as loginPage from './pages/login.js';
@@ -19,6 +20,7 @@ import * as tutorialPage from './pages/tutorial.js';
 
 // ─── Init ───────────────────────────────────────────────────────────
 l10nInit();
+applyTheme();
 
 const appEl = document.getElementById('app');
 

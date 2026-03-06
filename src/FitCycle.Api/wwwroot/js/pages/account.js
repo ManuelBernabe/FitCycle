@@ -3,7 +3,7 @@
 import { t, availableLanguages, languageDisplayName, currentLanguage, setLanguage } from '../l10n.js';
 import { api } from '../api.js';
 import { auth } from '../auth.js';
-import { showAlert, showConfirm } from '../utils.js';
+import { showAlert, showConfirm, getTheme, setTheme } from '../utils.js';
 
 let allUsers = [];
 
@@ -16,6 +16,8 @@ export function render() {
   const langOptions = availableLanguages
     .map(l => `<option value="${l}" ${l === currentLanguage() ? 'selected' : ''}>${languageDisplayName(l)}</option>`)
     .join('');
+
+  const currentTheme = getTheme();
 
   return `
     <div class="page no-tabs">
@@ -80,6 +82,18 @@ export function render() {
 
         <div class="divider"></div>
 
+        <!-- Theme selector -->
+        <div class="account-section">
+          <label style="font-size:15px;font-weight:bold;display:block;margin-bottom:8px;">${t('Theme')}</label>
+          <div class="theme-toggle" id="theme-toggle">
+            <button class="theme-toggle-btn ${currentTheme === 'auto' ? 'active' : ''}" data-theme="auto">${t('ThemeAuto')}</button>
+            <button class="theme-toggle-btn ${currentTheme === 'light' ? 'active' : ''}" data-theme="light">${t('ThemeLight')}</button>
+            <button class="theme-toggle-btn ${currentTheme === 'dark' ? 'active' : ''}" data-theme="dark">${t('ThemeDark')}</button>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
         <!-- Logout -->
         <div class="account-section">
           <button id="account-logout" class="btn btn-danger btn-block">${t('Logout')}</button>
@@ -134,6 +148,17 @@ export async function mount() {
 
   // Change password
   document.getElementById('password-change-btn')?.addEventListener('click', handlePasswordChange);
+
+  // Theme toggle
+  document.getElementById('theme-toggle')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-theme]');
+    if (!btn) return;
+    const mode = btn.dataset.theme;
+    setTheme(mode);
+    // Update active state
+    document.querySelectorAll('.theme-toggle-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  });
 
   // Language change
   document.getElementById('account-lang-select')?.addEventListener('change', (e) => {
