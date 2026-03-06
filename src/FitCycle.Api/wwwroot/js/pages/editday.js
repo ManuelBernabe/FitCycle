@@ -11,6 +11,12 @@ let allExercises = [];
 let groups = [];
 // Each exercise: { exerciseId, name, imageUrl, isSelected, sets, reps, weight, setDetails, supersetGroup, expanded }
 
+// Cardio & Abs extras
+let cardioType = '';
+let cardioMinutes = 0;
+let absExercise = '';
+let absMinutes = 0;
+
 export function render(params) {
   dayNum = parseInt(params);
   return `
@@ -40,6 +46,10 @@ export function destroy() {
   groups = [];
   allMuscleGroups = [];
   allExercises = [];
+  cardioType = '';
+  cardioMinutes = 0;
+  absExercise = '';
+  absMinutes = 0;
 }
 
 // ── Helpers ──
@@ -89,6 +99,12 @@ async function loadData() {
 
     const days = weekRoutine?.days || weekRoutine?.Days || (Array.isArray(weekRoutine) ? weekRoutine : []);
     const dayRoutine = days.find(d => (d.day ?? d.Day) === dayNum);
+
+    // Load cardio/abs extras
+    cardioType = dayRoutine?.cardioType || dayRoutine?.CardioType || '';
+    cardioMinutes = dayRoutine?.cardioMinutes || dayRoutine?.CardioMinutes || 0;
+    absExercise = dayRoutine?.absExercise || dayRoutine?.AbsExercise || '';
+    absMinutes = dayRoutine?.absMinutes || dayRoutine?.AbsMinutes || 0;
 
     const selectedMgIds = new Set(
       (dayRoutine?.muscleGroups || dayRoutine?.MuscleGroups || []).map(mg => mg.id || mg.Id)
@@ -167,6 +183,47 @@ function buildUI() {
       </div>
     `;
   });
+
+  // Cardio & Abs section
+  html += `
+    <div class="card" style="margin-bottom:10px;margin-top:16px;">
+      <div style="font-weight:bold;font-size:15px;margin-bottom:8px;">&#127939; ${t('Cardio')}</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <select id="cardio-type" class="form-input" style="flex:1;min-width:120px;font-size:13px;">
+          <option value="">— ${t('CardioType')} —</option>
+          <option value="Cinta" ${cardioType === 'Cinta' ? 'selected' : ''}>${t('Treadmill')}</option>
+          <option value="Bicicleta" ${cardioType === 'Bicicleta' ? 'selected' : ''}>${t('Bike')}</option>
+          <option value="Elíptica" ${cardioType === 'Elíptica' ? 'selected' : ''}>${t('Elliptical')}</option>
+          <option value="Remo" ${cardioType === 'Remo' ? 'selected' : ''}>${t('Rowing')}</option>
+          <option value="Escaladora" ${cardioType === 'Escaladora' ? 'selected' : ''}>${t('Stairmaster')}</option>
+          <option value="Otro" ${cardioType === 'Otro' ? 'selected' : ''}>${t('Other')}</option>
+        </select>
+        <div style="display:flex;align-items:center;gap:4px;">
+          <input id="cardio-minutes" type="number" class="form-input" style="width:60px;font-size:13px;text-align:center;" min="0" max="120" value="${cardioMinutes || ''}">
+          <span style="font-size:12px;color:var(--text-light);">${t('Min')}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:10px;">
+      <div style="font-weight:bold;font-size:15px;margin-bottom:8px;">&#128170; ${t('Abs')}</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <select id="abs-exercise" class="form-input" style="flex:1;min-width:120px;font-size:13px;">
+          <option value="">— ${t('AbsExercise')} —</option>
+          <option value="Crunch" ${absExercise === 'Crunch' ? 'selected' : ''}>${t('Crunch')}</option>
+          <option value="Plancha" ${absExercise === 'Plancha' ? 'selected' : ''}>${t('Plank')}</option>
+          <option value="Elevación piernas" ${absExercise === 'Elevación piernas' ? 'selected' : ''}>${t('LegRaise')}</option>
+          <option value="Russian twist" ${absExercise === 'Russian twist' ? 'selected' : ''}>${t('RussianTwist')}</option>
+          <option value="Ab Wheel" ${absExercise === 'Ab Wheel' ? 'selected' : ''}>${t('AbWheel')}</option>
+          <option value="Otro" ${absExercise === 'Otro' ? 'selected' : ''}>${t('Other')}</option>
+        </select>
+        <div style="display:flex;align-items:center;gap:4px;">
+          <input id="abs-minutes" type="number" class="form-input" style="width:60px;font-size:13px;text-align:center;" min="0" max="120" value="${absMinutes || ''}">
+          <span style="font-size:12px;color:var(--text-light);">${t('Min')}</span>
+        </div>
+      </div>
+    </div>
+  `;
 
   html += `
     <button id="editday-save" class="btn btn-primary btn-block btn-lg mt-16">${t('Save')}</button>
@@ -559,6 +616,12 @@ function attachEvents(container) {
     });
   });
 
+  // Cardio & Abs fields
+  document.getElementById('cardio-type')?.addEventListener('change', (e) => { cardioType = e.target.value; });
+  document.getElementById('cardio-minutes')?.addEventListener('input', (e) => { cardioMinutes = parseInt(e.target.value) || 0; });
+  document.getElementById('abs-exercise')?.addEventListener('change', (e) => { absExercise = e.target.value; });
+  document.getElementById('abs-minutes')?.addEventListener('input', (e) => { absMinutes = parseInt(e.target.value) || 0; });
+
   // Global save button
   document.getElementById('editday-save')?.addEventListener('click', () => doSave());
 }
@@ -606,6 +669,10 @@ async function doSave() {
     await api.put(`/routines/${dayNum}`, {
       muscleGroupIds: selectedMgIds,
       exercises: selectedExercises,
+      cardioType: cardioType || '',
+      cardioMinutes: cardioMinutes || 0,
+      absExercise: absExercise || '',
+      absMinutes: absMinutes || 0,
     });
 
     location.hash = '#routines';

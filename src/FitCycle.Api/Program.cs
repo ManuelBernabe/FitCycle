@@ -455,7 +455,8 @@ app.MapPut("/routines/{day}", (DayOfWeek day, UpdateDayRoutineRequest request, I
     {
         var userId = int.Parse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
         var exercises = request.Exercises ?? [];
-        var result = repo.SetDayRoutine(day, request.MuscleGroupIds, exercises, userId);
+        var result = repo.SetDayRoutine(day, request.MuscleGroupIds, exercises, userId,
+            request.CardioType ?? "", request.CardioMinutes, request.AbsExercise ?? "", request.AbsMinutes);
         return Results.Ok(result);
     }
     catch (ArgumentException ex)
@@ -668,7 +669,8 @@ app.MapPost("/templates/{id}/apply", (int id, ApplyTemplateRequest req, FitCycle
 
         if (muscleGroupIds.Count > 0 || exercises.Count > 0)
         {
-            repo.SetDayRoutine(day.Day, muscleGroupIds, exercises, req.TargetUserId);
+            repo.SetDayRoutine(day.Day, muscleGroupIds, exercises, req.TargetUserId,
+                day.CardioType ?? "", day.CardioMinutes, day.AbsExercise ?? "", day.AbsMinutes);
             copiedDays++;
             totalExercises += exercises.Count;
             details.Add($"{day.Day}: {exercises.Count} ejercicios");
@@ -1130,7 +1132,8 @@ app.Run();
 record SqlQueryRequest(string Query);
 record CreateExerciseRequest(string Name, int MuscleGroupId);
 record ExerciseInput(int ExerciseId, int Sets, int Reps);
-record UpdateDayRoutineRequest(List<int> MuscleGroupIds, List<RoutineExerciseInput>? Exercises);
+record UpdateDayRoutineRequest(List<int> MuscleGroupIds, List<RoutineExerciseInput>? Exercises,
+    string? CardioType = "", int CardioMinutes = 0, string? AbsExercise = "", int AbsMinutes = 0);
 record SaveWorkoutExerciseInput(int ExerciseId, string ExerciseName, int Sets, int Reps, decimal Weight, string MuscleGroupName, string SetDetails = "");
 record SaveWorkoutRequest(DayOfWeek Day, DateTime StartedAt, DateTime CompletedAt, List<SaveWorkoutExerciseInput> Exercises);
 record CopyRoutinesRequest(int SourceUserId, int TargetUserId);

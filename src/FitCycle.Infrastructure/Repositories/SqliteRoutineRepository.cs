@@ -421,7 +421,8 @@ public class SqliteRoutineRepository : IRoutineRepository
 
     public DayRoutine GetDayRoutine(DayOfWeek day, int userId) => BuildDayRoutine(day, userId);
 
-    public DayRoutine SetDayRoutine(DayOfWeek day, List<int> muscleGroupIds, List<RoutineExerciseInput> exercises, int userId)
+    public DayRoutine SetDayRoutine(DayOfWeek day, List<int> muscleGroupIds, List<RoutineExerciseInput> exercises, int userId,
+        string cardioType = "", int cardioMinutes = 0, string absExercise = "", int absMinutes = 0)
     {
         // All 7 days supported
 
@@ -461,6 +462,35 @@ public class SqliteRoutineRepository : IRoutineRepository
                     UserId = userId
                 });
             }
+        }
+
+        // Upsert day extras (cardio/abs)
+        var existingExtras = _db.DayExtras.FirstOrDefault(d => d.Day == day && d.UserId == userId);
+        if (!string.IsNullOrEmpty(cardioType) || cardioMinutes > 0 || !string.IsNullOrEmpty(absExercise) || absMinutes > 0)
+        {
+            if (existingExtras != null)
+            {
+                existingExtras.CardioType = cardioType ?? string.Empty;
+                existingExtras.CardioMinutes = cardioMinutes;
+                existingExtras.AbsExercise = absExercise ?? string.Empty;
+                existingExtras.AbsMinutes = absMinutes;
+            }
+            else
+            {
+                _db.DayExtras.Add(new DayExtrasEntity
+                {
+                    Day = day,
+                    UserId = userId,
+                    CardioType = cardioType ?? string.Empty,
+                    CardioMinutes = cardioMinutes,
+                    AbsExercise = absExercise ?? string.Empty,
+                    AbsMinutes = absMinutes
+                });
+            }
+        }
+        else if (existingExtras != null)
+        {
+            _db.DayExtras.Remove(existingExtras);
         }
 
         _db.SaveChanges();
@@ -504,11 +534,17 @@ public class SqliteRoutineRepository : IRoutineRepository
             };
         }).ToList();
 
+        var extras = _db.DayExtras.FirstOrDefault(d => d.Day == day && d.UserId == userId);
+
         return new DayRoutine
         {
             Day = day,
             MuscleGroups = muscleGroups,
-            Exercises = routineExercises
+            Exercises = routineExercises,
+            CardioType = extras?.CardioType ?? string.Empty,
+            CardioMinutes = extras?.CardioMinutes ?? 0,
+            AbsExercise = extras?.AbsExercise ?? string.Empty,
+            AbsMinutes = extras?.AbsMinutes ?? 0
         };
     }
 }

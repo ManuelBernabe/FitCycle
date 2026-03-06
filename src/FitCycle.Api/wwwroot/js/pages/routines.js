@@ -116,6 +116,19 @@ function renderDays(container) {
       </div>`;
     }).join('');
 
+    // Cardio & Abs badges
+    const dayCardio = dayData?.cardioType || dayData?.CardioType || '';
+    const dayCardioMin = dayData?.cardioMinutes || dayData?.CardioMinutes || 0;
+    const dayAbs = dayData?.absExercise || dayData?.AbsExercise || '';
+    const dayAbsMin = dayData?.absMinutes || dayData?.AbsMinutes || 0;
+    let extrasBadges = '';
+    if (dayCardio && dayCardioMin > 0) {
+      extrasBadges += `<span style="display:inline-flex;align-items:center;gap:3px;font-size:11px;color:#e67e22;background:#fff3e0;padding:2px 8px;border-radius:10px;">&#127939; ${dayCardio} ${dayCardioMin}${t('Min')}</span>`;
+    }
+    if (dayAbs && dayAbsMin > 0) {
+      extrasBadges += `<span style="display:inline-flex;align-items:center;gap:3px;font-size:11px;color:#512BD4;background:#f3f0fc;padding:2px 8px;border-radius:10px;">&#128170; ${dayAbs} ${dayAbsMin}${t('Min')}</span>`;
+    }
+
     html += `
       <div class="day-card day-card-vertical" data-day="${dayNum}" data-has-exercises="${hasExercises}">
         <div class="day-card-header">
@@ -123,6 +136,7 @@ function renderDays(container) {
           <div class="day-card-groups">${groupNames}</div>
         </div>
         ${hasExercises ? `<div class="day-card-exercises-compact">${exerciseLines}</div>` : ''}
+        ${extrasBadges ? `<div style="display:flex;gap:6px;flex-wrap:wrap;padding:4px 0;">${extrasBadges}</div>` : ''}
         <div class="day-card-actions-bottom">
           ${!hasRoutine ? `
             <button class="btn btn-sm btn-outline" data-action="edit" data-day="${dayNum}">${t('Create')}</button>

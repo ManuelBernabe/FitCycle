@@ -111,7 +111,9 @@ function renderTemplates(container) {
         const groups = (d.muscleGroups || d.MuscleGroups || []).map(g => muscleGroup(g.name || g.Name)).join(', ');
         const exercises = d.exercises || d.Exercises || [];
 
-        if (exercises.length === 0) return '';
+        const hasCardioAbs = (d.cardioType || d.CardioType) && (d.cardioMinutes || d.CardioMinutes) > 0
+          || (d.absExercise || d.AbsExercise) && (d.absMinutes || d.AbsMinutes) > 0;
+        if (exercises.length === 0 && !hasCardioAbs) return '';
 
         const exLines = exercises.map(ex => {
           const name = ex.exerciseName || ex.ExerciseName || '';
@@ -138,10 +140,20 @@ function renderTemplates(container) {
           return `<div style="font-size:12px;padding:2px 0;">&bull; ${name} — ${sets}x${reps}${weightStr}${extraInfo}</div>`;
         }).join('');
 
+        // Cardio & Abs badges
+        const dCardio = d.cardioType || d.CardioType || '';
+        const dCardioMin = d.cardioMinutes || d.CardioMinutes || 0;
+        const dAbs = d.absExercise || d.AbsExercise || '';
+        const dAbsMin = d.absMinutes || d.AbsMinutes || 0;
+        let dayExtras = '';
+        if (dCardio && dCardioMin > 0) dayExtras += `<span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:#e67e22;background:#fff3e0;padding:1px 6px;border-radius:8px;margin-right:4px;">&#127939; ${dCardio} ${dCardioMin}${t('Min')}</span>`;
+        if (dAbs && dAbsMin > 0) dayExtras += `<span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:#512BD4;background:#f3f0fc;padding:1px 6px;border-radius:8px;">&#128170; ${dAbs} ${dAbsMin}${t('Min')}</span>`;
+
         return `
           <div style="margin-bottom:8px;">
             <div style="font-weight:600;font-size:13px;">${dayName(dayNum)}${groups ? ` (${groups})` : ''}</div>
             ${exLines}
+            ${dayExtras ? `<div style="margin-top:4px;">${dayExtras}</div>` : ''}
           </div>
         `;
       }).join('');

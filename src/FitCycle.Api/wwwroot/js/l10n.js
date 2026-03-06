@@ -443,6 +443,26 @@ const Strings = {
   TutDownloadDBDesc:   { es: 'Descarga el archivo SQLite completo',      en: 'Download the full SQLite file',     fr: 'Téléchargez le fichier SQLite complet' },
   TutImpersonate:      { es: 'Iniciar sesión como otro usuario',         en: 'Login as another user',             fr: "Se connecter en tant qu'autre utilisateur" },
   TutImpersonateDesc:  { es: 'Accede a la cuenta de otro usuario para soporte', en: 'Access another user\'s account for support', fr: "Accédez au compte d'un autre utilisateur pour le support" },
+
+  // === Cardio & Abs ===
+  Cardio:              { es: 'Cardio',                                    en: 'Cardio',                            fr: 'Cardio' },
+  CardioType:          { es: 'Tipo de cardio',                            en: 'Cardio type',                       fr: 'Type de cardio' },
+  CardioMinutes:       { es: 'Minutos de cardio',                         en: 'Cardio minutes',                    fr: 'Minutes de cardio' },
+  Abs:                 { es: 'Abdominales',                               en: 'Abs',                               fr: 'Abdominaux' },
+  AbsExercise:         { es: 'Ejercicio de abdominales',                  en: 'Abs exercise',                      fr: 'Exercice abdominaux' },
+  AbsMinutes:          { es: 'Minutos de abdominales',                    en: 'Abs minutes',                       fr: 'Minutes abdominaux' },
+  Treadmill:           { es: 'Cinta',                                     en: 'Treadmill',                         fr: 'Tapis roulant' },
+  Bike:                { es: 'Bicicleta',                                 en: 'Bike',                              fr: 'Vélo' },
+  Elliptical:          { es: 'Elíptica',                                  en: 'Elliptical',                        fr: 'Elliptique' },
+  Rowing:              { es: 'Remo',                                      en: 'Rowing',                            fr: 'Rameur' },
+  Stairmaster:         { es: 'Escaladora',                                en: 'Stairmaster',                       fr: 'Escalier' },
+  Crunch:              { es: 'Crunch',                                    en: 'Crunch',                            fr: 'Crunch' },
+  Plank:               { es: 'Plancha',                                   en: 'Plank',                             fr: 'Planche' },
+  LegRaise:            { es: 'Elevación piernas',                         en: 'Leg Raise',                         fr: 'Relevé de jambes' },
+  RussianTwist:        { es: 'Russian twist',                             en: 'Russian Twist',                     fr: 'Russian Twist' },
+  AbWheel:             { es: 'Ab Wheel',                                  en: 'Ab Wheel',                          fr: 'Ab Wheel' },
+  Other:               { es: 'Otro',                                      en: 'Other',                             fr: 'Autre' },
+  Min:                 { es: 'min',                                       en: 'min',                               fr: 'min' },
 };
 
 // DayOfWeek in .NET: Sunday=0 ... Saturday=6

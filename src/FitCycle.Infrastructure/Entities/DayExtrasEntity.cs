@@ -1,10 +1,10 @@
-namespace FitCycle.Core.Models;
+namespace FitCycle.Infrastructure.Entities;
 
-public class DayRoutine
+public class DayExtrasEntity
 {
+    public int Id { get; set; }
+    public int UserId { get; set; }
     public DayOfWeek Day { get; set; }
-    public List<MuscleGroup> MuscleGroups { get; set; } = [];
-    public List<RoutineExercise> Exercises { get; set; } = [];
     public string CardioType { get; set; } = string.Empty;
     public int CardioMinutes { get; set; }
     public string AbsExercise { get; set; } = string.Empty;

@@ -17,6 +17,7 @@ public class FitCycleDbContext : DbContext
     public DbSet<WorkoutExerciseLog> WorkoutExerciseLogs => Set<WorkoutExerciseLog>();
     public DbSet<BodyMeasurement> BodyMeasurements => Set<BodyMeasurement>();
     public DbSet<RoutineTemplateEntity> RoutineTemplates => Set<RoutineTemplateEntity>();
+    public DbSet<DayExtrasEntity> DayExtras => Set<DayExtrasEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -91,6 +92,15 @@ public class FitCycleDbContext : DbContext
             e.Property(u => u.RefreshToken).HasMaxLength(256);
             e.Property(u => u.IsActive).HasDefaultValue(true);
             e.Property(u => u.ActivationToken).HasMaxLength(128);
+        });
+
+        // DayExtras (cardio/abs per day)
+        modelBuilder.Entity<DayExtrasEntity>(e =>
+        {
+            e.HasKey(d => d.Id);
+            e.HasIndex(d => new { d.UserId, d.Day }).IsUnique();
+            e.Property(d => d.CardioType).HasMaxLength(100);
+            e.Property(d => d.AbsExercise).HasMaxLength(100);
         });
 
         // RoutineTemplate
