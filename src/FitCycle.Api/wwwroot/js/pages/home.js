@@ -39,6 +39,9 @@ export function render() {
         <button id="home-go-stats" class="btn btn-outline btn-block home-secondary-btn" style="margin-top:10px;">
           ${t('ViewStats')}
         </button>
+        <button id="home-go-tutorial" class="btn btn-outline btn-block home-secondary-btn" style="margin-top:10px;color:#512BD4;border-color:#512BD4;">
+          📖 ${t('UserGuide')}
+        </button>
       </div>
     </div>
   `;
@@ -50,6 +53,9 @@ export async function mount() {
   });
   document.getElementById('home-go-stats')?.addEventListener('click', () => {
     location.hash = '#stats';
+  });
+  document.getElementById('home-go-tutorial')?.addEventListener('click', () => {
+    location.hash = '#tutorial';
   });
 
   // Load stats async

@@ -312,6 +312,59 @@ const Strings = {
   ConfirmRestoreDouble:{ es: '¿Estás seguro? Esta acción reemplazará toda la base de datos.', en: 'Are you sure? This will replace the entire database.', fr: 'Êtes-vous sûr ? Cela remplacera toute la base de données.' },
   NoBackups:           { es: 'No hay backups disponibles',               en: 'No backups available',              fr: 'Aucune sauvegarde disponible' },
   Download:            { es: 'Descargar',                                en: 'Download',                          fr: 'Télécharger' },
+
+  // === Tutorial / User Guide ===
+  UserGuide:           { es: 'Guía de uso',                              en: 'User Guide',                        fr: "Guide d'utilisation" },
+  TutorialTitle:       { es: 'Guía de uso de FitCycle',                  en: 'FitCycle User Guide',               fr: "Guide d'utilisation FitCycle" },
+  TutorialSubtitle:    { es: 'Aprende a sacar el máximo partido a la app', en: 'Learn how to get the most out of the app', fr: "Apprenez à tirer le meilleur parti de l'app" },
+  TutStep:             { es: 'Paso',                                     en: 'Step',                              fr: 'Étape' },
+  BackToHome:          { es: 'Volver al inicio',                         en: 'Back to Home',                      fr: "Retour à l'accueil" },
+
+  TutWelcomeTitle:     { es: 'Bienvenido a FitCycle',                    en: 'Welcome to FitCycle',               fr: 'Bienvenue sur FitCycle' },
+  TutWelcomeDesc:      { es: 'FitCycle es tu compañero de entrenamiento personal. Organiza tu rutina semanal, registra cada serie con peso y repeticiones, y sigue tu progreso con estadísticas detalladas. Funciona sin conexión gracias al modo offline.', en: 'FitCycle is your personal workout companion. Organize your weekly routine, log every set with weight and reps, and track your progress with detailed stats. Works offline too.', fr: "FitCycle est votre compagnon d'entraînement personnel. Organisez votre routine hebdomadaire, enregistrez chaque série avec poids et répétitions, et suivez vos progrès avec des statistiques détaillées. Fonctionne aussi hors ligne." },
+  TutWelcomeMockup:    { es: 'Tu entrenamiento, tu ritmo',               en: 'Your workout, your rhythm',         fr: 'Votre entraînement, votre rythme' },
+
+  TutRegisterTitle:    { es: 'Registro y activación',                    en: 'Registration & activation',         fr: "Inscription et activation" },
+  TutRegisterDesc:     { es: 'Crea tu cuenta con usuario, email y contraseña. Recibirás un email para activar tu cuenta. Haz clic en el enlace del email y ya podrás iniciar sesión.', en: 'Create your account with username, email and password. You will receive an activation email. Click the link and you can sign in.', fr: "Créez votre compte avec nom d'utilisateur, email et mot de passe. Vous recevrez un email d'activation. Cliquez sur le lien et connectez-vous." },
+  TutRegisterTip:      { es: 'La contraseña debe tener al menos 8 caracteres, mayúscula, minúscula, número y carácter especial.', en: 'Password must have at least 8 characters, uppercase, lowercase, number and special character.', fr: 'Le mot de passe doit contenir au moins 8 caractères, une majuscule, une minuscule, un chiffre et un caractère spécial.' },
+
+  TutHomeTitle:        { es: 'Pantalla de inicio',                       en: 'Home Screen',                       fr: "Écran d'accueil" },
+  TutHomeDesc:         { es: 'Desde el inicio ves tus stats rápidos: entrenamientos totales, racha actual y último entrenamiento. Accede directamente a tus rutinas o estadísticas.', en: 'From the home screen you see quick stats: total workouts, current streak and last workout. Jump straight to routines or stats.', fr: "Depuis l'accueil vous voyez vos stats rapides : entraînements totaux, série en cours et dernier entraînement. Accédez directement aux routines ou statistiques." },
+
+  TutRoutinesTitle:    { es: 'Crea tu rutina semanal',                   en: 'Create your weekly routine',        fr: 'Créez votre routine hebdomadaire' },
+  TutRoutinesDesc:     { es: 'Organiza tu semana asignando grupos musculares a cada día. Puedes configurar los 7 días de la semana y dejar días de descanso vacíos.', en: 'Organize your week by assigning muscle groups to each day. Configure all 7 days and leave rest days empty.', fr: "Organisez votre semaine en assignant des groupes musculaires à chaque jour. Configurez les 7 jours et laissez les jours de repos vides." },
+  TutRoutinesTip:      { es: 'Toca un día para editarlo. Puedes añadir varios grupos musculares al mismo día.', en: 'Tap a day to edit it. You can add multiple muscle groups to the same day.', fr: "Appuyez sur un jour pour le modifier. Vous pouvez ajouter plusieurs groupes musculaires au même jour." },
+  TutChest:            { es: 'Pecho',                                    en: 'Chest',                             fr: 'Poitrine' },
+  TutTriceps:          { es: 'Tríceps',                                  en: 'Triceps',                           fr: 'Triceps' },
+  TutBack:             { es: 'Espalda',                                  en: 'Back',                              fr: 'Dos' },
+  TutBiceps:           { es: 'Bíceps',                                   en: 'Biceps',                            fr: 'Biceps' },
+  TutLegs:             { es: 'Piernas',                                  en: 'Legs',                              fr: 'Jambes' },
+  TutGlutes:           { es: 'Glúteos',                                  en: 'Glutes',                            fr: 'Fessiers' },
+
+  TutExercisesTitle:   { es: 'Configura tus ejercicios',                 en: 'Configure your exercises',          fr: 'Configurez vos exercices' },
+  TutExercisesDesc:    { es: 'Para cada ejercicio, configura el número de series con repeticiones y peso individual por serie. Opcionalmente añade tempo, agrupa en supersets o añade notas.', en: 'For each exercise, set the number of sets with individual reps and weight per set. Optionally add tempo, group into supersets or add notes.', fr: "Pour chaque exercice, définissez le nombre de séries avec répétitions et poids individuels par série. Ajoutez optionnellement un tempo, groupez en supersets ou ajoutez des notes." },
+  TutExercisesTip:     { es: 'Cada serie puede tener su propio peso y repeticiones. Ideal para pirámides o drop sets.', en: 'Each set can have its own weight and reps. Ideal for pyramids or drop sets.', fr: 'Chaque série peut avoir son propre poids et ses répétitions. Idéal pour les pyramides ou drop sets.' },
+
+  TutWorkoutTitle:     { es: 'Entrena',                                  en: 'Work Out',                          fr: 'Entraînez-vous' },
+  TutWorkoutDesc:      { es: 'Inicia el entrenamiento del día y registra cada serie. Ajusta repeticiones y peso en tiempo real. Un temporizador de descanso de 90 segundos te ayuda a mantener el ritmo.', en: 'Start your daily workout and log each set. Adjust reps and weight in real time. A 90-second rest timer helps you keep pace.', fr: "Commencez votre entraînement du jour et enregistrez chaque série. Ajustez les répétitions et le poids en temps réel. Un minuteur de repos de 90 secondes vous aide à garder le rythme." },
+  TutCurrentExercise:  { es: 'Ejercicio actual',                         en: 'Current exercise',                  fr: 'Exercice en cours' },
+  TutLogSet:           { es: 'Registrar serie',                          en: 'Log set',                           fr: 'Enregistrer série' },
+  TutRestTimer:        { es: 'Descanso',                                 en: 'Rest',                              fr: 'Repos' },
+
+  TutSummaryTitle:     { es: 'Resumen del entrenamiento',                en: 'Workout Summary',                   fr: "Résumé de l'entraînement" },
+  TutSummaryDesc:      { es: 'Al terminar, ve un resumen completo: duración, ejercicios, series totales y récords personales. También un desglose por ejercicio con cada serie registrada.', en: 'After finishing, see a full summary: duration, exercises, total sets and personal records. Plus a per-exercise breakdown with every logged set.', fr: "Après l'entraînement, consultez un résumé complet : durée, exercices, séries totales et records personnels. Plus un détail par exercice avec chaque série enregistrée." },
+  TutWorkoutComplete:  { es: '¡Entrenamiento completado!',               en: 'Workout Complete!',                 fr: 'Entraînement terminé !' },
+
+  TutStatsTitle:       { es: 'Estadísticas',                             en: 'Statistics',                        fr: 'Statistiques' },
+  TutStatsDesc:        { es: 'Consulta tus estadísticas generales: entrenamientos totales, series, repeticiones y racha. Visualiza tu actividad semanal con gráficos de barras y revisa el historial completo.', en: 'View your overall stats: total workouts, sets, reps and streak. See your weekly activity with bar charts and review your full history.', fr: "Consultez vos statistiques globales : entraînements totaux, séries, répétitions et série. Visualisez votre activité hebdomadaire avec des graphiques à barres et consultez l'historique complet." },
+  TutWeeklyChart:      { es: 'Actividad semanal',                        en: 'Weekly activity',                   fr: 'Activité hebdomadaire' },
+
+  TutMeasurementsTitle:{ es: 'Medidas corporales',                       en: 'Body Measurements',                 fr: 'Mensurations corporelles' },
+  TutMeasurementsDesc: { es: 'Registra tus medidas: peso, altura, pecho, cintura, caderas, bíceps, muslos, gemelos, cuello y porcentaje de grasa. La app calcula tu IMC automáticamente y muestra gráficas de evolución.', en: 'Log your measurements: weight, height, chest, waist, hips, biceps, thighs, calves, neck and body fat. The app calculates BMI automatically and shows progress charts.', fr: "Enregistrez vos mensurations : poids, taille, poitrine, tour de taille, hanches, biceps, cuisses, mollets, cou et masse grasse. L'app calcule l'IMC automatiquement et affiche des graphiques d'évolution." },
+  TutMeasurementsTip:  { es: 'Añade medidas regularmente para ver tu evolución',  en: 'Add measurements regularly to see your progress', fr: 'Ajoutez des mesures régulièrement pour voir votre évolution' },
+
+  TutAccountTitle:     { es: 'Cuenta y ajustes',                         en: 'Account & Settings',                fr: 'Compte et paramètres' },
+  TutAccountDesc:      { es: 'Edita tu perfil (nombre, email), cambia el idioma de la app entre español, inglés y francés, y cierra sesión cuando quieras. Los administradores también tienen acceso al panel de control.', en: 'Edit your profile (name, email), change the app language between Spanish, English and French, and log out anytime. Admins also have access to the control panel.', fr: "Modifiez votre profil (nom, email), changez la langue de l'app entre espagnol, anglais et français, et déconnectez-vous à tout moment. Les administrateurs ont aussi accès au panneau de contrôle." },
 };
 
 // DayOfWeek in .NET: Sunday=0 ... Saturday=6
