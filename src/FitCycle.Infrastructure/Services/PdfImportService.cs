@@ -812,7 +812,9 @@ public static class LocalPdfParser
                 continue;
             }
 
-            // FASE POSITIVA: N seg
+            // FASE POSITIVA / NEGATIVA / AGARRE — can appear on same line
+            bool matchedTempoGrip = false;
+
             var tpMatch = Regex.Match(line,
                 @"(?:FASE\s+POSITIVA|CONC[EÉ]NTRIC[AO])\s*[:\s]*(\d+)",
                 RegexOptions.IgnoreCase);
@@ -820,10 +822,9 @@ public static class LocalPdfParser
             {
                 var val = int.Parse(tpMatch.Groups[1].Value);
                 foreach (var s in current.Sets) s.TempoPos = val;
-                continue;
+                matchedTempoGrip = true;
             }
 
-            // FASE NEGATIVA: N seg
             var tnMatch = Regex.Match(line,
                 @"(?:FASE\s+NEGATIVA|EXC[EÉ]NTRIC[AO])\s*[:\s]*(\d+)",
                 RegexOptions.IgnoreCase);
@@ -831,8 +832,20 @@ public static class LocalPdfParser
             {
                 var val = int.Parse(tnMatch.Groups[1].Value);
                 foreach (var s in current.Sets) s.TempoNeg = val;
-                continue;
+                matchedTempoGrip = true;
             }
+
+            var gripMatch = Regex.Match(line,
+                @"(?:AGARRE|GRIP)\s*[:\s]+\s*(prono|supino|neutro)",
+                RegexOptions.IgnoreCase);
+            if (gripMatch.Success)
+            {
+                var grip = gripMatch.Groups[1].Value.ToLower();
+                foreach (var s in current.Sets) s.Grip = grip;
+                matchedTempoGrip = true;
+            }
+
+            if (matchedTempoGrip) continue;
 
             // SERIES: N
             var seriesMatch = Regex.Match(line, @"(?:SERIES?|SETS?)\s*[:\s]*(\d+)",
@@ -882,6 +895,7 @@ public static class LocalPdfParser
         if (lower.Contains("reps") || lower.Contains("repeticion")) hits++;
         if (lower.Contains("fase")) hits++;
         if (lower.Contains("positiva") || lower.Contains("negativa")) hits++;
+        if (lower.Contains("agarre") || lower.Contains("grip")) hits++;
         return hits >= 2;
     }
 
@@ -905,11 +919,15 @@ public static class LocalPdfParser
         // Second number is reps — should be reasonable (1-100)
         if (numbers[1] < 1 || numbers[1] > 100) return null;
 
+        // Extract grip text (prono/supino/neutro) from the row
+        var gripMatch = Regex.Match(trimmed, @"(prono|supino|neutro)", RegexOptions.IgnoreCase);
+
         return new PdfSet
         {
             Reps = numbers[1],
             TempoPos = numbers.Count > 2 ? numbers[2] : 0,
             TempoNeg = numbers.Count > 3 ? numbers[3] : 0,
+            Grip = gripMatch.Success ? gripMatch.Groups[1].Value.ToLower() : "",
         };
     }
 
