@@ -587,8 +587,8 @@ app.MapPost("/templates", (SaveTemplateRequest req, IRoutineRepository repo, Fit
     var week = repo.GetWeekRoutine(req.SourceUserId);
     var days = week?.Days ?? [];
 
-    if (days.Count == 0)
-        return Results.BadRequest(new { error = "El usuario no tiene rutinas." });
+    if (!days.Any(d => d.Exercises.Count > 0))
+        return Results.BadRequest(new { error = "El usuario no tiene rutinas configuradas." });
 
     var json = JsonSerializer.Serialize(week);
 

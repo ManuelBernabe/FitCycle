@@ -187,10 +187,12 @@ async function showSaveModal() {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay modal-centered';
 
+  const currentUserId = auth.getUserId();
   const userOptions = (users || []).map(u => {
     const uid = u.id || u.Id;
     const uname = u.username || u.Username;
-    return `<option value="${uid}">${uname}</option>`;
+    const sel = String(uid) === String(currentUserId) ? ' selected' : '';
+    return `<option value="${uid}"${sel}>${uname}</option>`;
   }).join('');
 
   overlay.innerHTML = `
@@ -262,10 +264,12 @@ async function showApplyModal(templateId, templateName) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay modal-centered';
 
+  const currentUserId = auth.getUserId();
   const userOptions = (users || []).map(u => {
     const uid = u.id || u.Id;
     const uname = u.username || u.Username;
-    return `<option value="${uid}">${uname}</option>`;
+    const sel = String(uid) === String(currentUserId) ? ' selected' : '';
+    return `<option value="${uid}"${sel}>${uname}</option>`;
   }).join('');
 
   overlay.innerHTML = `
@@ -300,7 +304,7 @@ async function showApplyModal(templateId, templateName) {
     try {
       const result = await api.post(`/templates/${templateId}/apply`, { targetUserId });
       if (result?.success) {
-        if (statusEl) { statusEl.style.color = '#28a745'; statusEl.textContent = t('TemplateApplied'); }
+        if (statusEl) { statusEl.style.color = '#28a745'; statusEl.textContent = result.message || t('TemplateApplied'); }
         setTimeout(() => overlay.remove(), 2000);
       } else {
         if (statusEl) { statusEl.style.color = '#dc3545'; statusEl.textContent = result?.error || 'Error'; }
