@@ -107,7 +107,25 @@ function renderTemplates(container) {
           const name = ex.exerciseName || ex.ExerciseName || '';
           const sets = ex.sets || ex.Sets || 0;
           const reps = ex.reps || ex.Reps || 0;
-          return `<div style="font-size:12px;padding:2px 0;">&bull; ${name} — ${sets}x${reps}</div>`;
+          const weight = ex.weight || ex.Weight || 0;
+          const rawSD = ex.setDetails || ex.SetDetails || '';
+          let details = null;
+          try { if (rawSD) details = typeof rawSD === 'string' ? JSON.parse(rawSD) : rawSD; } catch (e) { /* */ }
+
+          let extraInfo = '';
+          if (Array.isArray(details) && details.length > 0) {
+            const tp = details[0].tempoPos || 0;
+            const tn = details[0].tempoNeg || 0;
+            const grip = details[0].grip || '';
+            if (tp > 0 || tn > 0) extraInfo += ` <span style="font-size:10px;color:#512BD4;background:#f3f0fc;padding:1px 4px;border-radius:4px;">&#8593;${tp}s ${t('TempoAsc')} &#8595;${tn}s ${t('TempoDesc')}</span>`;
+            if (grip) {
+              const gripKey = 'Grip' + grip.charAt(0).toUpperCase() + grip.slice(1).toLowerCase();
+              extraInfo += ` <span style="font-size:10px;color:#e67e22;background:#fff3e0;padding:1px 4px;border-radius:4px;">&#9994; ${t(gripKey) || grip}</span>`;
+            }
+          }
+
+          const weightStr = weight > 0 ? ` @${weight}kg` : '';
+          return `<div style="font-size:12px;padding:2px 0;">&bull; ${name} — ${sets}x${reps}${weightStr}${extraInfo}</div>`;
         }).join('');
 
         return `

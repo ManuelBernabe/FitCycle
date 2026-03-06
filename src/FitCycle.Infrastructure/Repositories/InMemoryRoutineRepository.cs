@@ -123,8 +123,7 @@ public class InMemoryRoutineRepository : IRoutineRepository
 
     public DayRoutine SetDayRoutine(DayOfWeek day, List<int> muscleGroupIds, List<RoutineExerciseInput> exercises, int userId)
     {
-        if (day is DayOfWeek.Saturday or DayOfWeek.Sunday)
-            throw new ArgumentException("Solo se permiten días de lunes a viernes.");
+        // All 7 days supported
 
         var validMgIds = muscleGroupIds
             .Where(id => _muscleGroups.Any(mg => mg.Id == id))

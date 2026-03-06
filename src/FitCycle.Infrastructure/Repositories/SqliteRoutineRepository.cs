@@ -412,7 +412,7 @@ public class SqliteRoutineRepository : IRoutineRepository
         var validDays = new[]
         {
             DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday,
-            DayOfWeek.Thursday, DayOfWeek.Friday
+            DayOfWeek.Thursday, DayOfWeek.Friday, DayOfWeek.Saturday, DayOfWeek.Sunday
         };
 
         var days = validDays.Select(d => BuildDayRoutine(d, userId)).OrderBy(d => d.Day).ToList();
@@ -423,8 +423,7 @@ public class SqliteRoutineRepository : IRoutineRepository
 
     public DayRoutine SetDayRoutine(DayOfWeek day, List<int> muscleGroupIds, List<RoutineExerciseInput> exercises, int userId)
     {
-        if (day is DayOfWeek.Saturday or DayOfWeek.Sunday)
-            throw new ArgumentException("Solo se permiten días de lunes a viernes.");
+        // All 7 days supported
 
         // Remove existing assignments
         var existingMg = _db.DayMuscleGroups.Where(d => d.Day == day && d.UserId == userId);
