@@ -34,12 +34,22 @@ async function loadTemplates() {
   const container = document.getElementById('templates-list');
   if (!container) return;
 
+  // Preserve scroll position during reload
+  const page = container.closest('.page');
+  const scrollY = page ? page.scrollTop : window.scrollY;
+
   try {
     templates = await api.get('/templates');
     renderTemplates(container);
   } catch (err) {
     container.innerHTML = `<div class="empty-state"><div class="empty-state-text">${t('ErrorFmt', err.message)}</div></div>`;
   }
+
+  // Restore scroll position
+  requestAnimationFrame(() => {
+    if (page && page.scrollTop !== undefined) page.scrollTop = scrollY;
+    else window.scrollTo(0, scrollY);
+  });
 }
 
 function renderTemplates(container) {
