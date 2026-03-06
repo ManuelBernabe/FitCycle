@@ -45,15 +45,15 @@ export async function mount() {
     html += `
       <div class="stat-grid mb-16">
         <div class="stat-card">
-          <div class="stat-value" style="color:#512BD4;">${stats.totalWorkouts}</div>
+          <div class="stat-value" >${stats.totalWorkouts}</div>
           <div class="stat-label">${t('Workouts')}</div>
         </div>
         <div class="stat-card">
-          <div class="stat-value" style="color:#512BD4;">${stats.totalSets}</div>
+          <div class="stat-value" >${stats.totalSets}</div>
           <div class="stat-label">${t('TotalSets')}</div>
         </div>
         <div class="stat-card">
-          <div class="stat-value" style="color:#512BD4;">${formatNumber(stats.totalReps)}</div>
+          <div class="stat-value" >${formatNumber(stats.totalReps)}</div>
           <div class="stat-label">${t('TotalReps')}</div>
         </div>
       </div>
@@ -175,12 +175,12 @@ export async function mount() {
           let details = null;
           try { if (rawDetails) details = JSON.parse(rawDetails); } catch (e) { /* */ }
           if (Array.isArray(details) && details.length > 0) {
-            setInfo = details.map((s, i) => `S${i + 1}: ${s.reps}r/${s.weight > 0 ? '<span style="color:#28a745;font-weight:600">' + s.weight + 'kg</span>' : '-'}`).join(' | ');
+            setInfo = details.map((s, i) => `S${i + 1}: ${s.reps}r/${s.weight > 0 ? '<span class="weight-val">' + s.weight + 'kg</span>' : '-'}`).join(' | ');
           } else {
             const logSets = log.sets || log.Sets || 0;
             const logReps = log.reps || log.Reps || 0;
             const logWeight = log.weight || log.Weight || 0;
-            setInfo = `${logSets}x${logReps}${logWeight > 0 ? ' @ <span style="color:#28a745;font-weight:600">' + logWeight + ' ' + t('WeightKg') + '</span>' : ''}`;
+            setInfo = `${logSets}x${logReps}${logWeight > 0 ? ' @ <span class="weight-val">' + logWeight + ' ' + t('WeightKg') + '</span>' : ''}`;
           }
           return `<div style="margin-bottom:4px;">&bull; <b>${logName}</b> — ${setInfo}${logMg ? ` <span style="font-size:11px;color:#512BD4;">(${logMg})</span>` : ''}</div>`;
         }).join('');

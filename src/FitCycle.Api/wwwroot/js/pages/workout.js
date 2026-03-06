@@ -155,8 +155,8 @@ function buildExerciseList() {
           <div class="exercise-list-name">${name}</div>
           <div class="exercise-list-meta">${mgTranslate(muscle)} · ${totalSets}s${maxWeight > 0 ? ` · ${maxWeight}kg` : ''}</div>
         </div>
-        ${isDone ? '<div style="color:#28a745;font-size:16px;">&#10003;</div>' : ''}
-        ${isCurrent ? '<div style="color:#512BD4;font-size:12px;font-weight:600;">&#9654;</div>' : ''}
+        ${isDone ? '<div class="done-check">&#10003;</div>' : ''}
+        ${isCurrent ? '<div class="current-arrow">&#9654;</div>' : ''}
       </div>
     `;
   }).join('');

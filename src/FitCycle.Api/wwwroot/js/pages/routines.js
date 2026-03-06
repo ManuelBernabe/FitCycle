@@ -12,7 +12,7 @@ export function render() {
       <div class="page-content">
         <div class="flex items-center justify-between">
           <div class="section-title">${t('MyWeeklyRoutine')}</div>
-          ${auth.isAdmin() ? `<div style="display:flex;gap:6px;"><button id="import-pdf-btn" class="btn btn-sm btn-outline" style="color:#512BD4;font-size:12px;">&#128196; ${t('ImportPdf')}</button><button id="copy-routines-btn" class="btn btn-sm btn-outline" style="color:#512BD4;font-size:12px;">&#128203; ${t('CopyRoutines')}</button></div>` : ''}
+          ${auth.isAdmin() ? `<div class="flex gap-4"><button id="import-pdf-btn" class="btn btn-sm btn-outline" style="font-size:12px;">&#128196; ${t('ImportPdf')}</button><button id="copy-routines-btn" class="btn btn-sm btn-outline" style="font-size:12px;">&#128203; ${t('CopyRoutines')}</button></div>` : ''}
         </div>
         <div class="section-subtitle">${t('ConfigureWeekly')}</div>
         <div id="routines-list">
@@ -84,15 +84,15 @@ function renderDays(container) {
         const hasVaryingWeight = new Set(details.map(s => s.weight)).size > 1;
         if (hasVaryingWeight) {
           // Show per-set weights compactly
-          setInfo = details.map(s => `${s.weight > 0 ? '<span style="color:#28a745;font-weight:600">' + s.weight + 'kg</span>' : '-'}`).join('/');
+          setInfo = details.map(s => `${s.weight > 0 ? '<span class="weight-val">' + s.weight + 'kg</span>' : '-'}`).join('/');
           setInfo = `<span class="exercise-meta">${details.length}S ${details[0].reps}r [${setInfo}]</span>`;
         } else {
           const w = details[0].weight || weight;
-          setInfo = `<span class="exercise-meta">${details.length}x${details[0].reps}${w > 0 ? ' @<span style="color:#28a745;font-weight:600">' + w + 'kg</span>' : ''}</span>`;
+          setInfo = `<span class="exercise-meta">${details.length}x${details[0].reps}${w > 0 ? ' @<span class="weight-val">' + w + 'kg</span>' : ''}</span>`;
         }
       } else {
         const weightStr = weight > 0 ? ` @${weight}kg` : '';
-        setInfo = `<span class="exercise-meta">${sets}x${reps}${weight > 0 ? ' @<span style="color:#28a745;font-weight:600">' + weight + 'kg</span>' : ''}</span>`;
+        setInfo = `<span class="exercise-meta">${sets}x${reps}${weight > 0 ? ' @<span class="weight-val">' + weight + 'kg</span>' : ''}</span>`;
       }
 
       // Tempo info from setDetails
@@ -100,16 +100,16 @@ function renderDays(container) {
       if (Array.isArray(details) && details.length > 0) {
         const tp = details[0].tempoPos || 0;
         const tn = details[0].tempoNeg || 0;
-        if (tp > 0 || tn > 0) tempoInfo = `<span style="font-size:10px;color:#512BD4;" title="${t('TempoAscFull')} / ${t('TempoDescFull')}">&#9201; ${tp}s&#8593;${t('TempoAsc')} ${tn}s&#8595;${t('TempoDesc')}</span>`;
+        if (tp > 0 || tn > 0) tempoInfo = `<span class="tempo-info" title="${t('TempoAscFull')} / ${t('TempoDescFull')}">&#9201; ${tp}s&#8593;${t('TempoAsc')} ${tn}s&#8595;${t('TempoDesc')}</span>`;
         const grip = details[0].grip || '';
-        if (grip) tempoInfo += ` <span style="font-size:10px;color:#e67e22;" title="${t('Grip')}">&#9994; ${t('Grip' + grip.charAt(0).toUpperCase() + grip.slice(1).toLowerCase()) || grip}</span>`;
+        if (grip) tempoInfo += ` <span class="grip-info" title="${t('Grip')}">&#9994; ${t('Grip' + grip.charAt(0).toUpperCase() + grip.slice(1).toLowerCase()) || grip}</span>`;
       }
 
       const exNotes = e.notes || e.Notes || '';
-      const notesIcon = exNotes ? '<span style="font-size:10px;color:#e67e22;" title="' + exNotes.replace(/"/g, '&quot;') + '">&#128221;</span>' : '';
+      const notesIcon = exNotes ? '<span class="notes-icon" title="' + exNotes.replace(/"/g, '&quot;') + '">&#128221;</span>' : '';
 
       const ssGroup = e.supersetGroup || e.SupersetGroup || 0;
-      const ssIcon = ssGroup > 0 ? `<span style="color:#e67e22;font-weight:bold;font-size:10px;" title="Superset #${ssGroup}">&#8644;</span> ` : '';
+      const ssIcon = ssGroup > 0 ? `<span class="superset-icon" title="Superset #${ssGroup}">&#8644;</span> ` : '';
       return `<div class="exercise-line-compact">
         <div class="ex-name-line">${ssIcon}${name} ${notesIcon}</div>
         <div class="ex-detail-line">${setInfo} ${tempoInfo} ${mgTag}</div>
@@ -117,7 +117,7 @@ function renderDays(container) {
     }).join('');
 
     html += `
-      <div class="day-card day-card-vertical" data-day="${dayNum}">
+      <div class="day-card day-card-vertical" data-day="${dayNum}" data-has-exercises="${hasExercises}">
         <div class="day-card-header">
           <div class="day-card-name">${dayName(dayNum)}</div>
           <div class="day-card-groups">${groupNames}</div>
