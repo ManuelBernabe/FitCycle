@@ -203,10 +203,10 @@ function renderExercise() {
   }).join('');
 
   container.innerHTML = `
+    <button id="workout-back" class="floating-back-btn">${t('Back')}</button>
     <div class="page-content" style="padding-top:8px;">
       <div class="flex items-center justify-between" style="margin-bottom:4px;">
-        <button id="workout-back" class="btn btn-ghost" style="padding:4px 8px;font-size:13px;">${t('Back')}</button>
-        <button id="toggle-exercise-list" class="btn btn-ghost" style="font-size:12px;color:#512BD4;padding:4px 8px;">
+        <button id="toggle-exercise-list" class="btn btn-ghost text-primary" style="font-size:12px;padding:4px 8px;">
           ${showExerciseList ? '&#9650; ' + t('Exercises') : '&#9660; ' + t('Exercises')} (${exercises.length})
         </button>
         <div class="status-text" style="font-size:12px;">${dayName(dayNum)}</div>
