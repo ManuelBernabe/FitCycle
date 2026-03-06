@@ -3,6 +3,7 @@
 import { t } from '../l10n.js';
 import { api } from '../api.js';
 import { auth } from '../auth.js';
+import { escapeHtml, showAlert, showConfirm } from '../utils.js';
 
 const QUICK_QUERIES = [
   { label: 'Usuarios', sql: 'SELECT Id, Username, Email, Role, CreatedAt FROM Users ORDER BY Id' },
@@ -146,11 +147,7 @@ function displayResults(result, container, statusEl) {
   `;
 }
 
-function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
-}
+// escapeHtml moved to utils.js
 
 // ── Backups ──
 
@@ -191,7 +188,7 @@ async function loadBackups() {
         try {
           await api.downloadBlob(`/admin/backup/download/${name}`, name);
         } catch (err) {
-          alert(t('ErrorFmt', err.message));
+          await showAlert(t('ErrorFmt', err.message));
         }
       });
     });
@@ -200,8 +197,8 @@ async function loadBackups() {
     container.querySelectorAll('[data-restore-backup]').forEach(btn => {
       btn.addEventListener('click', async () => {
         const name = btn.dataset.restoreBackup;
-        if (!confirm(t('ConfirmRestore', name))) return;
-        if (!confirm(t('ConfirmRestoreDouble'))) return;
+        if (!await showConfirm(t('ConfirmRestore', name))) return;
+        if (!await showConfirm(t('ConfirmRestoreDouble'))) return;
 
         const statusEl = document.getElementById('admin-status');
         try {

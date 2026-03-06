@@ -2,6 +2,7 @@
 
 import { t, dayName } from '../l10n.js';
 import { api } from '../api.js';
+import { escapeHtml } from '../utils.js';
 
 export function render() {
   const raw = sessionStorage.getItem('workout_summary');
@@ -76,7 +77,7 @@ export function render() {
             <div class="exercise-row">
               <div class="exercise-img">&#127947;</div>
               <div class="exercise-info">
-                <div class="exercise-name">${ex.exerciseName}${ex.muscleGroupName ? ` <span class="text-primary" style="font-size:11px;">(${ex.muscleGroupName})</span>` : ''}</div>
+                <div class="exercise-name">${escapeHtml(ex.exerciseName)}${ex.muscleGroupName ? ` <span class="text-primary" style="font-size:11px;">(${escapeHtml(ex.muscleGroupName)})</span>` : ''}</div>
                 <div class="exercise-detail">${setInfo}</div>
               </div>
             </div>
@@ -107,7 +108,7 @@ export async function mount() {
         if (prContainer) {
           prContainer.style.display = 'block';
           prContainer.innerHTML = prs.map(pr =>
-            `<div style="font-size:14px;font-weight:600;">${t('PRExercise', pr.name, pr.weight)}</div>`
+            `<div style="font-size:14px;font-weight:600;">${t('PRExercise', escapeHtml(pr.name), pr.weight)}</div>`
           ).join('');
         }
       }
@@ -125,9 +126,10 @@ export async function mount() {
 
         chartContainer.innerHTML = stats.weeklyData.map(w => {
           const barWidth = maxCount > 0 ? Math.max((w.count / maxCount * 100), w.count > 0 ? 5 : 0) : 0;
+          const weekLabel = w.week === 'week_0' ? t('ThisWeek') : (() => { const m = w.week.match(/^week_(\d+)$/); return m ? t('WeeksAgo', parseInt(m[1]) + 1) : w.week; })();
           return `
             <div class="bar-row">
-              <div class="bar-label">${w.week}</div>
+              <div class="bar-label">${weekLabel}</div>
               <div class="bar-track">
                 <div class="bar-fill" style="width:${barWidth.toFixed(0)}%"></div>
               </div>

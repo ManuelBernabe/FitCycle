@@ -3,6 +3,7 @@
 import { t, dayName, muscleGroup } from '../l10n.js';
 import { api } from '../api.js';
 import { auth } from '../auth.js';
+import { escapeHtml, showAlert, showConfirm } from '../utils.js';
 
 let weekData = null;
 
@@ -111,7 +112,7 @@ function renderDays(container) {
       const ssGroup = e.supersetGroup || e.SupersetGroup || 0;
       const ssIcon = ssGroup > 0 ? `<span class="superset-icon" title="Superset #${ssGroup}">&#8644;</span> ` : '';
       return `<div class="exercise-line-compact">
-        <div class="ex-name-line">${ssIcon}${name} ${notesIcon}</div>
+        <div class="ex-name-line">${ssIcon}${escapeHtml(name)} ${notesIcon}</div>
         <div class="ex-detail-line">${setInfo} ${tempoInfo} ${mgTag}</div>
       </div>`;
     }).join('');
@@ -124,10 +125,10 @@ function renderDays(container) {
     const dayAbsReps = dayData?.absReps || dayData?.AbsReps || 0;
     let extrasBadges = '';
     if (dayCardio && dayCardioMin > 0) {
-      extrasBadges += `<span style="display:inline-flex;align-items:center;gap:3px;font-size:11px;color:#e67e22;background:#fff3e0;padding:2px 8px;border-radius:10px;">&#127939; ${dayCardio} ${dayCardioMin}${t('MinUnit')}</span>`;
+      extrasBadges += `<span style="display:inline-flex;align-items:center;gap:3px;font-size:11px;color:#e67e22;background:#fff3e0;padding:2px 8px;border-radius:10px;">&#127939; ${escapeHtml(dayCardio)} ${dayCardioMin}${t('MinUnit')}</span>`;
     }
     if (dayAbs && (dayAbsSets > 0 || dayAbsReps > 0)) {
-      extrasBadges += `<span style="display:inline-flex;align-items:center;gap:3px;font-size:11px;color:#512BD4;background:#f3f0fc;padding:2px 8px;border-radius:10px;">&#128170; ${dayAbs} ${dayAbsSets}×${dayAbsReps}</span>`;
+      extrasBadges += `<span style="display:inline-flex;align-items:center;gap:3px;font-size:11px;color:#512BD4;background:#f3f0fc;padding:2px 8px;border-radius:10px;">&#128170; ${escapeHtml(dayAbs)} ${dayAbsSets}×${dayAbsReps}</span>`;
     }
 
     html += `
@@ -174,13 +175,13 @@ function renderDays(container) {
 }
 
 async function handleDelete(day) {
-  if (!confirm(t('DeleteRoutineMsg'))) return;
+  if (!await showConfirm(t('DeleteRoutineMsg'))) return;
 
   try {
     await api.put(`/routines/${day}`, { muscleGroupIds: [], exercises: [] });
     await loadRoutines();
   } catch (err) {
-    alert(t('ErrorFmt', err.message));
+    await showAlert(t('ErrorFmt', err.message));
   }
 }
 
@@ -192,7 +193,7 @@ async function showImportModal() {
   try {
     users = await api.get('/users');
   } catch (e) {
-    alert(t('ErrorFmt', e.message));
+    await showAlert(t('ErrorFmt', e.message));
     return;
   }
 
@@ -203,7 +204,7 @@ async function showImportModal() {
     const uid = u.id || u.Id;
     const uname = u.username || u.Username;
     const uemail = u.email || u.Email;
-    return `<option value="${uid}">${uname} (${uemail})</option>`;
+    return `<option value="${uid}">${escapeHtml(uname)} (${escapeHtml(uemail)})</option>`;
   }).join('');
 
   overlay.innerHTML = `
@@ -261,7 +262,7 @@ async function showImportModal() {
 
       const result = await api.postForm('/routines/import-pdf', formData);
 
-      console.log('PDF import result:', JSON.stringify(result, null, 2));
+      // PDF import result logged for debugging (removed in production)
 
       if (result?.success) {
         const daysSummary = (result.days || []).map(d =>
@@ -274,7 +275,7 @@ async function showImportModal() {
 
         if (statusEl) {
           statusEl.style.color = '#28a745';
-          statusEl.innerHTML = `<strong>${t('ImportSuccess')}</strong><br><pre style="text-align:left;font-size:10px;margin-top:4px;white-space:pre-wrap;max-height:300px;overflow-y:auto;">${daysSummary}${debugInfo}\n\nMsg: ${result.message || ''}</pre>`;
+          statusEl.innerHTML = `<strong>${t('ImportSuccess')}</strong><br><pre style="text-align:left;font-size:10px;margin-top:4px;white-space:pre-wrap;max-height:300px;overflow-y:auto;">${escapeHtml(daysSummary)}${escapeHtml(debugInfo)}\n\nMsg: ${escapeHtml(result.message || '')}</pre>`;
         }
 
         // Reload routines after 5s (more time to read debug)
@@ -300,7 +301,7 @@ async function showCopyModal() {
   try {
     users = await api.get('/users');
   } catch (e) {
-    alert(t('ErrorFmt', e.message));
+    await showAlert(t('ErrorFmt', e.message));
     return;
   }
 
@@ -311,7 +312,7 @@ async function showCopyModal() {
     const uid = u.id || u.Id;
     const uname = u.username || u.Username;
     const uemail = u.email || u.Email;
-    return `<option value="${uid}">${uname} (${uemail})</option>`;
+    return `<option value="${uid}">${escapeHtml(uname)} (${escapeHtml(uemail)})</option>`;
   }).join('');
 
   overlay.innerHTML = `
@@ -352,7 +353,7 @@ async function showCopyModal() {
       return;
     }
 
-    if (!confirm(t('ConfirmCopyRoutines'))) return;
+    if (!await showConfirm(t('ConfirmCopyRoutines'))) return;
 
     if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = t('CopyingRoutines'); }
     if (statusEl) { statusEl.style.color = '#512BD4'; statusEl.textContent = t('CopyingRoutines'); }

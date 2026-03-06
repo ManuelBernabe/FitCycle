@@ -444,6 +444,46 @@ app.MapPut("/users/{id}/password", async (int id, ResetPasswordRequest request, 
 .WithOpenApi()
 .RequireAuthorization("SuperUserMasterOnly");
 
+// -- Self-service profile endpoints (any authenticated user) --
+app.MapPut("/me/profile", async (UpdateProfileRequest request, ClaimsPrincipal user, IAuthService auth) =>
+{
+    var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+    if (userIdClaim is null || !int.TryParse(userIdClaim, out var userId))
+        return Results.Unauthorized();
+
+    try
+    {
+        var updated = await auth.UpdateUserAsync(userId, new UpdateUserRequest(request.Username, request.Email, null, null));
+        return Results.Ok(updated);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+})
+.WithName("UpdateMyProfile")
+.WithOpenApi()
+.RequireAuthorization();
+
+app.MapPut("/me/password", async (ChangeMyPasswordRequest request, ClaimsPrincipal user, IAuthService auth, FitCycleDbContext db) =>
+{
+    var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+    if (userIdClaim is null || !int.TryParse(userIdClaim, out var userId))
+        return Results.Unauthorized();
+
+    var dbUser = await db.Users.FindAsync(userId);
+    if (dbUser is null) return Results.NotFound();
+
+    if (!BCrypt.Net.BCrypt.Verify(request.CurrentPassword, dbUser.PasswordHash))
+        return Results.BadRequest(new { error = "Contraseña actual incorrecta." });
+
+    await auth.ResetPasswordAsync(userId, request.NewPassword);
+    return Results.Ok(new { message = "Contraseña actualizada." });
+})
+.WithName("ChangeMyPassword")
+.WithOpenApi()
+.RequireAuthorization();
+
 // -- Grupos musculares --
 app.MapGet("/musclegroups", (IRoutineRepository repo) =>
 {
@@ -828,7 +868,7 @@ app.MapGet("/workouts/stats", (FitCycleDbContext db, ClaimsPrincipal user) =>
         var weekEnd = now.AddDays(-weekOffset * 7);
         return new
         {
-            week = weekOffset == 0 ? "Esta semana" : $"Hace {weekOffset + 1} sem.",
+            week = $"week_{weekOffset}",
             count = recentSessions.Count(s => s.CompletedAt >= weekStart && s.CompletedAt < weekEnd)
         };
     }).Reverse().ToList();
@@ -1179,6 +1219,8 @@ app.MapFallbackToFile("index.html");
 
 app.Run();
 
+record UpdateProfileRequest(string? Username = null, string? Email = null);
+record ChangeMyPasswordRequest(string CurrentPassword, string NewPassword);
 record SqlQueryRequest(string Query);
 record CreateExerciseRequest(string Name, int MuscleGroupId);
 record ExerciseInput(int ExerciseId, int Sets, int Reps);

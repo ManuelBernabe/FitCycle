@@ -3,6 +3,7 @@
 import { t, availableLanguages, languageDisplayName, currentLanguage, setLanguage } from '../l10n.js';
 import { api } from '../api.js';
 import { auth } from '../auth.js';
+import { showAlert, showConfirm } from '../utils.js';
 
 let allUsers = [];
 
@@ -44,6 +45,24 @@ export function render() {
               <input id="profile-email" class="form-input" type="email" value="${email}">
             </div>
             <button id="profile-save" class="btn btn-primary btn-block">${t('Save')}</button>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- Change Password -->
+        <div class="account-section" id="account-password">
+          <div class="account-section-title">${t('ChangePassword')}</div>
+          <div class="card">
+            <div class="form-group">
+              <label class="form-label">${t('CurrentPassword')}</label>
+              <input id="current-password" class="form-input" type="password">
+            </div>
+            <div class="form-group">
+              <label class="form-label">${t('NewPassword')}</label>
+              <input id="new-password-self" class="form-input" type="password">
+            </div>
+            <button id="password-change-btn" class="btn btn-primary btn-block">${t('ChangePassword')}</button>
           </div>
         </div>
 
@@ -113,6 +132,9 @@ export async function mount() {
   // Edit profile save
   document.getElementById('profile-save')?.addEventListener('click', handleProfileSave);
 
+  // Change password
+  document.getElementById('password-change-btn')?.addEventListener('click', handlePasswordChange);
+
   // Language change
   document.getElementById('account-lang-select')?.addEventListener('change', (e) => {
     const newLang = e.target.value;
@@ -137,7 +159,7 @@ export async function mount() {
     try {
       await api.downloadBlob('/admin/download-db', 'fitcycle.db');
     } catch (err) {
-      alert(t('ErrorFmt', err.message));
+      await showAlert(t('ErrorFmt', err.message));
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = t('DownloadDb'); }
     }
@@ -182,8 +204,7 @@ async function handleProfileSave() {
   if (btn) { btn.disabled = true; btn.textContent = t('Updating'); }
 
   try {
-    const userId = auth.getUserId();
-    const result = await api.put(`/users/${userId}`, { username, email, role: auth.getRole() });
+    const result = await api.put('/me/profile', { username, email });
 
     // Update local storage
     localStorage.setItem('auth_username', username);
@@ -204,6 +225,39 @@ async function handleProfileSave() {
   } catch (err) {
     if (statusEl) statusEl.textContent = t('ErrorFmt', err.message);
     if (btn) { btn.textContent = t('Save'); btn.disabled = false; }
+  }
+}
+
+// ── Change Password ──
+
+async function handlePasswordChange() {
+  const btn = document.getElementById('password-change-btn');
+  const statusEl = document.getElementById('account-status');
+  const currentPassword = document.getElementById('current-password')?.value;
+  const newPassword = document.getElementById('new-password-self')?.value;
+
+  if (!currentPassword || !newPassword) return;
+
+  if (btn) { btn.disabled = true; btn.textContent = t('Updating'); }
+
+  try {
+    await api.put('/me/password', { currentPassword, newPassword });
+
+    // Clear inputs
+    const curPwEl = document.getElementById('current-password');
+    const newPwEl = document.getElementById('new-password-self');
+    if (curPwEl) curPwEl.value = '';
+    if (newPwEl) newPwEl.value = '';
+
+    if (statusEl) statusEl.textContent = t('PasswordChanged');
+    if (btn) { btn.textContent = t('PasswordChanged'); }
+    setTimeout(() => {
+      if (btn) { btn.textContent = t('ChangePassword'); btn.disabled = false; }
+      if (statusEl) statusEl.textContent = '';
+    }, 2000);
+  } catch (err) {
+    if (statusEl) statusEl.textContent = t('ErrorFmt', err.message);
+    if (btn) { btn.textContent = t('ChangePassword'); btn.disabled = false; }
   }
 }
 
@@ -267,7 +321,7 @@ function renderUsers(container) {
     btn.addEventListener('click', async (e) => {
       const userId = parseInt(e.currentTarget.dataset.deleteUser);
       const username = e.currentTarget.dataset.username;
-      if (!confirm(t('ConfirmDeleteUser', username))) return;
+      if (!await showConfirm(t('ConfirmDeleteUser', username))) return;
 
       const statusEl = document.getElementById('account-status');
       try {
@@ -286,7 +340,7 @@ function renderUsers(container) {
     btn.addEventListener('click', async (e) => {
       const userId = parseInt(e.currentTarget.dataset.loginAs);
       const username = e.currentTarget.dataset.username;
-      if (!confirm(t('ConfirmLoginAs', username))) return;
+      if (!await showConfirm(t('ConfirmLoginAs', username))) return;
 
       try {
         const result = await api.post(`/auth/impersonate/${userId}`);
@@ -294,7 +348,7 @@ function renderUsers(container) {
         location.hash = '#home';
         location.reload();
       } catch (err) {
-        alert(t('ErrorFmt', err.message));
+        await showAlert(t('ErrorFmt', err.message));
       }
     });
   });

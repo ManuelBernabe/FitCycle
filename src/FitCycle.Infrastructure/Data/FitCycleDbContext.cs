@@ -60,6 +60,7 @@ public class FitCycleDbContext : DbContext
         modelBuilder.Entity<WorkoutSession>(e =>
         {
             e.HasKey(w => w.Id);
+            e.HasIndex(w => w.UserId);
             e.HasMany(w => w.ExerciseLogs).WithOne(l => l.WorkoutSession).HasForeignKey(l => l.WorkoutSessionId);
         });
 
@@ -67,6 +68,7 @@ public class FitCycleDbContext : DbContext
         modelBuilder.Entity<WorkoutExerciseLog>(e =>
         {
             e.HasKey(l => l.Id);
+            e.HasIndex(l => l.WorkoutSessionId);
             e.Property(l => l.ExerciseName).HasMaxLength(200);
             e.Property(l => l.MuscleGroupName).HasMaxLength(100);
         });

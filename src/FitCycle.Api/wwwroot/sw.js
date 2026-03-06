@@ -1,5 +1,5 @@
-const CACHE = 'fitcycle-v47';
-const SHELL = ['/', '/css/app.css', '/js/app.js', '/js/api.js', '/js/auth.js', '/js/l10n.js', '/js/exercises.js',
+const CACHE = 'fitcycle-v48';
+const SHELL = ['/', '/css/app.css', '/js/app.js', '/js/api.js', '/js/auth.js', '/js/l10n.js', '/js/exercises.js', '/js/utils.js',
   '/js/pages/login.js', '/js/pages/home.js', '/js/pages/routines.js', '/js/pages/editday.js', '/js/pages/workout.js',
   '/js/pages/summary.js', '/js/pages/stats.js', '/js/pages/account.js', '/js/pages/measurements.js',
   '/js/pages/templates.js', '/js/pages/admin.js', '/js/pages/tutorial.js'];
@@ -22,7 +22,8 @@ self.addEventListener('fetch', e => {
   if (e.request.url.includes('/auth/') || e.request.url.includes('/routines') ||
       e.request.url.includes('/workouts') || e.request.url.includes('/exercises') ||
       e.request.url.includes('/musclegroups') || e.request.url.includes('/users') ||
-      e.request.url.includes('/measurements') || e.request.url.includes('/admin/')) {
+      e.request.url.includes('/measurements') || e.request.url.includes('/admin/') ||
+      e.request.url.includes('/templates')) {
     e.respondWith(fetch(e.request).catch(() => caches.match(e.request).then(r => r || new Response('{"error":"offline"}', {status:503, headers:{'Content-Type':'application/json'}}))));
   } else {
     // App shell: network-first with cache fallback (ensures updates are picked up)

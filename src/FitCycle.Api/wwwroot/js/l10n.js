@@ -410,12 +410,12 @@ const Strings = {
 
   // Account
   TutAccountTitle:     { es: 'Cuenta y ajustes',                         en: 'Account & Settings',                fr: 'Compte et paramètres' },
-  TutAccountDesc:      { es: 'Edita tu perfil (nombre, email), cambia la contraseña, selecciona el idioma (español, inglés o francés) y cierra sesión.', en: 'Edit your profile (name, email), change password, select language (Spanish, English or French) and log out.', fr: "Modifiez votre profil, changez le mot de passe, sélectionnez la langue et déconnectez-vous." },
+  TutAccountDesc:      { es: 'Edita tu perfil (nombre, email), cambia tu contraseña directamente, selecciona el idioma y cierra sesión. Todos los usuarios pueden editar su propio perfil.', en: 'Edit your profile (name, email), change your password directly, select language and log out. All users can edit their own profile.', fr: "Modifiez votre profil, changez votre mot de passe directement, sélectionnez la langue et déconnectez-vous. Tous les utilisateurs peuvent modifier leur profil." },
   TutChangePassword:   { es: 'Cambiar contraseña',                       en: 'Change password',                   fr: 'Changer le mot de passe' },
 
   // Offline / PWA
   TutOfflineTitle:     { es: 'Modo offline y PWA',                       en: 'Offline Mode & PWA',                fr: 'Mode hors ligne et PWA' },
-  TutOfflineDesc:      { es: 'FitCycle funciona como app nativa en tu móvil. Instálala desde el navegador y úsala sin conexión.', en: 'FitCycle works like a native app on your phone. Install it from the browser and use it offline.', fr: "FitCycle fonctionne comme une app native. Installez-la depuis le navigateur et utilisez-la hors ligne." },
+  TutOfflineDesc:      { es: 'FitCycle funciona como app nativa en tu móvil. Instálala desde el navegador y úsala sin conexión. Incluye modo oscuro automático según la preferencia de tu dispositivo.', en: 'FitCycle works like a native app on your phone. Install it from the browser and use it offline. Includes automatic dark mode based on your device preference.', fr: "FitCycle fonctionne comme une app native. Installez-la depuis le navigateur et utilisez-la hors ligne. Mode sombre automatique selon les préférences de votre appareil." },
   TutPWA:              { es: 'Instalar como app',                        en: 'Install as app',                    fr: "Installer comme app" },
   TutOffline1:         { es: 'Funciona sin conexión a internet',         en: 'Works without internet connection',  fr: 'Fonctionne sans connexion internet' },
   TutOffline2:         { es: 'Se actualiza automáticamente cuando hay conexión', en: 'Auto-updates when connected', fr: 'Se met à jour automatiquement avec connexion' },
@@ -464,6 +464,15 @@ const Strings = {
   AbWheel:             { es: 'Ab Wheel',                                  en: 'Ab Wheel',                          fr: 'Ab Wheel' },
   Other:               { es: 'Otro',                                      en: 'Other',                             fr: 'Autre' },
   MinUnit:             { es: 'min',                                       en: 'min',                               fr: 'min' },
+
+  // === Utils / Modals ===
+  OK:                  { es: 'Aceptar',                                   en: 'OK',                                fr: 'OK' },
+  WorkoutSaveError:    { es: 'Error al guardar, tu progreso se mantiene',  en: 'Save failed, your progress is kept', fr: 'Erreur de sauvegarde, votre progression est conservée' },
+  ThisWeek:            { es: 'Esta semana',                                en: 'This week',                         fr: 'Cette semaine' },
+  WeeksAgo:            { es: 'Hace {0} sem.',                              en: '{0} weeks ago',                      fr: 'Il y a {0} sem.' },
+  CurrentPassword:     { es: 'Contraseña actual',                          en: 'Current password',                   fr: 'Mot de passe actuel' },
+  NewPassword:         { es: 'Nueva contraseña',                           en: 'New password',                       fr: 'Nouveau mot de passe' },
+  PasswordChanged:     { es: 'Contraseña cambiada correctamente',          en: 'Password changed successfully',      fr: 'Mot de passe changé avec succès' },
 };
 
 // DayOfWeek in .NET: Sunday=0 ... Saturday=6

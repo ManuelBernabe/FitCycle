@@ -3,6 +3,7 @@
 import { t, availableLanguages, languageDisplayName, currentLanguage, setLanguage } from '../l10n.js';
 import { api } from '../api.js';
 import { auth } from '../auth.js';
+import { showPrompt } from '../utils.js';
 
 let registeredEmail = null;
 
@@ -199,7 +200,7 @@ async function handleSubmit() {
       errorEl.innerHTML = msg + `<br><button id="login-resend-inline" style="margin-top:8px;background:none;border:1px solid #512BD4;color:#512BD4;padding:6px 16px;border-radius:6px;cursor:pointer;font-size:13px;">${t('ResendActivation')}</button>`;
       const inlineResend = document.getElementById('login-resend-inline');
       inlineResend?.addEventListener('click', async () => {
-        const resendEmail = prompt(t('Email') + ':');
+        const resendEmail = await showPrompt(t('Email') + ':');
         if (!resendEmail) return;
         try {
           await api.post('/auth/resend-activation', { email: resendEmail });

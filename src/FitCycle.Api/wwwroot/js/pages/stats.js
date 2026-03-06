@@ -2,6 +2,7 @@
 
 import { t, dayName } from '../l10n.js';
 import { api } from '../api.js';
+import { escapeHtml, calculateStreak } from '../utils.js';
 
 export function render() {
   return `
@@ -79,9 +80,10 @@ export async function mount() {
           <div class="bar-chart">
             ${stats.weeklyData.map(w => {
               const barWidth = maxCount > 0 ? Math.max((w.count / maxCount * 100), w.count > 0 ? 5 : 0) : 0;
+              const weekLabel = formatWeekLabel(w.week);
               return `
                 <div class="bar-row">
-                  <div class="bar-label">${w.week}</div>
+                  <div class="bar-label">${weekLabel}</div>
                   <div class="bar-track">
                     <div class="bar-fill" style="width:${barWidth.toFixed(0)}%;background:#512BD4;"></div>
                   </div>
@@ -284,43 +286,9 @@ function formatNumber(n) {
   return String(n);
 }
 
-function calculateStreak(workouts) {
-  if (!workouts || workouts.length === 0) return 0;
-
-  const dates = new Set();
-  workouts.forEach(w => {
-    const d = new Date(w.completedAt || w.CompletedAt);
-    dates.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
-  });
-
-  const today = new Date();
-  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-
-  let streak = 0;
-  let checkDate = new Date(today);
-
-  if (!dates.has(todayStr)) {
-    checkDate.setDate(checkDate.getDate() - 1);
-    const yesterdayStr = `${checkDate.getFullYear()}-${String(checkDate.getMonth() + 1).padStart(2, '0')}-${String(checkDate.getDate()).padStart(2, '0')}`;
-    if (!dates.has(yesterdayStr)) return 0;
-  }
-
-  for (let i = 0; i < 365; i++) {
-    const dateStr = `${checkDate.getFullYear()}-${String(checkDate.getMonth() + 1).padStart(2, '0')}-${String(checkDate.getDate()).padStart(2, '0')}`;
-    const dayOfWeek = checkDate.getDay();
-
-    if (dayOfWeek === 0 || dayOfWeek === 6) {
-      checkDate.setDate(checkDate.getDate() - 1);
-      continue;
-    }
-
-    if (dates.has(dateStr)) {
-      streak++;
-      checkDate.setDate(checkDate.getDate() - 1);
-    } else {
-      break;
-    }
-  }
-
-  return streak;
+function formatWeekLabel(key) {
+  if (key === 'week_0') return t('ThisWeek');
+  const match = key.match(/^week_(\d+)$/);
+  if (match) return t('WeeksAgo', parseInt(match[1]) + 1);
+  return key;
 }

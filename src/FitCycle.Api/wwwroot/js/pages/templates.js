@@ -3,6 +3,7 @@
 import { t, dayName, muscleGroup } from '../l10n.js';
 import { api } from '../api.js';
 import { auth } from '../auth.js';
+import { escapeHtml, showAlert, showConfirm } from '../utils.js';
 
 let templates = [];
 
@@ -77,8 +78,8 @@ function renderTemplates(container) {
       <div class="card" style="margin-bottom:10px;">
         <div style="display:flex;align-items:center;justify-content:space-between;">
           <div>
-            <div class="card-title">${tmpl.name}</div>
-            ${tmpl.description ? `<div class="card-subtitle">${tmpl.description}</div>` : ''}
+            <div class="card-title">${escapeHtml(tmpl.name)}</div>
+            ${tmpl.description ? `<div class="card-subtitle">${escapeHtml(tmpl.description)}</div>` : ''}
             <div style="font-size:11px;color:var(--text-light);margin-top:4px;">${date} &middot; ${dayCount} ${t('Days')}</div>
           </div>
           <div style="display:flex;gap:4px;flex-shrink:0;">
@@ -142,7 +143,7 @@ function renderTemplates(container) {
           }
 
           const weightStr = weight > 0 ? ` @${weight}kg` : '';
-          return `<div style="font-size:12px;padding:2px 0;">&bull; ${name} — ${sets}x${reps}${weightStr}${extraInfo}</div>`;
+          return `<div style="font-size:12px;padding:2px 0;">&bull; ${escapeHtml(name)} — ${sets}x${reps}${weightStr}${extraInfo}</div>`;
         }).join('');
 
         // Cardio & Abs badges
@@ -152,8 +153,8 @@ function renderTemplates(container) {
         const dAbsSets = d.absSets || d.AbsSets || 0;
         const dAbsReps = d.absReps || d.AbsReps || 0;
         let dayExtras = '';
-        if (dCardio && dCardioMin > 0) dayExtras += `<span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:#e67e22;background:#fff3e0;padding:1px 6px;border-radius:8px;margin-right:4px;">&#127939; ${dCardio} ${dCardioMin}${t('MinUnit')}</span>`;
-        if (dAbs && (dAbsSets > 0 || dAbsReps > 0)) dayExtras += `<span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:#512BD4;background:#f3f0fc;padding:1px 6px;border-radius:8px;">&#128170; ${dAbs} ${dAbsSets}×${dAbsReps}</span>`;
+        if (dCardio && dCardioMin > 0) dayExtras += `<span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:#e67e22;background:#fff3e0;padding:1px 6px;border-radius:8px;margin-right:4px;">&#127939; ${escapeHtml(dCardio)} ${dCardioMin}${t('MinUnit')}</span>`;
+        if (dAbs && (dAbsSets > 0 || dAbsReps > 0)) dayExtras += `<span style="display:inline-flex;align-items:center;gap:3px;font-size:10px;color:#512BD4;background:#f3f0fc;padding:1px 6px;border-radius:8px;">&#128170; ${escapeHtml(dAbs)} ${dAbsSets}×${dAbsReps}</span>`;
 
         return `
           <div style="margin-bottom:8px;">
@@ -181,13 +182,13 @@ function renderTemplates(container) {
   container.querySelectorAll('[data-delete-tmpl]').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       const id = parseInt(e.currentTarget.dataset.deleteTmpl);
-      if (!confirm(t('ConfirmDeleteTemplate'))) return;
+      if (!await showConfirm(t('ConfirmDeleteTemplate'))) return;
 
       try {
         await api.del(`/templates/${id}`);
         await loadTemplates();
       } catch (err) {
-        alert(t('ErrorFmt', err.message));
+        await showAlert(t('ErrorFmt', err.message));
       }
     });
   });
@@ -198,7 +199,7 @@ async function showSaveModal() {
   try {
     users = await api.get('/users');
   } catch (e) {
-    alert(t('ErrorFmt', e.message));
+    await showAlert(t('ErrorFmt', e.message));
     return;
   }
 
@@ -210,7 +211,7 @@ async function showSaveModal() {
     const uid = u.id || u.Id;
     const uname = u.username || u.Username;
     const sel = String(uid) === String(currentUserId) ? ' selected' : '';
-    return `<option value="${uid}"${sel}>${uname}</option>`;
+    return `<option value="${uid}"${sel}>${escapeHtml(uname)}</option>`;
   }).join('');
 
   overlay.innerHTML = `
@@ -275,7 +276,7 @@ async function showApplyModal(templateId, templateName) {
   try {
     users = await api.get('/users');
   } catch (e) {
-    alert(t('ErrorFmt', e.message));
+    await showAlert(t('ErrorFmt', e.message));
     return;
   }
 
@@ -287,13 +288,13 @@ async function showApplyModal(templateId, templateName) {
     const uid = u.id || u.Id;
     const uname = u.username || u.Username;
     const sel = String(uid) === String(currentUserId) ? ' selected' : '';
-    return `<option value="${uid}"${sel}>${uname}</option>`;
+    return `<option value="${uid}"${sel}>${escapeHtml(uname)}</option>`;
   }).join('');
 
   overlay.innerHTML = `
     <div class="modal-content" style="max-width:400px;">
       <div class="modal-header">
-        <div class="modal-title">${t('ApplyTemplate')}: ${templateName}</div>
+        <div class="modal-title">${t('ApplyTemplate')}: ${escapeHtml(templateName)}</div>
         <button class="modal-close" id="apply-modal-close">&times;</button>
       </div>
       <div class="form-group">
@@ -315,7 +316,7 @@ async function showApplyModal(templateId, templateName) {
     const statusEl = overlay.querySelector('#apply-status');
     const btn = overlay.querySelector('#apply-submit');
 
-    if (!confirm(t('ConfirmApplyTemplate', targetName))) return;
+    if (!await showConfirm(t('ConfirmApplyTemplate', targetName))) return;
 
     if (btn) { btn.disabled = true; btn.textContent = t('CopyingRoutines'); }
 

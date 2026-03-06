@@ -2,6 +2,7 @@
 
 import { t } from '../l10n.js';
 import { api } from '../api.js';
+import { showAlert, showConfirm, escapeHtml } from '../utils.js';
 
 const FIELDS = [
   { key: 'weight', label: 'MeasWeight', step: '0.1', unit: 'kg' },
@@ -155,7 +156,7 @@ function renderContent(container, measurements) {
           <div style="flex:1;min-width:0;">
             <div style="font-weight:600;font-size:14px;">${date}</div>
             <div style="font-size:12px;color:#666;margin-top:2px;overflow-wrap:break-word;">${summary}</div>
-            ${m.notes ? `<div style="font-size:11px;color:#999;margin-top:2px;font-style:italic;">${m.notes}</div>` : ''}
+            ${m.notes ? `<div style="font-size:11px;color:#999;margin-top:2px;font-style:italic;">${escapeHtml(m.notes)}</div>` : ''}
           </div>
           <button class="btn-delete-meas" data-meas-id="${m.id || m.Id}"
             style="background:none;border:none;color:#dc3545;font-size:16px;cursor:pointer;padding:4px 8px;flex-shrink:0;">&#10005;</button>
@@ -254,14 +255,14 @@ function renderContent(container, measurements) {
   container.querySelectorAll('.btn-delete-meas').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
-      if (!confirm(t('ConfirmDeleteMeas'))) return;
+      if (!await showConfirm(t('ConfirmDeleteMeas'))) return;
       const id = btn.dataset.measId;
       try {
         await api.del(`/measurements/${id}`);
         const updated = await api.get('/measurements');
         renderContent(container, updated || []);
       } catch (err) {
-        alert(t('ErrorFmt', err.message));
+        await showAlert(t('ErrorFmt', err.message));
       }
     });
   });

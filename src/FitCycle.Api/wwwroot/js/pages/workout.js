@@ -2,6 +2,7 @@
 
 import { t, dayName, muscleGroup as mgTranslate } from '../l10n.js';
 import { api } from '../api.js';
+import { escapeHtml } from '../utils.js';
 
 let dayNum = 0;
 let exercises = [];
@@ -152,7 +153,7 @@ function buildExerciseList() {
       <div class="exercise-list-item ${isCurrent ? 'current' : ''} ${isDone ? 'done' : ''}" data-go-exercise="${idx}">
         <div class="exercise-list-num">${idx + 1}</div>
         <div class="exercise-list-info">
-          <div class="exercise-list-name">${name}</div>
+          <div class="exercise-list-name">${escapeHtml(name)}</div>
           <div class="exercise-list-meta">${mgTranslate(muscle)} · ${totalSets}s${maxWeight > 0 ? ` · ${maxWeight}kg` : ''}</div>
         </div>
         ${isDone ? '<div class="done-check">&#10003;</div>' : ''}
@@ -226,15 +227,15 @@ function renderExercise() {
         <div style="display:flex;align-items:center;gap:12px;text-align:left;margin-bottom:6px;">
           <div class="workout-exercise-image" style="margin:0;flex-shrink:0;">
             ${exImage
-              ? `<img src="${exImage}" alt="${exName}" onerror="this.onerror=null;this.parentElement.innerHTML='<div style=&quot;font-size:40px;opacity:0.3;&quot;>&#127947;</div>'">`
+              ? `<img src="${exImage}" alt="${escapeHtml(exName)}" onerror="this.onerror=null;this.parentElement.innerHTML='<div style=&quot;font-size:40px;opacity:0.3;&quot;>&#127947;</div>'">`
               : `<div style="font-size:40px;opacity:0.3;">&#127947;</div>`
             }
           </div>
           <div style="min-width:0;">
             <div style="font-size:12px;color:#512BD4;font-weight:600;">${t('ExerciseProgress', currentIndex + 1, exercises.length)}</div>
-            <div class="workout-exercise-name">${exName}</div>
+            <div class="workout-exercise-name">${escapeHtml(exName)}</div>
             <div style="font-size:13px;color:gray;">${mgTranslate(exMuscle)}</div>
-            ${ssPartnerName ? `<div style="margin-top:3px;font-size:11px;color:#e67e22;font-weight:600;">&#8644; ${t('Superset')}: ${ssPartnerName}</div>` : ''}
+            ${ssPartnerName ? `<div style="margin-top:3px;font-size:11px;color:#e67e22;font-weight:600;">&#8644; ${t('Superset')}: ${escapeHtml(ssPartnerName)}</div>` : ''}
           </div>
         </div>
 
@@ -275,7 +276,7 @@ function renderExercise() {
               <span>&#128221; ${t('ExerciseNotes')}</span>
               <span id="notes-chevron" style="font-size:12px;">&#9660;</span>
             </div>
-            <div id="workout-notes-body" style="display:none;font-size:11px;color:#333;white-space:pre-wrap;margin-top:4px;">${exNotes}</div>
+            <div id="workout-notes-body" style="display:none;font-size:11px;color:#333;white-space:pre-wrap;margin-top:4px;">${escapeHtml(exNotes)}</div>
           </div>
         ` : ''}
 
@@ -511,6 +512,7 @@ async function finishWorkout() {
     setDetails: JSON.stringify(ex.setDetails),
   }));
 
+  let saved = false;
   try {
     await api.post('/workouts', {
       day: dayNum,
@@ -518,10 +520,16 @@ async function finishWorkout() {
       completedAt: completedAt.toISOString(),
       exercises: exerciseLogs,
     });
-  } catch (e) { /* Don't block finish */ }
+    saved = true;
+  } catch (e) {
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.textContent = t('WorkoutSaveError');
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+  }
 
-  // Clear saved progress after successful finish
-  clearProgress();
+  if (saved) clearProgress();
 
   sessionStorage.setItem('workout_summary', JSON.stringify({
     day: dayNum,
