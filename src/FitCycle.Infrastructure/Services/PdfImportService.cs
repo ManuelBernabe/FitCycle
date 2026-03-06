@@ -663,8 +663,12 @@ public static class LocalPdfParser
                 if (current != null && pendingFaseType != null)
                 {
                     var nums = Regex.Matches(line, @"\d+").Select(m => int.Parse(m.Value)).ToList();
-                    if (nums.Count > 0) ApplyTempoValues(current, pendingFaseType, nums);
-                    pendingFaseType = null;
+                    if (nums.Count > 0)
+                    {
+                        ApplyTempoValues(current, pendingFaseType, nums);
+                        pendingFaseType = null; // only clear if we actually applied values
+                    }
+                    // If no numbers, keep pendingFaseType — numbers may be on next line
                 }
                 continue;
             }
@@ -762,6 +766,75 @@ public static class LocalPdfParser
 
             if (current == null) continue; // Skip lines before first exercise
 
+            // === FASE POSITIVA / NEGATIVA / AGARRE — MUST come before table header check ===
+            // (IsTableHeader was incorrectly matching "Fase positiva" as a table header)
+            bool matchedTempoGrip = false;
+
+            var tpMatch = Regex.Match(line,
+                @"(?:FASE\s+POSITIVA|CONC[EÉ]NTRIC[AO])\s*[:\s]*(.*)",
+                RegexOptions.IgnoreCase);
+            if (tpMatch.Success)
+            {
+                var nums = Regex.Matches(tpMatch.Groups[1].Value, @"\d+")
+                    .Select(m => int.Parse(m.Value)).ToList();
+                if (nums.Count > 0)
+                {
+                    ApplyTempoValues(current, "positiva", nums);
+                    pendingFaseType = null;
+                }
+                else
+                {
+                    pendingFaseType = "positiva"; // numbers may be on next "Seg. Ejecución" line
+                }
+                matchedTempoGrip = true;
+            }
+
+            var tnMatch = Regex.Match(line,
+                @"(?:FASE\s+NEGATIVA|EXC[EÉ]NTRIC[AO])\s*[:\s]*(.*)",
+                RegexOptions.IgnoreCase);
+            if (!tpMatch.Success && tnMatch.Success)
+            {
+                var nums = Regex.Matches(tnMatch.Groups[1].Value, @"\d+")
+                    .Select(m => int.Parse(m.Value)).ToList();
+                if (nums.Count > 0)
+                {
+                    ApplyTempoValues(current, "negativa", nums);
+                    pendingFaseType = null;
+                }
+                else
+                {
+                    pendingFaseType = "negativa"; // numbers may be on next "Seg. Ejecución" line
+                }
+                matchedTempoGrip = true;
+            }
+
+            // AGARRE row: "Agarre Prono Prono Neutro Supino" — extract ALL grip values
+            var gripMatch = Regex.Match(line,
+                @"(?:AGARRE|GRIP)\s*[:\s]+(.*)",
+                RegexOptions.IgnoreCase);
+            if (gripMatch.Success)
+            {
+                var gripValues = Regex.Matches(gripMatch.Groups[1].Value, @"(prono|supino|neutro)",
+                    RegexOptions.IgnoreCase).Select(m => m.Value.ToLower()).ToList();
+                if (gripValues.Count > 0)
+                {
+                    if (gripValues.Count == 1)
+                    {
+                        // Single grip value → apply to all sets
+                        foreach (var s in current.Sets) s.Grip = gripValues[0];
+                    }
+                    else
+                    {
+                        // Per-column grip values → apply per set
+                        for (int gi = 0; gi < current.Sets.Count && gi < gripValues.Count; gi++)
+                            current.Sets[gi].Grip = gripValues[gi];
+                    }
+                }
+                matchedTempoGrip = true;
+            }
+
+            if (matchedTempoGrip) continue;
+
             // Table header detection: "Serie Reps Fase positiva Fase negativa"
             if (IsTableHeader(line))
             {
@@ -839,74 +912,6 @@ public static class LocalPdfParser
                     current.Sets.Add(new PdfSet { Reps = r });
                 continue;
             }
-
-            // FASE POSITIVA / NEGATIVA / AGARRE — support per-column values
-            bool matchedTempoGrip = false;
-
-            var tpMatch = Regex.Match(line,
-                @"(?:FASE\s+POSITIVA|CONC[EÉ]NTRIC[AO])\s*[:\s]*(.*)",
-                RegexOptions.IgnoreCase);
-            if (tpMatch.Success)
-            {
-                var nums = Regex.Matches(tpMatch.Groups[1].Value, @"\d+")
-                    .Select(m => int.Parse(m.Value)).ToList();
-                if (nums.Count > 0)
-                {
-                    ApplyTempoValues(current, "positiva", nums);
-                    pendingFaseType = null;
-                }
-                else
-                {
-                    pendingFaseType = "positiva"; // numbers may be on next "Seg. Ejecución" line
-                }
-                matchedTempoGrip = true;
-            }
-
-            var tnMatch = Regex.Match(line,
-                @"(?:FASE\s+NEGATIVA|EXC[EÉ]NTRIC[AO])\s*[:\s]*(.*)",
-                RegexOptions.IgnoreCase);
-            if (!tpMatch.Success && tnMatch.Success)
-            {
-                var nums = Regex.Matches(tnMatch.Groups[1].Value, @"\d+")
-                    .Select(m => int.Parse(m.Value)).ToList();
-                if (nums.Count > 0)
-                {
-                    ApplyTempoValues(current, "negativa", nums);
-                    pendingFaseType = null;
-                }
-                else
-                {
-                    pendingFaseType = "negativa"; // numbers may be on next "Seg. Ejecución" line
-                }
-                matchedTempoGrip = true;
-            }
-
-            // AGARRE row: "Agarre Prono Prono Neutro Supino" — extract ALL grip values
-            var gripMatch = Regex.Match(line,
-                @"(?:AGARRE|GRIP)\s*[:\s]+(.*)",
-                RegexOptions.IgnoreCase);
-            if (gripMatch.Success)
-            {
-                var gripValues = Regex.Matches(gripMatch.Groups[1].Value, @"(prono|supino|neutro)",
-                    RegexOptions.IgnoreCase).Select(m => m.Value.ToLower()).ToList();
-                if (gripValues.Count > 0)
-                {
-                    if (gripValues.Count == 1)
-                    {
-                        // Single grip value → apply to all sets
-                        foreach (var s in current.Sets) s.Grip = gripValues[0];
-                    }
-                    else
-                    {
-                        // Per-column grip values → apply per set
-                        for (int gi = 0; gi < current.Sets.Count && gi < gripValues.Count; gi++)
-                            current.Sets[gi].Grip = gripValues[gi];
-                    }
-                }
-                matchedTempoGrip = true;
-            }
-
-            if (matchedTempoGrip) continue;
 
             // SERIES: N
             var seriesMatch = Regex.Match(line, @"(?:SERIES?|SETS?)\s*[:\s]*(\d+)",
@@ -1017,9 +1022,14 @@ public static class LocalPdfParser
         if (Regex.IsMatch(lower, @"\d+\s+series?\s+(?:x|de)\s+\d+")) return false;
         // Reject lines that are too long to be table headers (likely exercise+instruction)
         if (lower.Length > 80) return false;
+        // A real table header MUST contain "serie" or "reps" — prevents false positives
+        // on lines like "Fase positiva" or "Fase negativa" which are data rows
+        bool hasSerie = lower.Contains("serie");
+        bool hasReps = lower.Contains("reps") || lower.Contains("repeticion");
+        if (!hasSerie && !hasReps) return false;
         int hits = 0;
-        if (lower.Contains("serie")) hits++;
-        if (lower.Contains("reps") || lower.Contains("repeticion")) hits++;
+        if (hasSerie) hits++;
+        if (hasReps) hits++;
         if (lower.Contains("fase")) hits++;
         if (lower.Contains("positiva") || lower.Contains("negativa")) hits++;
         if (lower.Contains("agarre") || lower.Contains("grip")) hits++;
