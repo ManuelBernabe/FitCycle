@@ -649,6 +649,7 @@ public static class LocalPdfParser
         PdfExercise? current = null;
         var notesBuilder = new StringBuilder();
         bool inTable = false;
+        string? pendingFaseType = null; // "positiva" or "negativa" — awaiting numbers on next Seg. line
 
         for (int idx = 0; idx < lines.Count; idx++)
         {
@@ -656,11 +657,31 @@ public static class LocalPdfParser
             if (string.IsNullOrWhiteSpace(line)) continue;
             if (line.StartsWith("---")) continue; // page separator
 
+            // "Seg. Ejecución" lines — may contain numbers for a pending Fase row
+            if (Regex.IsMatch(line, @"Seg\.?\s*(?:de\s+)?(?:Ejecuci[oó]n|ejecuci[oó]n)", RegexOptions.IgnoreCase))
+            {
+                if (current != null && pendingFaseType != null)
+                {
+                    var nums = Regex.Matches(line, @"\d+").Select(m => int.Parse(m.Value)).ToList();
+                    if (nums.Count > 0) ApplyTempoValues(current, pendingFaseType, nums);
+                    pendingFaseType = null;
+                }
+                continue;
+            }
+
+            // Horizontal table "Serie" row: "Serie 1 2 3 4" — just skip (Reps row determines sets)
+            if (Regex.IsMatch(line, @"^Serie\s+\d", RegexOptions.IgnoreCase))
+            {
+                pendingFaseType = null;
+                continue;
+            }
+
             // Rest/descanso line — finalize current exercise notes
             if (RestLine.IsMatch(line))
             {
                 FinalizeNotes(current, notesBuilder);
                 inTable = false;
+                pendingFaseType = null;
                 continue;
             }
 
@@ -674,6 +695,7 @@ public static class LocalPdfParser
                 {
                     FinalizeNotes(current, notesBuilder);
                     inTable = false;
+                    pendingFaseType = null;
                     var seriesCount = int.Parse(inlineMatch.Groups[2].Value);
                     var reps = int.Parse(inlineMatch.Groups[3].Value);
                     current = new PdfExercise
@@ -684,6 +706,8 @@ public static class LocalPdfParser
                     for (int i = 0; i < Math.Min(seriesCount, 10); i++)
                         current.Sets.Add(new PdfSet { Reps = reps });
                     exercises.Add(current);
+                    // Extract grip from exercise name
+                    ExtractGripFromName(current);
                     continue;
                 }
             }
@@ -693,6 +717,7 @@ public static class LocalPdfParser
             {
                 FinalizeNotes(current, notesBuilder);
                 inTable = false;
+                pendingFaseType = null;
 
                 // Check for superset notation: "Exercise A + Exercise B"
                 var plusParts = line.Split('+');
@@ -719,6 +744,8 @@ public static class LocalPdfParser
                         exercises.Add(exA);
                         exercises.Add(exB);
                         current = exB;
+                        ExtractGripFromName(exA);
+                        ExtractGripFromName(exB);
                         continue;
                     }
                 }
@@ -729,6 +756,7 @@ public static class LocalPdfParser
                     MuscleGroup = dayMuscleGroups.FirstOrDefault() ?? "Pecho",
                 };
                 exercises.Add(current);
+                ExtractGripFromName(current);
                 continue;
             }
 
@@ -812,36 +840,69 @@ public static class LocalPdfParser
                 continue;
             }
 
-            // FASE POSITIVA / NEGATIVA / AGARRE — can appear on same line
+            // FASE POSITIVA / NEGATIVA / AGARRE — support per-column values
             bool matchedTempoGrip = false;
 
             var tpMatch = Regex.Match(line,
-                @"(?:FASE\s+POSITIVA|CONC[EÉ]NTRIC[AO])\s*[:\s]*(\d+)",
+                @"(?:FASE\s+POSITIVA|CONC[EÉ]NTRIC[AO])\s*[:\s]*(.*)",
                 RegexOptions.IgnoreCase);
             if (tpMatch.Success)
             {
-                var val = int.Parse(tpMatch.Groups[1].Value);
-                foreach (var s in current.Sets) s.TempoPos = val;
+                var nums = Regex.Matches(tpMatch.Groups[1].Value, @"\d+")
+                    .Select(m => int.Parse(m.Value)).ToList();
+                if (nums.Count > 0)
+                {
+                    ApplyTempoValues(current, "positiva", nums);
+                    pendingFaseType = null;
+                }
+                else
+                {
+                    pendingFaseType = "positiva"; // numbers may be on next "Seg. Ejecución" line
+                }
                 matchedTempoGrip = true;
             }
 
             var tnMatch = Regex.Match(line,
-                @"(?:FASE\s+NEGATIVA|EXC[EÉ]NTRIC[AO])\s*[:\s]*(\d+)",
+                @"(?:FASE\s+NEGATIVA|EXC[EÉ]NTRIC[AO])\s*[:\s]*(.*)",
                 RegexOptions.IgnoreCase);
-            if (tnMatch.Success)
+            if (!tpMatch.Success && tnMatch.Success)
             {
-                var val = int.Parse(tnMatch.Groups[1].Value);
-                foreach (var s in current.Sets) s.TempoNeg = val;
+                var nums = Regex.Matches(tnMatch.Groups[1].Value, @"\d+")
+                    .Select(m => int.Parse(m.Value)).ToList();
+                if (nums.Count > 0)
+                {
+                    ApplyTempoValues(current, "negativa", nums);
+                    pendingFaseType = null;
+                }
+                else
+                {
+                    pendingFaseType = "negativa"; // numbers may be on next "Seg. Ejecución" line
+                }
                 matchedTempoGrip = true;
             }
 
+            // AGARRE row: "Agarre Prono Prono Neutro Supino" — extract ALL grip values
             var gripMatch = Regex.Match(line,
-                @"(?:AGARRE|GRIP)\s*[:\s]+\s*(prono|supino|neutro)",
+                @"(?:AGARRE|GRIP)\s*[:\s]+(.*)",
                 RegexOptions.IgnoreCase);
             if (gripMatch.Success)
             {
-                var grip = gripMatch.Groups[1].Value.ToLower();
-                foreach (var s in current.Sets) s.Grip = grip;
+                var gripValues = Regex.Matches(gripMatch.Groups[1].Value, @"(prono|supino|neutro)",
+                    RegexOptions.IgnoreCase).Select(m => m.Value.ToLower()).ToList();
+                if (gripValues.Count > 0)
+                {
+                    if (gripValues.Count == 1)
+                    {
+                        // Single grip value → apply to all sets
+                        foreach (var s in current.Sets) s.Grip = gripValues[0];
+                    }
+                    else
+                    {
+                        // Per-column grip values → apply per set
+                        for (int gi = 0; gi < current.Sets.Count && gi < gripValues.Count; gi++)
+                            current.Sets[gi].Grip = gripValues[gi];
+                    }
+                }
                 matchedTempoGrip = true;
             }
 
@@ -858,6 +919,18 @@ public static class LocalPdfParser
                 continue;
             }
 
+            // Standalone numbers line after pending Fase: "2 2 3 4"
+            if (pendingFaseType != null && current != null && Regex.IsMatch(line, @"^\d[\d\s]+$"))
+            {
+                var nums = Regex.Matches(line, @"\d+").Select(m => int.Parse(m.Value)).ToList();
+                if (nums.Count > 0)
+                {
+                    ApplyTempoValues(current, pendingFaseType, nums);
+                    pendingFaseType = null;
+                    continue;
+                }
+            }
+
             // Anything else → notes (if it has some text substance)
             if (line.Length > 3)
                 notesBuilder.AppendLine(line);
@@ -870,6 +943,19 @@ public static class LocalPdfParser
             for (int i = 0; i < 3; i++)
                 ex.Sets.Add(new PdfSet { Reps = 12 });
 
+        // Propagate grip from exercise name to sets that don't have one yet
+        foreach (var ex in exercises)
+        {
+            if (string.IsNullOrWhiteSpace(ex.Name)) continue;
+            var nameGrip = Regex.Match(ex.Name, @"agarre\s+(prono|supino|neutro)", RegexOptions.IgnoreCase);
+            if (nameGrip.Success)
+            {
+                var grip = nameGrip.Groups[1].Value.ToLower();
+                foreach (var s in ex.Sets.Where(s => string.IsNullOrEmpty(s.Grip)))
+                    s.Grip = grip;
+            }
+        }
+
         return exercises;
     }
 
@@ -878,6 +964,47 @@ public static class LocalPdfParser
         if (ex != null)
             ex.Notes = sb.ToString().Trim();
         sb.Clear();
+    }
+
+    /// <summary>
+    /// Apply tempo values per-set (if multiple) or to all sets (if single value).
+    /// </summary>
+    private static void ApplyTempoValues(PdfExercise ex, string faseType, List<int> values)
+    {
+        if (values.Count == 1)
+        {
+            // Single value → apply to all sets
+            foreach (var s in ex.Sets)
+            {
+                if (faseType == "positiva") s.TempoPos = values[0];
+                else s.TempoNeg = values[0];
+            }
+        }
+        else
+        {
+            // Per-column values → apply per set
+            for (int i = 0; i < ex.Sets.Count && i < values.Count; i++)
+            {
+                if (faseType == "positiva") ex.Sets[i].TempoPos = values[i];
+                else ex.Sets[i].TempoNeg = values[i];
+            }
+        }
+    }
+
+    /// <summary>
+    /// Extract grip type from exercise name: "Máquina agarre supino" → grip = "supino"
+    /// Sets the default grip for all sets that don't have one yet.
+    /// </summary>
+    private static void ExtractGripFromName(PdfExercise ex)
+    {
+        if (string.IsNullOrWhiteSpace(ex.Name)) return;
+        var match = Regex.Match(ex.Name, @"agarre\s+(prono|supino|neutro)", RegexOptions.IgnoreCase);
+        if (!match.Success) return;
+        var grip = match.Groups[1].Value.ToLower();
+        foreach (var s in ex.Sets.Where(s => string.IsNullOrEmpty(s.Grip)))
+            s.Grip = grip;
+        // Also set as default for future sets added later
+        ex.Notes = string.IsNullOrEmpty(ex.Notes) ? $"grip:{grip}" : ex.Notes;
     }
 
     /// <summary>
