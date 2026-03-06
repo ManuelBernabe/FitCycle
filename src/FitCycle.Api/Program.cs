@@ -630,11 +630,16 @@ app.MapPost("/templates/{id}/apply", (int id, ApplyTemplateRequest req, FitCycle
     if (template is null)
         return Results.NotFound(new { error = "Plantilla no encontrada." });
 
-    var week = JsonSerializer.Deserialize<WeekRoutine>(template.RoutineDataJson);
+    // Use case-insensitive deserialization for robustness
+    var jsonOpts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+    var week = JsonSerializer.Deserialize<WeekRoutine>(template.RoutineDataJson, jsonOpts);
     if (week?.Days is null || week.Days.Count == 0)
         return Results.BadRequest(new { error = "La plantilla no contiene rutinas." });
 
     int copiedDays = 0;
+    int totalExercises = 0;
+    var details = new List<string>();
+
     foreach (var day in week.Days)
     {
         var muscleGroupIds = day.MuscleGroups.Select(g => g.Id).ToList();
@@ -665,12 +670,41 @@ app.MapPost("/templates/{id}/apply", (int id, ApplyTemplateRequest req, FitCycle
         {
             repo.SetDayRoutine(day.Day, muscleGroupIds, exercises, req.TargetUserId);
             copiedDays++;
+            totalExercises += exercises.Count;
+            details.Add($"{day.Day}: {exercises.Count} ejercicios");
         }
     }
 
-    return Results.Ok(new { success = true, message = $"Plantilla aplicada: {copiedDays} días." });
+    if (copiedDays == 0)
+        return Results.BadRequest(new { error = "La plantilla no contiene ejercicios para copiar." });
+
+    return Results.Ok(new { success = true, message = $"Plantilla aplicada: {copiedDays} días, {totalExercises} ejercicios a usuario #{req.TargetUserId}.", details });
 })
 .WithName("ApplyTemplate")
+.WithOpenApi()
+.RequireAuthorization("AdminOrAbove");
+
+// Debug: inspect template data
+app.MapGet("/templates/{id}/debug", (int id, FitCycleDbContext db) =>
+{
+    var template = db.RoutineTemplates.Find(id);
+    if (template is null)
+        return Results.NotFound(new { error = "Not found" });
+
+    var jsonOpts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+    var week = JsonSerializer.Deserialize<WeekRoutine>(template.RoutineDataJson, jsonOpts);
+
+    var dayInfo = week?.Days?.Select(d => new
+    {
+        Day = d.Day.ToString(),
+        MuscleGroups = d.MuscleGroups.Select(g => new { g.Id, g.Name }).ToList(),
+        ExerciseCount = d.Exercises.Count,
+        Exercises = d.Exercises.Select(e => new { e.ExerciseId, e.ExerciseName, e.Sets, e.Reps, e.Weight }).ToList()
+    }).ToList();
+
+    return Results.Ok(new { template.Id, template.Name, rawJsonLength = template.RoutineDataJson.Length, days = dayInfo });
+})
+.WithName("DebugTemplate")
 .WithOpenApi()
 .RequireAuthorization("AdminOrAbove");
 
