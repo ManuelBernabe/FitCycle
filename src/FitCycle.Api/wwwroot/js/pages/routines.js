@@ -120,13 +120,14 @@ function renderDays(container) {
     const dayCardio = dayData?.cardioType || dayData?.CardioType || '';
     const dayCardioMin = dayData?.cardioMinutes || dayData?.CardioMinutes || 0;
     const dayAbs = dayData?.absExercise || dayData?.AbsExercise || '';
-    const dayAbsMin = dayData?.absMinutes || dayData?.AbsMinutes || 0;
+    const dayAbsSets = dayData?.absSets || dayData?.AbsSets || 0;
+    const dayAbsReps = dayData?.absReps || dayData?.AbsReps || 0;
     let extrasBadges = '';
     if (dayCardio && dayCardioMin > 0) {
       extrasBadges += `<span style="display:inline-flex;align-items:center;gap:3px;font-size:11px;color:#e67e22;background:#fff3e0;padding:2px 8px;border-radius:10px;">&#127939; ${dayCardio} ${dayCardioMin}${t('MinUnit')}</span>`;
     }
-    if (dayAbs && dayAbsMin > 0) {
-      extrasBadges += `<span style="display:inline-flex;align-items:center;gap:3px;font-size:11px;color:#512BD4;background:#f3f0fc;padding:2px 8px;border-radius:10px;">&#128170; ${dayAbs} ${dayAbsMin}${t('MinUnit')}</span>`;
+    if (dayAbs && (dayAbsSets > 0 || dayAbsReps > 0)) {
+      extrasBadges += `<span style="display:inline-flex;align-items:center;gap:3px;font-size:11px;color:#512BD4;background:#f3f0fc;padding:2px 8px;border-radius:10px;">&#128170; ${dayAbs} ${dayAbsSets}×${dayAbsReps}</span>`;
     }
 
     html += `

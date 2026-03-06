@@ -422,7 +422,7 @@ public class SqliteRoutineRepository : IRoutineRepository
     public DayRoutine GetDayRoutine(DayOfWeek day, int userId) => BuildDayRoutine(day, userId);
 
     public DayRoutine SetDayRoutine(DayOfWeek day, List<int> muscleGroupIds, List<RoutineExerciseInput> exercises, int userId,
-        string cardioType = "", int cardioMinutes = 0, string absExercise = "", int absMinutes = 0)
+        string cardioType = "", int cardioMinutes = 0, string absExercise = "", int absSets = 0, int absReps = 0)
     {
         // All 7 days supported
 
@@ -466,14 +466,15 @@ public class SqliteRoutineRepository : IRoutineRepository
 
         // Upsert day extras (cardio/abs)
         var existingExtras = _db.DayExtras.FirstOrDefault(d => d.Day == day && d.UserId == userId);
-        if (!string.IsNullOrEmpty(cardioType) || cardioMinutes > 0 || !string.IsNullOrEmpty(absExercise) || absMinutes > 0)
+        if (!string.IsNullOrEmpty(cardioType) || cardioMinutes > 0 || !string.IsNullOrEmpty(absExercise) || absSets > 0 || absReps > 0)
         {
             if (existingExtras != null)
             {
                 existingExtras.CardioType = cardioType ?? string.Empty;
                 existingExtras.CardioMinutes = cardioMinutes;
                 existingExtras.AbsExercise = absExercise ?? string.Empty;
-                existingExtras.AbsMinutes = absMinutes;
+                existingExtras.AbsSets = absSets;
+                existingExtras.AbsReps = absReps;
             }
             else
             {
@@ -484,7 +485,8 @@ public class SqliteRoutineRepository : IRoutineRepository
                     CardioType = cardioType ?? string.Empty,
                     CardioMinutes = cardioMinutes,
                     AbsExercise = absExercise ?? string.Empty,
-                    AbsMinutes = absMinutes
+                    AbsSets = absSets,
+                    AbsReps = absReps
                 });
             }
         }
@@ -544,7 +546,8 @@ public class SqliteRoutineRepository : IRoutineRepository
             CardioType = extras?.CardioType ?? string.Empty,
             CardioMinutes = extras?.CardioMinutes ?? 0,
             AbsExercise = extras?.AbsExercise ?? string.Empty,
-            AbsMinutes = extras?.AbsMinutes ?? 0
+            AbsSets = extras?.AbsSets ?? 0,
+            AbsReps = extras?.AbsReps ?? 0
         };
     }
 }

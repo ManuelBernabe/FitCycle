@@ -10,7 +10,7 @@ public interface IRoutineRepository
     WeekRoutine GetWeekRoutine(int userId);
     DayRoutine GetDayRoutine(DayOfWeek day, int userId);
     DayRoutine SetDayRoutine(DayOfWeek day, List<int> muscleGroupIds, List<RoutineExerciseInput> exercises, int userId,
-        string cardioType = "", int cardioMinutes = 0, string absExercise = "", int absMinutes = 0);
+        string cardioType = "", int cardioMinutes = 0, string absExercise = "", int absSets = 0, int absReps = 0);
 }
 
 public record RoutineExerciseInput(int ExerciseId, int Sets, int Reps, decimal Weight, string SetDetails = "", int SupersetGroup = 0, string Notes = "");

@@ -8,5 +8,6 @@ public class DayExtrasEntity
     public string CardioType { get; set; } = string.Empty;
     public int CardioMinutes { get; set; }
     public string AbsExercise { get; set; } = string.Empty;
-    public int AbsMinutes { get; set; }
+    public int AbsSets { get; set; }
+    public int AbsReps { get; set; }
 }

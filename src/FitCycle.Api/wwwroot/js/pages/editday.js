@@ -15,7 +15,8 @@ let groups = [];
 let cardioType = '';
 let cardioMinutes = 0;
 let absExercise = '';
-let absMinutes = 0;
+let absSets = 0;
+let absReps = 0;
 
 export function render(params) {
   dayNum = parseInt(params);
@@ -49,7 +50,8 @@ export function destroy() {
   cardioType = '';
   cardioMinutes = 0;
   absExercise = '';
-  absMinutes = 0;
+  absSets = 0;
+  absReps = 0;
 }
 
 // ── Helpers ──
@@ -104,7 +106,8 @@ async function loadData() {
     cardioType = dayRoutine?.cardioType || dayRoutine?.CardioType || '';
     cardioMinutes = dayRoutine?.cardioMinutes || dayRoutine?.CardioMinutes || 0;
     absExercise = dayRoutine?.absExercise || dayRoutine?.AbsExercise || '';
-    absMinutes = dayRoutine?.absMinutes || dayRoutine?.AbsMinutes || 0;
+    absSets = dayRoutine?.absSets || dayRoutine?.AbsSets || 0;
+    absReps = dayRoutine?.absReps || dayRoutine?.AbsReps || 0;
 
     const selectedMgIds = new Set(
       (dayRoutine?.muscleGroups || dayRoutine?.MuscleGroups || []).map(mg => mg.id || mg.Id)
@@ -218,8 +221,10 @@ function buildUI() {
           <option value="Otro" ${absExercise === 'Otro' ? 'selected' : ''}>${t('Other')}</option>
         </select>
         <div style="display:flex;align-items:center;gap:4px;">
-          <input id="abs-minutes" type="number" class="form-input" style="width:60px;font-size:13px;text-align:center;" min="0" max="120" value="${absMinutes || ''}">
-          <span style="font-size:12px;color:var(--text-light);">${t('MinUnit')}</span>
+          <input id="abs-sets" type="number" class="form-input" style="width:50px;font-size:13px;text-align:center;" min="0" max="20" value="${absSets || ''}" placeholder="3">
+          <span style="font-size:12px;color:var(--text-light);">ser ×</span>
+          <input id="abs-reps" type="number" class="form-input" style="width:50px;font-size:13px;text-align:center;" min="0" max="100" value="${absReps || ''}" placeholder="15">
+          <span style="font-size:12px;color:var(--text-light);">rep</span>
         </div>
       </div>
     </div>
@@ -620,7 +625,8 @@ function attachEvents(container) {
   document.getElementById('cardio-type')?.addEventListener('change', (e) => { cardioType = e.target.value; });
   document.getElementById('cardio-minutes')?.addEventListener('input', (e) => { cardioMinutes = parseInt(e.target.value) || 0; });
   document.getElementById('abs-exercise')?.addEventListener('change', (e) => { absExercise = e.target.value; });
-  document.getElementById('abs-minutes')?.addEventListener('input', (e) => { absMinutes = parseInt(e.target.value) || 0; });
+  document.getElementById('abs-sets')?.addEventListener('input', (e) => { absSets = parseInt(e.target.value) || 0; });
+  document.getElementById('abs-reps')?.addEventListener('input', (e) => { absReps = parseInt(e.target.value) || 0; });
 
   // Global save button
   document.getElementById('editday-save')?.addEventListener('click', () => doSave());
@@ -672,7 +678,8 @@ async function doSave() {
       cardioType: cardioType || '',
       cardioMinutes: cardioMinutes || 0,
       absExercise: absExercise || '',
-      absMinutes: absMinutes || 0,
+      absSets: absSets || 0,
+      absReps: absReps || 0,
     });
 
     location.hash = '#routines';

@@ -122,7 +122,7 @@ public class InMemoryRoutineRepository : IRoutineRepository
     public DayRoutine GetDayRoutine(DayOfWeek day, int userId) => BuildDayRoutine(day);
 
     public DayRoutine SetDayRoutine(DayOfWeek day, List<int> muscleGroupIds, List<RoutineExerciseInput> exercises, int userId,
-        string cardioType = "", int cardioMinutes = 0, string absExercise = "", int absMinutes = 0)
+        string cardioType = "", int cardioMinutes = 0, string absExercise = "", int absSets = 0, int absReps = 0)
     {
         // All 7 days supported
 
