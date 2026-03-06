@@ -1,3 +1,6 @@
+using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
 using MailKit.Net.Smtp;
 using MailKit.Security;
 using Microsoft.Extensions.Logging;
@@ -9,6 +12,7 @@ public class EmailService : IEmailService
 {
     private readonly EmailSettings _settings;
     private readonly ILogger<EmailService> _logger;
+    private static readonly HttpClient _httpClient = new();
 
     public EmailService(EmailSettings settings, ILogger<EmailService> logger)
     {
@@ -16,56 +20,39 @@ public class EmailService : IEmailService
         _logger = logger;
     }
 
+    private bool UseResend => !string.IsNullOrWhiteSpace(_settings.ResendApiKey);
+
+    private bool HasSmtpCredentials =>
+        !string.IsNullOrWhiteSpace(_settings.SmtpUser) && !string.IsNullOrWhiteSpace(_settings.SmtpPassword);
+
     public async Task SendWelcomeEmailAsync(string toEmail, string username)
     {
-        if (string.IsNullOrWhiteSpace(_settings.SmtpUser) || string.IsNullOrWhiteSpace(_settings.SmtpPassword))
-        {
-            _logger.LogWarning("Email not configured — skipping welcome email for {Email}", toEmail);
-            return;
-        }
-
-        var message = new MimeMessage();
-        message.From.Add(new MailboxAddress(_settings.FromName, _settings.FromEmail));
-        message.To.Add(new MailboxAddress(username, toEmail));
-        message.Subject = $"Bienvenido a FitCycle, {username}!";
-
-        var bodyBuilder = new BodyBuilder
-        {
-            HtmlBody = BuildWelcomeHtml(username)
-        };
-        message.Body = bodyBuilder.ToMessageBody();
-
-        using var client = new SmtpClient();
-        var sslOptions = _settings.SmtpPort == 465 ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTls;
-        await client.ConnectAsync(_settings.SmtpHost, _settings.SmtpPort, sslOptions);
-        await client.AuthenticateAsync(_settings.SmtpUser, _settings.SmtpPassword);
-        await client.SendAsync(message);
-        await client.DisconnectAsync(true);
-
-        _logger.LogInformation("Welcome email sent to {Email}", toEmail);
+        var subject = $"Bienvenido a FitCycle, {username}!";
+        var html = BuildWelcomeHtml(username);
+        await SendEmailAsync(toEmail, username, subject, html, "welcome");
     }
 
     public async Task SendDeployNotificationAsync(string status, string? environment = null)
     {
-        if (string.IsNullOrWhiteSpace(_settings.SmtpUser) || string.IsNullOrWhiteSpace(_settings.SmtpPassword))
+        if (!UseResend && !HasSmtpCredentials)
         {
             _logger.LogWarning("Email not configured — skipping deploy notification");
             return;
         }
 
         var toEmail = !string.IsNullOrWhiteSpace(_settings.NotifyEmail) ? _settings.NotifyEmail : _settings.SmtpUser;
+        if (string.IsNullOrWhiteSpace(toEmail) && UseResend)
+        {
+            _logger.LogWarning("No NotifyEmail configured — skipping deploy notification");
+            return;
+        }
+
         var isSuccess = status.Equals("SUCCESS", StringComparison.OrdinalIgnoreCase);
         var emoji = isSuccess ? "✅" : "❌";
         var env = environment ?? "production";
 
-        var message = new MimeMessage();
-        message.From.Add(new MailboxAddress(_settings.FromName, _settings.FromEmail));
-        message.To.Add(new MailboxAddress("Admin", toEmail));
-        message.Subject = $"{emoji} FitCycle Deploy {status} — {env}";
-
-        var bodyBuilder = new BodyBuilder
-        {
-            HtmlBody = $@"<!DOCTYPE html>
+        var subject = $"{emoji} FitCycle Deploy {status} — {env}";
+        var html = $@"<!DOCTYPE html>
 <html><head><meta charset=""UTF-8""></head>
 <body style=""margin:0;padding:0;background:#f3f0fc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;"">
   <table width=""100%"" cellpadding=""0"" cellspacing=""0"" style=""max-width:500px;margin:32px auto;background:#fff;border-radius:12px;overflow:hidden;"">
@@ -80,37 +67,78 @@ public class EmailService : IEmailService
       {(isSuccess ? @"<div style=""text-align:center;margin-top:16px;""><a href=""https://fitcycle-production.up.railway.app/"" style=""display:inline-block;background:#512BD4;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;"">Abrir App</a></div>" : "")}
     </td></tr>
   </table>
-</body></html>"
-        };
-        message.Body = bodyBuilder.ToMessageBody();
+</body></html>";
 
-        using var client = new SmtpClient();
-        var sslOptions = _settings.SmtpPort == 465 ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTls;
-        await client.ConnectAsync(_settings.SmtpHost, _settings.SmtpPort, sslOptions);
-        await client.AuthenticateAsync(_settings.SmtpUser, _settings.SmtpPassword);
-        await client.SendAsync(message);
-        await client.DisconnectAsync(true);
-
-        _logger.LogInformation("Deploy notification sent to {Email}: {Status}", toEmail, status);
+        await SendEmailAsync(toEmail, "Admin", subject, html, "deploy notification");
     }
 
     public async Task SendActivationEmailAsync(string toEmail, string username, string activationUrl)
     {
-        if (string.IsNullOrWhiteSpace(_settings.SmtpUser) || string.IsNullOrWhiteSpace(_settings.SmtpPassword))
-        {
-            _logger.LogWarning("Email not configured — skipping activation email for {Email}", toEmail);
-            return;
-        }
+        var subject = "Activa tu cuenta en FitCycle";
+        var html = BuildActivationHtml(username, activationUrl);
+        await SendEmailAsync(toEmail, username, subject, html, "activation");
+    }
 
+    private async Task SendEmailAsync(string toEmail, string toName, string subject, string html, string emailType)
+    {
+        if (UseResend)
+        {
+            await SendViaResendAsync(toEmail, subject, html, emailType);
+        }
+        else if (HasSmtpCredentials)
+        {
+            await SendViaSmtpAsync(toEmail, toName, subject, html, emailType);
+        }
+        else
+        {
+            _logger.LogWarning("Email not configured — skipping {EmailType} email for {Email}", emailType, toEmail);
+        }
+    }
+
+    private async Task SendViaResendAsync(string toEmail, string subject, string html, string emailType)
+    {
+        var from = !string.IsNullOrWhiteSpace(_settings.FromEmail)
+            ? $"{_settings.FromName} <{_settings.FromEmail}>"
+            : $"{_settings.FromName} <onboarding@resend.dev>";
+
+        var payload = new
+        {
+            from,
+            to = new[] { toEmail },
+            subject,
+            html
+        };
+
+        var json = JsonSerializer.Serialize(payload);
+        var request = new HttpRequestMessage(HttpMethod.Post, "https://api.resend.com/emails")
+        {
+            Content = new StringContent(json, Encoding.UTF8, "application/json")
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _settings.ResendApiKey);
+
+        var response = await _httpClient.SendAsync(request);
+        var responseBody = await response.Content.ReadAsStringAsync();
+
+        if (response.IsSuccessStatusCode)
+        {
+            _logger.LogInformation("Resend: {EmailType} email sent to {Email}", emailType, toEmail);
+        }
+        else
+        {
+            _logger.LogError("Resend: failed to send {EmailType} email to {Email}. Status: {Status}, Body: {Body}",
+                emailType, toEmail, response.StatusCode, responseBody);
+            throw new Exception($"Resend API error: {response.StatusCode} — {responseBody}");
+        }
+    }
+
+    private async Task SendViaSmtpAsync(string toEmail, string toName, string subject, string html, string emailType)
+    {
         var message = new MimeMessage();
         message.From.Add(new MailboxAddress(_settings.FromName, _settings.FromEmail));
-        message.To.Add(new MailboxAddress(username, toEmail));
-        message.Subject = "Activa tu cuenta en FitCycle";
+        message.To.Add(new MailboxAddress(toName, toEmail));
+        message.Subject = subject;
 
-        var bodyBuilder = new BodyBuilder
-        {
-            HtmlBody = BuildActivationHtml(username, activationUrl)
-        };
+        var bodyBuilder = new BodyBuilder { HtmlBody = html };
         message.Body = bodyBuilder.ToMessageBody();
 
         using var client = new SmtpClient();
@@ -120,7 +148,7 @@ public class EmailService : IEmailService
         await client.SendAsync(message);
         await client.DisconnectAsync(true);
 
-        _logger.LogInformation("Activation email sent to {Email}", toEmail);
+        _logger.LogInformation("SMTP: {EmailType} email sent to {Email}", emailType, toEmail);
     }
 
     private static string BuildActivationHtml(string username, string activationUrl)
