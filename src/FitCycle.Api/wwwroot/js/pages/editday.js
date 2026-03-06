@@ -16,16 +16,14 @@ export function render(params) {
   return `
     <div class="page no-tabs">
       <div class="page-content">
-        <div class="flex items-center gap-8 mb-8">
-          <button id="editday-back" class="btn btn-ghost">${t('Back')}</button>
-          <div class="section-title" id="editday-title">${t('EditDay')}</div>
-        </div>
+        <div class="section-title" id="editday-title" style="margin-bottom:8px;">${t('EditDay')}</div>
         <div class="section-subtitle">${t('SelectGroupsExercises')}</div>
         <div id="editday-content">
           <div class="loading-page"><div class="spinner"></div><span>${t('Loading')}</span></div>
         </div>
         <div id="editday-status" class="status-text mt-8"></div>
       </div>
+      <button id="editday-back" class="floating-back-btn">${t('Back')}</button>
     </div>
   `;
 }
