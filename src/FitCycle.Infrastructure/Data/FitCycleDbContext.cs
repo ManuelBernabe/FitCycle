@@ -94,6 +94,9 @@ public class FitCycleDbContext : DbContext
             e.Property(u => u.RefreshToken).HasMaxLength(256);
             e.Property(u => u.IsActive).HasDefaultValue(true);
             e.Property(u => u.ActivationToken).HasMaxLength(128);
+            e.Property(u => u.TwoFactorEnabled).HasDefaultValue(false);
+            e.Property(u => u.TwoFactorSecret).HasMaxLength(128);
+            e.Property(u => u.RecoveryCodes).HasMaxLength(1024);
         });
 
         // DayExtras (cardio/abs per day)

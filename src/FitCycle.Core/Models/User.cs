@@ -20,4 +20,9 @@ public class User
     public string? ActivationToken { get; set; }
     [JsonIgnore]
     public DateTime? ActivationTokenExpiresAt { get; set; }
+    public bool TwoFactorEnabled { get; set; } = false;
+    [JsonIgnore]
+    public string? TwoFactorSecret { get; set; }
+    [JsonIgnore]
+    public string? RecoveryCodes { get; set; }
 }

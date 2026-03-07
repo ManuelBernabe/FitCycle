@@ -484,6 +484,103 @@ app.MapPut("/me/password", async (ChangeMyPasswordRequest request, ClaimsPrincip
 .WithOpenApi()
 .RequireAuthorization();
 
+// -- 2FA endpoints --
+app.MapPost("/auth/verify-2fa", async (Verify2FARequest request, IAuthService auth) =>
+{
+    try
+    {
+        var result = await auth.Verify2FAAsync(request);
+        return Results.Ok(result);
+    }
+    catch (UnauthorizedAccessException ex)
+    {
+        return Results.Json(new { error = ex.Message }, statusCode: 401);
+    }
+})
+.WithName("Verify2FA")
+.WithOpenApi()
+.AllowAnonymous();
+
+app.MapGet("/me/2fa/status", async (ClaimsPrincipal user, FitCycleDbContext db) =>
+{
+    var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+    if (userIdClaim is null || !int.TryParse(userIdClaim, out var userId))
+        return Results.Unauthorized();
+
+    var dbUser = await db.Users.FindAsync(userId);
+    if (dbUser is null) return Results.NotFound();
+
+    return Results.Ok(new TwoFactorStatusResponse(dbUser.TwoFactorEnabled));
+})
+.WithName("Get2FAStatus")
+.WithOpenApi()
+.RequireAuthorization();
+
+app.MapPost("/me/2fa/setup", async (ClaimsPrincipal user, FitCycleDbContext db, IAuthService auth) =>
+{
+    var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+    if (userIdClaim is null || !int.TryParse(userIdClaim, out var userId))
+        return Results.Unauthorized();
+
+    var dbUser = await db.Users.FindAsync(userId);
+    if (dbUser is null) return Results.NotFound();
+
+    if (dbUser.TwoFactorEnabled)
+        return Results.BadRequest(new { error = "2FA ya está activado." });
+
+    var result = auth.Setup2FA(dbUser);
+    return Results.Ok(result);
+})
+.WithName("Setup2FA")
+.WithOpenApi()
+.RequireAuthorization();
+
+app.MapPost("/me/2fa/confirm", async (Confirm2FARequest request, ClaimsPrincipal user, FitCycleDbContext db, IAuthService auth) =>
+{
+    var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+    if (userIdClaim is null || !int.TryParse(userIdClaim, out var userId))
+        return Results.Unauthorized();
+
+    var dbUser = await db.Users.FindAsync(userId);
+    if (dbUser is null) return Results.NotFound();
+
+    try
+    {
+        var result = auth.Confirm2FA(dbUser, request.Code);
+        return Results.Ok(result);
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+})
+.WithName("Confirm2FA")
+.WithOpenApi()
+.RequireAuthorization();
+
+app.MapPost("/me/2fa/disable", async (Disable2FARequest request, ClaimsPrincipal user, FitCycleDbContext db, IAuthService auth) =>
+{
+    var userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+    if (userIdClaim is null || !int.TryParse(userIdClaim, out var userId))
+        return Results.Unauthorized();
+
+    var dbUser = await db.Users.FindAsync(userId);
+    if (dbUser is null) return Results.NotFound();
+
+    try
+    {
+        auth.Disable2FA(dbUser, request.Password);
+        return Results.Ok(new { message = "2FA desactivado." });
+    }
+    catch (ArgumentException ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+})
+.WithName("Disable2FA")
+.WithOpenApi()
+.RequireAuthorization();
+
 // -- Grupos musculares --
 app.MapGet("/musclegroups", (IRoutineRepository repo) =>
 {

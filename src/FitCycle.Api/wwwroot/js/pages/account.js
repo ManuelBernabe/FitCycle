@@ -94,6 +94,16 @@ export function render() {
 
         <div class="divider"></div>
 
+        <!-- 2FA -->
+        <div class="account-section" id="account-2fa">
+          <div class="account-section-title">${t('TwoFactorAuth')}</div>
+          <div id="twofa-status" class="card" style="text-align:center;padding:16px;">
+            <div class="spinner" style="margin:0 auto;"></div>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
         <!-- Logout -->
         <div class="account-section">
           <button id="account-logout" class="btn btn-danger btn-block">${t('Logout')}</button>
@@ -208,6 +218,9 @@ export async function mount() {
     /* Use cached data from auth */
   }
 
+  // Load 2FA status
+  load2FAStatus();
+
   // Load users if SuperUserMaster
   if (auth.isSuperUserMaster()) {
     await loadUsers();
@@ -215,6 +228,186 @@ export async function mount() {
 }
 
 export function destroy() {}
+
+// ── 2FA ──
+
+async function load2FAStatus() {
+  const container = document.getElementById('twofa-status');
+  if (!container) return;
+
+  try {
+    const status = await api.get('/me/2fa/status');
+    if (status.enabled) {
+      container.innerHTML = `
+        <div style="color:#28a745;font-weight:bold;margin-bottom:8px;">${t('TwoFAEnabled')}</div>
+        <button id="disable-2fa-btn" class="btn btn-outline btn-block" style="color:var(--danger,#dc3545);border-color:var(--danger,#dc3545);">${t('Disable2FA')}</button>
+      `;
+      container.querySelector('#disable-2fa-btn')?.addEventListener('click', showDisable2FAModal);
+    } else {
+      container.innerHTML = `
+        <div style="color:#999;margin-bottom:8px;">${t('TwoFADisabled')}</div>
+        <button id="enable-2fa-btn" class="btn btn-primary btn-block">${t('Enable2FA')}</button>
+      `;
+      container.querySelector('#enable-2fa-btn')?.addEventListener('click', startSetup2FA);
+    }
+  } catch {
+    container.innerHTML = `<div style="color:#999;">${t('TwoFADisabled')}</div>`;
+  }
+}
+
+async function startSetup2FA() {
+  const btn = document.getElementById('enable-2fa-btn');
+  if (btn) { btn.disabled = true; btn.textContent = t('Loading'); }
+
+  try {
+    const setup = await api.post('/me/2fa/setup');
+    show2FASetupModal(setup);
+  } catch (err) {
+    await showAlert(t('ErrorFmt', err.message));
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = t('Enable2FA'); }
+  }
+}
+
+function show2FASetupModal(setup) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay modal-centered';
+  overlay.innerHTML = `
+    <div class="modal-content" style="max-width:380px;">
+      <div class="modal-header">
+        <div class="modal-title">${t('Enable2FA')}</div>
+        <button class="modal-close" id="modal-close">&times;</button>
+      </div>
+      <p style="font-size:13px;color:#555;line-height:1.5;margin:0 0 12px;">${t('ScanQRCode')}</p>
+      <div id="qrcode-container" style="display:flex;justify-content:center;margin:12px 0;"></div>
+      <p style="font-size:12px;color:#888;margin:8px 0 4px;">${t('ManualEntry')}</p>
+      <div style="background:#f5f5f5;padding:8px 12px;border-radius:6px;font-family:monospace;font-size:14px;word-break:break-all;text-align:center;user-select:all;cursor:pointer;" id="manual-secret" title="Click to copy">${setup.secret}</div>
+      <div class="divider" style="margin:16px 0;"></div>
+      <p style="font-size:13px;color:#555;margin:0 0 8px;">${t('EnterCodeFromApp')}</p>
+      <input id="setup-2fa-code" class="form-input" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="000000" style="text-align:center;font-size:20px;letter-spacing:4px;">
+      <div id="setup-2fa-error" style="color:var(--danger,#dc3545);font-size:13px;margin-top:4px;display:none;"></div>
+      <button id="setup-2fa-confirm" class="btn btn-primary btn-block" style="margin-top:12px;">${t('Verify')}</button>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+  bindModalClose(overlay);
+
+  // Generate QR code
+  const qrContainer = overlay.querySelector('#qrcode-container');
+  if (qrContainer && typeof QRCode !== 'undefined') {
+    new QRCode(qrContainer, {
+      text: setup.otpAuthUri,
+      width: 200,
+      height: 200,
+      correctLevel: QRCode.CorrectLevel.M
+    });
+  }
+
+  // Copy secret on click
+  overlay.querySelector('#manual-secret')?.addEventListener('click', () => {
+    navigator.clipboard?.writeText(setup.secret);
+    const el = overlay.querySelector('#manual-secret');
+    if (el) { const orig = el.textContent; el.textContent = t('CopiedToClipboard'); setTimeout(() => el.textContent = orig, 1500); }
+  });
+
+  const codeInput = overlay.querySelector('#setup-2fa-code');
+  codeInput?.focus();
+  codeInput?.addEventListener('keydown', e => { if (e.key === 'Enter') confirmSetup2FA(overlay); });
+  overlay.querySelector('#setup-2fa-confirm')?.addEventListener('click', () => confirmSetup2FA(overlay));
+}
+
+async function confirmSetup2FA(overlay) {
+  const code = overlay.querySelector('#setup-2fa-code')?.value?.trim();
+  const errEl = overlay.querySelector('#setup-2fa-error');
+  const btn = overlay.querySelector('#setup-2fa-confirm');
+  if (!code) return;
+
+  if (btn) { btn.disabled = true; btn.textContent = t('Loading'); }
+
+  try {
+    const result = await api.post('/me/2fa/confirm', { code });
+    overlay.remove();
+    showRecoveryCodesModal(result.recoveryCodes);
+    load2FAStatus();
+  } catch (err) {
+    if (errEl) { errEl.textContent = err.message || t('InvalidCode'); errEl.style.display = 'block'; }
+    if (btn) { btn.disabled = false; btn.textContent = t('Verify'); }
+  }
+}
+
+function showRecoveryCodesModal(codes) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay modal-centered';
+  overlay.innerHTML = `
+    <div class="modal-content" style="max-width:380px;">
+      <div class="modal-header">
+        <div class="modal-title">${t('RecoveryCodes')}</div>
+      </div>
+      <p style="font-size:13px;color:#dc3545;line-height:1.5;margin:0 0 12px;font-weight:500;">${t('RecoveryCodesWarning')}</p>
+      <div style="background:#f5f5f5;padding:12px;border-radius:8px;font-family:monospace;font-size:15px;line-height:2;text-align:center;user-select:all;">
+        ${codes.join('<br>')}
+      </div>
+      <button id="copy-recovery-codes" class="btn btn-outline btn-block" style="margin-top:12px;">${t('Copy')}</button>
+      <button id="recovery-codes-done" class="btn btn-primary btn-block" style="margin-top:8px;">${t('OK')}</button>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  overlay.querySelector('#copy-recovery-codes')?.addEventListener('click', () => {
+    navigator.clipboard?.writeText(codes.join('\n'));
+    const btn = overlay.querySelector('#copy-recovery-codes');
+    if (btn) { btn.textContent = t('CopiedToClipboard'); setTimeout(() => btn.textContent = t('Copy'), 1500); }
+  });
+
+  overlay.querySelector('#recovery-codes-done')?.addEventListener('click', () => overlay.remove());
+}
+
+function showDisable2FAModal() {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay modal-centered';
+  overlay.innerHTML = `
+    <div class="modal-content" style="max-width:340px;text-align:center;">
+      <div class="modal-header">
+        <div class="modal-title">${t('Disable2FA')}</div>
+        <button class="modal-close" id="modal-close">&times;</button>
+      </div>
+      <p style="font-size:13px;color:#555;margin:0 0 12px;">${t('EnterPasswordToDisable')}</p>
+      <input id="disable-2fa-password" class="form-input" type="password" placeholder="${t('Password')}">
+      <div id="disable-2fa-error" style="color:var(--danger,#dc3545);font-size:13px;margin-top:4px;display:none;"></div>
+      <button id="disable-2fa-confirm" class="btn btn-danger btn-block" style="margin-top:12px;">${t('Disable2FA')}</button>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+  bindModalClose(overlay);
+
+  const pwInput = overlay.querySelector('#disable-2fa-password');
+  pwInput?.focus();
+  pwInput?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') disableConfirm(overlay);
+  });
+  overlay.querySelector('#disable-2fa-confirm')?.addEventListener('click', () => disableConfirm(overlay));
+}
+
+async function disableConfirm(overlay) {
+  const password = overlay.querySelector('#disable-2fa-password')?.value;
+  const errEl = overlay.querySelector('#disable-2fa-error');
+  const btn = overlay.querySelector('#disable-2fa-confirm');
+  if (!password) return;
+
+  if (btn) { btn.disabled = true; btn.textContent = t('Loading'); }
+
+  try {
+    await api.post('/me/2fa/disable', { password });
+    overlay.remove();
+    load2FAStatus();
+  } catch (err) {
+    if (errEl) { errEl.textContent = err.message || t('UnknownError'); errEl.style.display = 'block'; }
+    if (btn) { btn.disabled = false; btn.textContent = t('Disable2FA'); }
+  }
+}
 
 // ── Edit Profile ──
 

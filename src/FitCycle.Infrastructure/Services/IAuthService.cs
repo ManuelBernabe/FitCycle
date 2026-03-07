@@ -5,7 +5,7 @@ namespace FitCycle.Infrastructure.Services;
 public interface IAuthService
 {
     Task<RegisterResponse> RegisterAsync(RegisterRequest request);
-    Task<AuthResponse> LoginAsync(LoginRequest request);
+    Task<object> LoginAsync(LoginRequest request);
     Task<AuthResponse> RefreshTokenAsync(RefreshRequest request);
     Task<UserInfo?> GetUserInfoAsync(int userId);
     Task<List<UserInfo>> GetAllUsersAsync();
@@ -16,4 +16,8 @@ public interface IAuthService
     Task<AuthResponse> ImpersonateAsync(int userId);
     Task<bool> ActivateAsync(string token);
     Task<string?> ResendActivationAsync(string email);
+    Task<AuthResponse> Verify2FAAsync(Verify2FARequest request);
+    TwoFactorSetupResponse Setup2FA(User user);
+    TwoFactorConfirmResponse Confirm2FA(User user, string code);
+    void Disable2FA(User user, string password);
 }

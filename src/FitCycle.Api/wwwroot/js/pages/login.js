@@ -6,14 +6,41 @@ import { auth } from '../auth.js';
 import { showPrompt } from '../utils.js';
 
 let registeredEmail = null;
+let tempToken2FA = null;
 
 export function render() {
   const isRegister = (sessionStorage.getItem('login_mode') === 'register');
   const showActivation = sessionStorage.getItem('login_show_activation') === 'true';
+  const show2FA = sessionStorage.getItem('login_show_2fa') === 'true';
 
   const langOptions = availableLanguages
     .map(l => `<option value="${l}" ${l === currentLanguage() ? 'selected' : ''}>${languageDisplayName(l)}</option>`)
     .join('');
+
+  if (show2FA) {
+    return `
+      <div class="login-page" style="padding-top:0;">
+        <div class="login-lang">
+          <select id="login-lang-select">${langOptions}</select>
+        </div>
+        <div class="login-logo">FC</div>
+        <div class="login-app-name">${t('AppName')}</div>
+        <div class="login-card" style="text-align:center;">
+          <div style="font-size:36px;margin-bottom:8px;">&#128272;</div>
+          <h2 class="login-section-title">${t('TwoFAVerification')}</h2>
+          <p style="color:#555;font-size:14px;line-height:1.6;margin:8px 0 16px;">${t('EnterCodeFromApp')}</p>
+          <div id="login-error" class="login-error hidden"></div>
+          <input id="twofa-code" class="form-input" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="10" placeholder="${t('VerificationCode')}" autocomplete="one-time-code" style="text-align:center;font-size:20px;letter-spacing:4px;">
+          <button id="twofa-submit" class="btn btn-primary btn-block btn-lg" style="margin-top:12px;">${t('Verify')}</button>
+          <div id="login-loading" class="login-loading hidden">
+            <div class="spinner"></div>
+          </div>
+          <button id="twofa-recovery" class="btn btn-outline btn-block" style="margin-top:8px;font-size:13px;">${t('UseRecoveryCode')}</button>
+          <button id="twofa-back" class="btn btn-outline btn-block" style="margin-top:4px;font-size:13px;">${t('BackToLogin')}</button>
+        </div>
+      </div>
+    `;
+  }
 
   if (showActivation) {
     return `
@@ -75,6 +102,33 @@ export function mount() {
   const langSelect = document.getElementById('login-lang-select');
   const backToLogin = document.getElementById('back-to-login');
   const resendBtn = document.getElementById('resend-activation');
+
+  // 2FA verification handlers
+  const twofaSubmit = document.getElementById('twofa-submit');
+  const twofaCode = document.getElementById('twofa-code');
+  const twofaRecovery = document.getElementById('twofa-recovery');
+  const twofaBack = document.getElementById('twofa-back');
+
+  if (twofaSubmit) {
+    twofaSubmit.addEventListener('click', handle2FASubmit);
+    twofaCode?.addEventListener('keydown', e => { if (e.key === 'Enter') handle2FASubmit(); });
+    twofaCode?.focus();
+    twofaRecovery?.addEventListener('click', () => {
+      if (twofaCode) {
+        twofaCode.maxLength = 10;
+        twofaCode.placeholder = t('RecoveryCodes');
+        twofaCode.inputMode = 'text';
+        twofaCode.style.letterSpacing = '2px';
+        twofaCode.value = '';
+        twofaCode.focus();
+      }
+    });
+    twofaBack?.addEventListener('click', () => {
+      tempToken2FA = null;
+      sessionStorage.removeItem('login_show_2fa');
+      window.dispatchEvent(new Event('app-rerender'));
+    });
+  }
 
   form?.addEventListener('click', handleSubmit);
 
@@ -184,6 +238,12 @@ async function handleSubmit() {
       window.dispatchEvent(new Event('app-rerender'));
     } else {
       const result = await api.post('/auth/login', { username, password });
+      if (result.requires2FA) {
+        tempToken2FA = result.tempToken;
+        sessionStorage.setItem('login_show_2fa', 'true');
+        window.dispatchEvent(new Event('app-rerender'));
+        return;
+      }
       auth.store(result);
       location.hash = '#home';
     }
@@ -214,4 +274,35 @@ async function handleSubmit() {
   }
 }
 
-export function destroy() {}
+async function handle2FASubmit() {
+  const errorEl = document.getElementById('login-error');
+  const submitBtn = document.getElementById('twofa-submit');
+  const loadingEl = document.getElementById('login-loading');
+  const code = document.getElementById('twofa-code')?.value?.trim();
+
+  if (!code || !tempToken2FA) return;
+
+  errorEl?.classList.add('hidden');
+  submitBtn.disabled = true;
+  submitBtn.textContent = t('Loading');
+  if (loadingEl) loadingEl.classList.remove('hidden');
+
+  try {
+    const result = await api.post('/auth/verify-2fa', { tempToken: tempToken2FA, code });
+    auth.store(result);
+    tempToken2FA = null;
+    sessionStorage.removeItem('login_show_2fa');
+    location.hash = '#home';
+  } catch (err) {
+    errorEl.textContent = err.message || t('InvalidCode');
+    errorEl.classList.remove('hidden');
+    submitBtn.disabled = false;
+    submitBtn.textContent = t('Verify');
+    if (loadingEl) loadingEl.classList.add('hidden');
+  }
+}
+
+export function destroy() {
+  tempToken2FA = null;
+  sessionStorage.removeItem('login_show_2fa');
+}

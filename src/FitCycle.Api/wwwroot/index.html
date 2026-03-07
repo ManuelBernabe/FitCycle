@@ -9,7 +9,7 @@
   <link rel="manifest" href="/manifest.json">
   <link rel="apple-touch-icon" href="/icons/icon-192.svg">
   <title>FitCycle</title>
-  <link rel="stylesheet" href="/css/app.css?v=49">
+  <link rel="stylesheet" href="/css/app.css?v=50">
   <script>
     // Apply theme before first paint to prevent flash
     (function(){var t=localStorage.getItem('fitcycle_theme')||'auto';if(t==='dark'||(t==='auto'&&matchMedia('(prefers-color-scheme:dark)').matches))document.documentElement.classList.add('dark');})();
@@ -25,6 +25,7 @@
   <script>
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' });
   </script>
-  <script type="module" src="/js/app.js?v=49"></script>
+  <script src="/js/qrcode.min.js"></script>
+  <script type="module" src="/js/app.js?v=50"></script>
 </body>
 </html>

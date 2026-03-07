@@ -2,11 +2,13 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using FitCycle.Core.Models;
 using FitCycle.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using OtpNet;
 
 namespace FitCycle.Infrastructure.Services;
 
@@ -55,7 +57,7 @@ public class AuthService : IAuthService
         return new RegisterResponse("Registro exitoso. Revisa tu email para activar tu cuenta.", activationToken);
     }
 
-    public async Task<AuthResponse> LoginAsync(LoginRequest request)
+    public async Task<object> LoginAsync(LoginRequest request)
     {
         var user = await _db.Users.FirstOrDefaultAsync(u => u.Username == request.Username);
         if (user is null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
@@ -63,6 +65,12 @@ public class AuthService : IAuthService
 
         if (!user.IsActive)
             throw new UnauthorizedAccessException("Tu cuenta no está activada. Revisa tu email para activarla.");
+
+        if (user.TwoFactorEnabled)
+        {
+            var tempToken = GenerateTempToken(user);
+            return new TwoFactorLoginResponse(true, tempToken);
+        }
 
         return GenerateTokens(user);
     }
@@ -238,6 +246,164 @@ public class AuthService : IAuthService
         await _db.SaveChangesAsync();
 
         return activationToken;
+    }
+
+    // -- 2FA Methods --
+
+    public async Task<AuthResponse> Verify2FAAsync(Verify2FARequest request)
+    {
+        // Validate temp token
+        var handler = new JwtSecurityTokenHandler();
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwt.SecretKey));
+
+        ClaimsPrincipal principal;
+        try
+        {
+            principal = handler.ValidateToken(request.TempToken, new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidateAudience = true,
+                ValidateLifetime = true,
+                ValidateIssuerSigningKey = true,
+                ValidIssuer = _jwt.Issuer,
+                ValidAudience = _jwt.Audience,
+                IssuerSigningKey = key
+            }, out _);
+        }
+        catch
+        {
+            throw new UnauthorizedAccessException("Token temporal inválido o expirado.");
+        }
+
+        var purposeClaim = principal.FindFirst("purpose")?.Value;
+        if (purposeClaim != "2fa")
+            throw new UnauthorizedAccessException("Token temporal inválido.");
+
+        var userIdClaim = principal.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (userIdClaim is null || !int.TryParse(userIdClaim, out var userId))
+            throw new UnauthorizedAccessException("Token temporal inválido.");
+
+        var user = await _db.Users.FindAsync(userId);
+        if (user is null || !user.TwoFactorEnabled || user.TwoFactorSecret is null)
+            throw new UnauthorizedAccessException("2FA no configurado.");
+
+        // Try TOTP code first
+        if (ValidateTotpCode(user.TwoFactorSecret, request.Code))
+            return GenerateTokens(user);
+
+        // Try recovery code
+        if (await ValidateRecoveryCodeAsync(user, request.Code))
+            return GenerateTokens(user);
+
+        throw new UnauthorizedAccessException("Código inválido.");
+    }
+
+    public TwoFactorSetupResponse Setup2FA(User user)
+    {
+        var secretBytes = KeyGeneration.GenerateRandomKey(20);
+        var secret = Base32Encoding.ToString(secretBytes);
+        user.TwoFactorSecret = secret;
+        _db.SaveChanges();
+
+        var otpAuthUri = $"otpauth://totp/FitCycle:{Uri.EscapeDataString(user.Username)}?secret={secret}&issuer=FitCycle&digits=6&period=30";
+        return new TwoFactorSetupResponse(secret, otpAuthUri);
+    }
+
+    public TwoFactorConfirmResponse Confirm2FA(User user, string code)
+    {
+        if (user.TwoFactorSecret is null)
+            throw new ArgumentException("Primero debes iniciar la configuración de 2FA.");
+
+        if (!ValidateTotpCode(user.TwoFactorSecret, code))
+            throw new ArgumentException("Código inválido. Verifica que tu app authenticator está sincronizada.");
+
+        user.TwoFactorEnabled = true;
+
+        // Generate 8 recovery codes
+        var codes = new string[8];
+        for (int i = 0; i < 8; i++)
+        {
+            var bytes = RandomNumberGenerator.GetBytes(4);
+            var part1 = Convert.ToHexString(bytes[..2]).ToUpperInvariant();
+            var part2 = Convert.ToHexString(bytes[2..]).ToUpperInvariant();
+            codes[i] = $"{part1}-{part2}";
+        }
+
+        // Store hashed recovery codes
+        var hashed = codes.Select(c => BCrypt.Net.BCrypt.HashPassword(c.Replace("-", "").ToUpperInvariant())).ToArray();
+        user.RecoveryCodes = JsonSerializer.Serialize(hashed);
+        _db.SaveChanges();
+
+        return new TwoFactorConfirmResponse(codes);
+    }
+
+    public void Disable2FA(User user, string password)
+    {
+        if (!BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
+            throw new ArgumentException("Contraseña incorrecta.");
+
+        user.TwoFactorEnabled = false;
+        user.TwoFactorSecret = null;
+        user.RecoveryCodes = null;
+        _db.SaveChanges();
+    }
+
+    private bool ValidateTotpCode(string secret, string code)
+    {
+        try
+        {
+            var secretBytes = Base32Encoding.ToBytes(secret);
+            var totp = new Totp(secretBytes, step: 30, totpSize: 6);
+            return totp.VerifyTotp(code, out _, new VerificationWindow(previous: 1, future: 1));
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private async Task<bool> ValidateRecoveryCodeAsync(User user, string code)
+    {
+        if (user.RecoveryCodes is null) return false;
+
+        var normalizedCode = code.Replace("-", "").ToUpperInvariant();
+        var hashed = JsonSerializer.Deserialize<string[]>(user.RecoveryCodes);
+        if (hashed is null) return false;
+
+        for (int i = 0; i < hashed.Length; i++)
+        {
+            if (hashed[i] != "" && BCrypt.Net.BCrypt.Verify(normalizedCode, hashed[i]))
+            {
+                // Consume the code
+                hashed[i] = "";
+                user.RecoveryCodes = JsonSerializer.Serialize(hashed);
+                await _db.SaveChangesAsync();
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private string GenerateTempToken(User user)
+    {
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwt.SecretKey));
+        var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+
+        var claims = new[]
+        {
+            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+            new Claim("purpose", "2fa")
+        };
+
+        var token = new JwtSecurityToken(
+            issuer: _jwt.Issuer,
+            audience: _jwt.Audience,
+            claims: claims,
+            expires: DateTime.UtcNow.AddMinutes(5),
+            signingCredentials: creds);
+
+        return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
     private static void ValidatePasswordStrength(string password)
