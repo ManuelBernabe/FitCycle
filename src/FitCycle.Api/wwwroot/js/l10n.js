@@ -446,8 +446,21 @@ const Strings = {
 
   // Account
   TutAccountTitle:     { es: 'Cuenta y ajustes',                         en: 'Account & Settings',                fr: 'Compte et paramètres' },
-  TutAccountDesc:      { es: 'Edita tu perfil (nombre, email), cambia tu contraseña directamente, selecciona el idioma y cierra sesión. Todos los usuarios pueden editar su propio perfil.', en: 'Edit your profile (name, email), change your password directly, select language and log out. All users can edit their own profile.', fr: "Modifiez votre profil, changez votre mot de passe directement, sélectionnez la langue et déconnectez-vous. Tous les utilisateurs peuvent modifier leur profil." },
+  TutAccountDesc:      { es: 'Edita tu perfil (nombre, email), cambia tu contraseña, activa la autenticación en dos pasos (2FA), selecciona idioma y tema, y cierra sesión.', en: 'Edit your profile (name, email), change your password, enable two-factor authentication (2FA), select language and theme, and log out.', fr: "Modifiez votre profil, changez votre mot de passe, activez l'authentification à deux facteurs (2FA), sélectionnez la langue et le thème, et déconnectez-vous." },
   TutChangePassword:   { es: 'Cambiar contraseña',                       en: 'Change password',                   fr: 'Changer le mot de passe' },
+  Tut2FADesc:          { es: 'Protege tu cuenta con código temporal',    en: 'Protect your account with a temporary code', fr: 'Protégez votre compte avec un code temporaire' },
+  Tut2FAFlow:          { es: 'Añade una capa extra de seguridad. Al activar 2FA, cada vez que inicies sesión necesitarás un código de 6 dígitos generado por tu app authenticator (Google Authenticator, Authy, etc.).',
+                         en: 'Add an extra layer of security. When 2FA is enabled, you will need a 6-digit code from your authenticator app (Google Authenticator, Authy, etc.) every time you log in.',
+                         fr: 'Ajoutez une couche de sécurité supplémentaire. Avec le 2FA activé, vous aurez besoin d\'un code à 6 chiffres de votre application d\'authentification à chaque connexion.' },
+  Tut2FAStep1:         { es: 'Escanear QR',       en: 'Scan QR',         fr: 'Scanner QR' },
+  Tut2FAStep2:         { es: 'Verificar código',   en: 'Verify code',     fr: 'Vérifier code' },
+  Tut2FAStep3:         { es: '2FA activado',        en: '2FA enabled',     fr: '2FA activé' },
+  Tut2FATip:           { es: 'Al activar 2FA recibirás 8 códigos de recuperación. Guárdalos en un lugar seguro por si pierdes acceso a tu app.',
+                         en: 'When enabling 2FA you will receive 8 recovery codes. Save them in a safe place in case you lose access to your app.',
+                         fr: 'En activant le 2FA, vous recevrez 8 codes de récupération. Conservez-les en lieu sûr.' },
+  Tut2FATip2:          { es: 'Para desactivar 2FA necesitarás introducir tu contraseña actual.',
+                         en: 'To disable 2FA you will need to enter your current password.',
+                         fr: 'Pour désactiver le 2FA, vous devrez entrer votre mot de passe actuel.' },
 
   // Offline / PWA
   TutOfflineTitle:     { es: 'Modo offline y PWA',                       en: 'Offline Mode & PWA',                fr: 'Mode hors ligne et PWA' },

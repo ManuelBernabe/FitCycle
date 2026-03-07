@@ -306,8 +306,30 @@ export function render() {
               ${mockMenuItem('✏️', t('Edit') + ' ' + t('Profile'), '')}
               ${mockMenuItem('🔒', t('TutChangePassword'), '')}
               ${mockMenuItem('🌐', t('Language'), 'Español / English / Français')}
+              ${mockMenuItem('🎨', t('Theme'), 'Auto / Light / Dark')}
+              ${mockMenuItem('🔐', t('TwoFactorAuth'), t('Tut2FADesc'))}
               ${mockMenuItem('🚪', t('Logout'), '', true)}
             </div>
+          </div>
+          <div style="margin-top:10px;background:#fff;border-radius:10px;padding:12px;border:1px solid #eee;">
+            <div style="font-weight:600;font-size:13px;color:#333;margin-bottom:8px;">🔐 ${t('TwoFactorAuth')}</div>
+            <p style="font-size:12px;color:#555;line-height:1.5;margin:0 0 10px;">${t('Tut2FAFlow')}</p>
+            <div style="display:flex;gap:6px;margin-bottom:8px;">
+              <div style="flex:1;background:#f3f0fc;border-radius:8px;padding:10px;text-align:center;">
+                <div style="font-size:20px;">📱</div>
+                <div style="font-size:10px;color:#888;margin-top:4px;">${t('Tut2FAStep1')}</div>
+              </div>
+              <div style="flex:1;background:#f3f0fc;border-radius:8px;padding:10px;text-align:center;">
+                <div style="font-size:20px;">🔢</div>
+                <div style="font-size:10px;color:#888;margin-top:4px;">${t('Tut2FAStep2')}</div>
+              </div>
+              <div style="flex:1;background:#f3f0fc;border-radius:8px;padding:10px;text-align:center;">
+                <div style="font-size:20px;">✅</div>
+                <div style="font-size:10px;color:#888;margin-top:4px;">${t('Tut2FAStep3')}</div>
+              </div>
+            </div>
+            ${tip(t('Tut2FATip'))}
+            ${tip(t('Tut2FATip2'), '#fff3e0', '#e65100')}
           </div>
         `)}
 
