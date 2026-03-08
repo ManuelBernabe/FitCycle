@@ -13,7 +13,7 @@ namespace FitCycle.Infrastructure.Services;
 
 public interface IPdfImportService
 {
-    Task<PdfImportResult> ImportFromPdfAsync(byte[] pdfBytes, int targetUserId);
+    Task<PdfImportResult> ImportFromPdfAsync(byte[] pdfBytes, int targetUserId, string language = "es");
     string ExtractTextFromPdf(byte[] pdfBytes);
 }
 
@@ -41,7 +41,7 @@ public class PdfImportService : IPdfImportService
         _logger = logger;
     }
 
-    public async Task<PdfImportResult> ImportFromPdfAsync(byte[] pdfBytes, int targetUserId)
+    public async Task<PdfImportResult> ImportFromPdfAsync(byte[] pdfBytes, int targetUserId, string language = "es")
     {
         // 1. Extract text from PDF locally using PdfPig
         string pdfText;
@@ -122,6 +122,36 @@ public class PdfImportService : IPdfImportService
                 DebugDiaLines = diaLines.ToList(),
                 DebugLines = first.ToList(),
             };
+        }
+
+        // 4b. Translate exercise names if language is not Spanish
+        if (!string.Equals(language, "es", StringComparison.OrdinalIgnoreCase) && daysWithExercises.Count > 0)
+        {
+            var allNames = daysWithExercises
+                .SelectMany(d => d.Exercises)
+                .Select(e => e.Name)
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .Select(n => n!)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (allNames.Count > 0)
+            {
+                var translations = await TranslateExerciseNamesAsync(allNames, language);
+                if (translations.Count > 0)
+                {
+                    foreach (var day in daysWithExercises)
+                    {
+                        foreach (var ex in day.Exercises)
+                        {
+                            if (ex.Name != null && translations.TryGetValue(ex.Name, out var translated))
+                                ex.Name = translated;
+                        }
+                    }
+                    _logger.LogInformation("Translated {Count}/{Total} exercise names to {Lang}",
+                        translations.Count, allNames.Count, language);
+                }
+            }
         }
 
         // 5. Get all muscle groups and exercises
@@ -306,6 +336,112 @@ public class PdfImportService : IPdfImportService
         text = text.Replace('\u2013', '-').Replace('\u2014', '-')
                    .Replace('\u2015', '-').Replace('\u2212', '-');
         return text;
+    }
+
+    private async Task<Dictionary<string, string>> TranslateExerciseNamesAsync(List<string> names, string targetLanguage)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        if (string.IsNullOrWhiteSpace(_settings.ApiKey))
+        {
+            _logger.LogInformation("No Gemini API key, skipping exercise name translation");
+            return result;
+        }
+
+        var langName = targetLanguage switch
+        {
+            "en" => "English",
+            "fr" => "French",
+            _ => targetLanguage
+        };
+
+        var namesList = string.Join("\n", names.Select((n, i) => $"{i + 1}. {n}"));
+        var prompt = $@"Translate these gym/fitness exercise names from Spanish to {langName}.
+Return ONLY a JSON object mapping each original Spanish name to its {langName} translation.
+Use Title Case for translations. Keep proper nouns (brand names, etc.) as-is.
+
+Exercise names:
+{namesList}
+
+Example response format:
+{{""Press Banca Inclinado"": ""Incline Bench Press"", ""Curl Con Mancuernas"": ""Dumbbell Curl""}}
+
+Return ONLY the JSON object, no markdown, no explanation.";
+
+        var requestBody = new
+        {
+            contents = new[]
+            {
+                new
+                {
+                    parts = new object[]
+                    {
+                        new { text = prompt }
+                    }
+                }
+            },
+            generationConfig = new
+            {
+                temperature = 0.1,
+                maxOutputTokens = 4096,
+            }
+        };
+
+        var json = JsonSerializer.Serialize(requestBody);
+        var url = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key={_settings.ApiKey}";
+
+        try
+        {
+            var httpRequest = new HttpRequestMessage(HttpMethod.Post, url)
+            {
+                Content = new StringContent(json, Encoding.UTF8, "application/json")
+            };
+
+            var response = await _http.SendAsync(httpRequest);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Gemini translation API error {Status}", response.StatusCode);
+                return result;
+            }
+
+            var responseText = await response.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(responseText);
+            var candidates = doc.RootElement.GetProperty("candidates");
+            foreach (var candidate in candidates.EnumerateArray())
+            {
+                var content = candidate.GetProperty("content");
+                var parts = content.GetProperty("parts");
+                foreach (var part in parts.EnumerateArray())
+                {
+                    if (part.TryGetProperty("text", out var textProp))
+                    {
+                        var text = textProp.GetString() ?? "";
+                        text = text.Trim();
+                        if (text.StartsWith("```json")) text = text[7..];
+                        else if (text.StartsWith("```")) text = text[3..];
+                        if (text.EndsWith("```")) text = text[..^3];
+                        text = text.Trim();
+
+                        var translations = JsonSerializer.Deserialize<Dictionary<string, string>>(text, _jsonOpts);
+                        if (translations != null)
+                        {
+                            foreach (var kvp in translations)
+                            {
+                                if (!string.IsNullOrWhiteSpace(kvp.Value))
+                                    result[kvp.Key] = kvp.Value;
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to translate exercise names with Gemini");
+        }
+
+        return result;
     }
 
     private async Task<(string? Json, string? Error)> CallGeminiWithTextAsync(string pdfText)

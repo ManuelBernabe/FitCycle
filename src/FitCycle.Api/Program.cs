@@ -671,9 +671,12 @@ app.MapPost("/routines/import-pdf", async (HttpRequest request, IPdfImportServic
         if (!int.TryParse(form["userId"].ToString(), out var targetUserId) || targetUserId <= 0)
             return Results.BadRequest(new { error = "userId inválido." });
 
+        var language = form["language"].ToString();
+        if (string.IsNullOrWhiteSpace(language)) language = "es";
+
         using var ms = new MemoryStream();
         await file.CopyToAsync(ms);
-        var result = await importService.ImportFromPdfAsync(ms.ToArray(), targetUserId);
+        var result = await importService.ImportFromPdfAsync(ms.ToArray(), targetUserId, language);
 
         return result.Success ? Results.Ok(result) : Results.BadRequest(result);
     }

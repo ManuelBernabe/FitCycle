@@ -1,6 +1,6 @@
 // FitCycle Routines Page — weekly routine overview with 7 day cards
 
-import { t, dayName, muscleGroup, exerciseName as exTranslate } from '../l10n.js';
+import { t, dayName, muscleGroup, exerciseName as exTranslate, currentLanguage } from '../l10n.js';
 import { api } from '../api.js';
 import { auth } from '../auth.js';
 import { escapeHtml, showAlert, showConfirm } from '../utils.js';
@@ -259,6 +259,7 @@ async function showImportModal() {
       const formData = new FormData();
       formData.append('pdf', file);
       formData.append('userId', userId);
+      formData.append('language', currentLanguage());
 
       const result = await api.postForm('/routines/import-pdf', formData);
 
