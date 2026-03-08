@@ -1,7 +1,7 @@
 // FitCycle Edit Day Page — configure muscle groups and exercises for a day
 // Supports multi-set (per-set reps/weight configuration)
 
-import { t, dayName, muscleGroup as mgTranslate } from '../l10n.js';
+import { t, dayName, muscleGroup as mgTranslate, exerciseName as exTranslate } from '../l10n.js';
 import { api } from '../api.js';
 import { getSuggestions, clearCache } from '../exercises.js';
 import { escapeHtml, showConfirm, showPrompt } from '../utils.js';
@@ -312,11 +312,11 @@ function buildExerciseRows(group, gi) {
         <div style="display:flex;align-items:center;gap:4px;">
           <input type="checkbox" class="ex-check" data-gi="${gi}" data-ei="${ei}" ${checkedAttr}>
           ${imgHtml ? `<div style="flex-shrink:0;">${imgHtml}</div>` : ''}
-          <span style="font-size:13px;font-weight:600;flex:1;min-width:0;word-break:break-word;">${escapeHtml(ex.name)}</span>
+          <span style="font-size:13px;font-weight:600;flex:1;min-width:0;word-break:break-word;">${escapeHtml(exTranslate(ex.name))}</span>
           ${supersetBtn}
           <button class="btn-delete-ex" data-gi="${gi}" data-ei="${ei}" style="background:#dc3545;color:#fff;border:none;border-radius:6px;padding:2px 6px;font-size:12px;cursor:pointer;flex-shrink:0;">&#10005;</button>
         </div>
-        ${isInSuperset ? `<div style="font-size:10px;color:#e67e22;font-weight:600;margin:2px 0 0 24px;">&#8644; ${partnerName ? escapeHtml(partnerName) : t('Superset')}</div>` : ''}
+        ${isInSuperset ? `<div style="font-size:10px;color:#e67e22;font-weight:600;margin:2px 0 0 24px;">&#8644; ${partnerName ? escapeHtml(exTranslate(partnerName)) : t('Superset')}</div>` : ''}
         <div style="margin:4px 0 0 24px;">
           <div style="font-size:10px;color:#666;word-break:break-word;">${summaryText}</div>
           ${badgesHtml}
@@ -376,7 +376,7 @@ function showSupersetModal(sourceGi, sourceEi) {
           <div style="display:flex;align-items:center;gap:8px;">
             ${c.imageUrl ? `<img src="${c.imageUrl}" alt="" style="width:36px;height:36px;object-fit:cover;border-radius:4px;" onerror="this.onerror=null;this.parentElement.innerHTML='&#127947;&#65039;'">` : '<span style="font-size:18px;">&#127947;</span>'}
             <div style="flex:1;">
-              <div style="font-size:14px;font-weight:600;">${escapeHtml(c.name)}</div>
+              <div style="font-size:14px;font-weight:600;">${escapeHtml(exTranslate(c.name))}</div>
               <div style="font-size:11px;color:#888;">${c.mgName}</div>
             </div>
           </div>
@@ -387,7 +387,7 @@ function showSupersetModal(sourceGi, sourceEi) {
   overlay.innerHTML = `
     <div class="modal-content" style="max-height:70vh;overflow-y:auto;">
       <div class="modal-header">
-        <div class="modal-title">&#8644; ${t('Superset')}: ${escapeHtml(sourceEx.name)}</div>
+        <div class="modal-title">&#8644; ${t('Superset')}: ${escapeHtml(exTranslate(sourceEx.name))}</div>
         <button class="modal-close" id="ss-modal-close">&times;</button>
       </div>
       <div style="padding:0 4px;font-size:12px;color:#666;margin-bottom:8px;">${t('SelectPair')}</div>
@@ -608,7 +608,7 @@ function attachEvents(container) {
       const gi = parseInt(btn.dataset.gi);
       const ei = parseInt(btn.dataset.ei);
       const ex = groups[gi].exercises[ei];
-      if (!await showConfirm(t('ConfirmDeleteExercise', ex.name))) return;
+      if (!await showConfirm(t('ConfirmDeleteExercise', exTranslate(ex.name)))) return;
       groups[gi].exercises.splice(ei, 1);
       buildUI();
     });
@@ -714,7 +714,7 @@ function showSuggestionModal(group, displayName, suggestions) {
         ${s.imageUrl ? `<img src="${s.imageUrl}" alt="" style="width:40px;height:40px;object-fit:cover;border-radius:4px;" onerror="this.onerror=null;this.parentElement.innerHTML='&#127947;&#65039;'">` : '&#127947;'}
       </div>
       <div class="exercise-info">
-        <div class="exercise-name">${escapeHtml(s.name)}</div>
+        <div class="exercise-name">${escapeHtml(exTranslate(s.name))}</div>
       </div>
     </div>
   `).join('');

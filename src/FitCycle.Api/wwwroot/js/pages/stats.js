@@ -1,6 +1,6 @@
 // FitCycle Stats Page — workout statistics and history
 
-import { t, dayName } from '../l10n.js';
+import { t, dayName, exerciseName as exTranslate } from '../l10n.js';
 import { api } from '../api.js';
 import { escapeHtml, calculateStreak } from '../utils.js';
 
@@ -107,8 +107,8 @@ export async function mount() {
               const barWidth = maxEx > 0 ? (e.count / maxEx * 100) : 0;
               const exId = e.exerciseId || e.ExerciseId || 0;
               return `
-                <div class="bar-row top-exercise-row" data-exercise-id="${exId}" data-exercise-name="${e.name}" style="cursor:pointer;" title="${t('WeightProgress')}">
-                  <div class="bar-label" style="font-weight:bold;">${e.name}</div>
+                <div class="bar-row top-exercise-row" data-exercise-id="${exId}" data-exercise-name="${exTranslate(e.name)}" style="cursor:pointer;" title="${t('WeightProgress')}">
+                  <div class="bar-label" style="font-weight:bold;">${exTranslate(e.name)}</div>
                   <div class="bar-track">
                     <div class="bar-fill" style="width:${barWidth.toFixed(0)}%;background:#28a745;"></div>
                   </div>
@@ -170,7 +170,7 @@ export async function mount() {
         detailDiv.id = detailId;
         detailDiv.style.cssText = 'margin-left:16px;margin-bottom:8px;font-size:14px;';
         detailDiv.innerHTML = exLogs.map(log => {
-          const logName = log.exerciseName || log.ExerciseName || '';
+          const logName = exTranslate(log.exerciseName || log.ExerciseName || '');
           const logMg = log.muscleGroupName || log.MuscleGroupName || '';
           let setInfo = '';
           const rawDetails = log.setDetails || log.SetDetails || '';

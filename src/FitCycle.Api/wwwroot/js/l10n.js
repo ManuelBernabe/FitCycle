@@ -22,6 +22,114 @@ const Strings = {
   MG_Abdominales:  { en: 'Abs',       fr: 'Abdominaux' },
   'MG_Glúteos':    { en: 'Glutes',    fr: 'Fessiers' },
 
+  // === Exercise Names (key = EX_{spanish name}) ===
+  // Pecho
+  'EX_Press banca':              { en: 'Bench press',           fr: 'Developpe couche' },
+  'EX_Press inclinado':          { en: 'Incline bench press',   fr: 'Developpe incline' },
+  'EX_Press declinado':          { en: 'Decline bench press',   fr: 'Developpe decline' },
+  'EX_Aperturas con mancuernas': { en: 'Dumbbell flyes',        fr: 'Ecartes halteres' },
+  'EX_Aperturas en polea':       { en: 'Cable flyes',           fr: 'Ecartes poulie' },
+  'EX_Fondos':                   { en: 'Dips',                  fr: 'Dips' },
+  'EX_Pullover':                 { en: 'Pullover',              fr: 'Pullover' },
+  'EX_Press con mancuernas':     { en: 'Dumbbell press',        fr: 'Developpe halteres' },
+  'EX_Cruces en polea alta':     { en: 'High cable crossover',  fr: 'Croise poulie haute' },
+  'EX_Cruces en polea baja':     { en: 'Low cable crossover',   fr: 'Croise poulie basse' },
+  'EX_Flexiones':                { en: 'Push-ups',              fr: 'Pompes' },
+  'EX_Flexiones diamante':       { en: 'Diamond push-ups',      fr: 'Pompes diamant' },
+  'EX_Press en maquina':         { en: 'Machine press',         fr: 'Presse pectorale' },
+  'EX_Peck deck':                { en: 'Pec deck',              fr: 'Pec deck' },
+  // Espalda
+  'EX_Dominadas':                { en: 'Pull-ups',              fr: 'Tractions' },
+  'EX_Remo con barra':           { en: 'Barbell row',           fr: 'Rowing barre' },
+  'EX_Jalon al pecho':           { en: 'Lat pulldown',          fr: 'Tirage poitrine' },
+  'EX_Remo con mancuerna':       { en: 'Dumbbell row',          fr: 'Rowing haltere' },
+  'EX_Remo en polea baja':       { en: 'Seated cable row',      fr: 'Rowing poulie basse' },
+  'EX_Jalon tras nuca':          { en: 'Behind neck pulldown',  fr: 'Tirage nuque' },
+  'EX_Peso muerto':              { en: 'Deadlift',              fr: 'Souleve de terre' },
+  'EX_Pullover en polea':        { en: 'Cable pullover',        fr: 'Pullover poulie' },
+  'EX_Remo en maquina':          { en: 'Machine row',           fr: 'Rowing machine' },
+  'EX_Dominadas supinas':        { en: 'Chin-ups',              fr: 'Tractions supination' },
+  'EX_Remo T':                   { en: 'T-bar row',             fr: 'Rowing en T' },
+  'EX_Face pull':                { en: 'Face pull',             fr: 'Face pull' },
+  'EX_Hiperextensiones':         { en: 'Hyperextensions',       fr: 'Hyperextensions' },
+  'EX_Encogimientos con barra':  { en: 'Barbell shrugs',        fr: 'Haussements barre' },
+  // Hombros
+  'EX_Press militar':            { en: 'Military press',        fr: 'Developpe militaire' },
+  'EX_Elevaciones laterales':    { en: 'Lateral raises',        fr: 'Elevations laterales' },
+  'EX_Elevaciones frontales':    { en: 'Front raises',          fr: 'Elevations frontales' },
+  'EX_Pajaros':                  { en: 'Reverse flyes',         fr: 'Oiseau' },
+  'EX_Press Arnold':             { en: 'Arnold press',          fr: 'Developpe Arnold' },
+  'EX_Remo al menton':           { en: 'Upright row',           fr: 'Rowing menton' },
+  'EX_Elevaciones laterales en polea': { en: 'Cable lateral raises', fr: 'Elevations laterales poulie' },
+  'EX_Shrugs':                   { en: 'Shrugs',                fr: 'Shrugs' },
+  'EX_Rotacion externa':         { en: 'External rotation',     fr: 'Rotation externe' },
+  'EX_Plancha lateral':          { en: 'Side plank',            fr: 'Planche laterale' },
+  // Bíceps
+  'EX_Curl con barra':           { en: 'Barbell curl',          fr: 'Curl barre' },
+  'EX_Curl con mancuernas':      { en: 'Dumbbell curl',         fr: 'Curl halteres' },
+  'EX_Curl martillo':            { en: 'Hammer curl',           fr: 'Curl marteau' },
+  'EX_Curl concentrado':         { en: 'Concentration curl',    fr: 'Curl concentre' },
+  'EX_Curl en predicador':       { en: 'Preacher curl',         fr: 'Curl pupitre' },
+  'EX_Curl en polea':            { en: 'Cable curl',            fr: 'Curl poulie' },
+  'EX_Curl 21s':                 { en: '21s curl',              fr: 'Curl 21s' },
+  'EX_Curl arana':               { en: 'Spider curl',           fr: 'Curl araignee' },
+  'EX_Curl con barra Z':         { en: 'EZ bar curl',           fr: 'Curl barre EZ' },
+  'EX_Curl inclinado':           { en: 'Incline curl',          fr: 'Curl incline' },
+  'EX_Curl en maquina':          { en: 'Machine curl',          fr: 'Curl machine' },
+  'EX_Curl inverso':             { en: 'Reverse curl',          fr: 'Curl inverse' },
+  // Tríceps
+  'EX_Fondos en paralelas':      { en: 'Parallel bar dips',     fr: 'Dips paralleles' },
+  'EX_Extension con polea':      { en: 'Cable pushdown',        fr: 'Extension poulie' },
+  'EX_Press frances':            { en: 'Skull crushers',        fr: 'Barre au front' },
+  'EX_Patada de triceps':        { en: 'Tricep kickback',       fr: 'Extension triceps' },
+  'EX_Press cerrado':            { en: 'Close grip bench press', fr: 'Developpe serre' },
+  'EX_Extension sobre cabeza':   { en: 'Overhead extension',    fr: 'Extension au-dessus tete' },
+  'EX_Dips en banco':            { en: 'Bench dips',            fr: 'Dips banc' },
+  'EX_Extension con mancuerna':  { en: 'Dumbbell extension',    fr: 'Extension haltere' },
+  'EX_Jalon con cuerda':         { en: 'Rope pushdown',         fr: 'Tirage corde' },
+  'EX_Press de triceps en maquina': { en: 'Machine tricep press', fr: 'Presse triceps machine' },
+  'EX_Extension en polea alta':  { en: 'High cable extension',  fr: 'Extension poulie haute' },
+  // Piernas
+  'EX_Sentadilla':               { en: 'Squat',                 fr: 'Squat' },
+  'EX_Prensa':                   { en: 'Leg press',             fr: 'Presse a cuisses' },
+  'EX_Extension de cuadriceps':  { en: 'Leg extension',         fr: 'Extension jambes' },
+  'EX_Curl femoral':             { en: 'Leg curl',              fr: 'Curl ischio-jambiers' },
+  'EX_Zancadas':                 { en: 'Lunges',                fr: 'Fentes' },
+  'EX_Sentadilla bulgara':       { en: 'Bulgarian split squat', fr: 'Squat bulgare' },
+  'EX_Sentadilla hack':          { en: 'Hack squat',            fr: 'Hack squat' },
+  'EX_Peso muerto rumano':       { en: 'Romanian deadlift',     fr: 'Souleve de terre roumain' },
+  'EX_Elevacion de gemelos':     { en: 'Calf raises',           fr: 'Mollets debout' },
+  'EX_Sentadilla goblet':        { en: 'Goblet squat',          fr: 'Squat goblet' },
+  'EX_Prensa de gemelos':        { en: 'Calf press',            fr: 'Mollets presse' },
+  'EX_Step up':                  { en: 'Step up',               fr: 'Step up' },
+  'EX_Sentadilla sumo':          { en: 'Sumo squat',            fr: 'Squat sumo' },
+  'EX_Abductores':               { en: 'Hip abduction',         fr: 'Abducteurs' },
+  'EX_Aductores':                { en: 'Hip adduction',         fr: 'Adducteurs' },
+  'EX_Leg curl sentado':         { en: 'Seated leg curl',       fr: 'Leg curl assis' },
+  // Abdominales
+  'EX_Crunch':                   { en: 'Crunch',                fr: 'Crunch' },
+  'EX_Plancha':                  { en: 'Plank',                 fr: 'Planche' },
+  'EX_Elevacion de piernas':     { en: 'Leg raises',            fr: 'Releve de jambes' },
+  'EX_Russian twist':            { en: 'Russian twist',         fr: 'Russian twist' },
+  'EX_Crunch en polea':          { en: 'Cable crunch',          fr: 'Crunch poulie' },
+  'EX_Ab wheel':                 { en: 'Ab wheel',              fr: 'Ab wheel' },
+  'EX_Mountain climbers':        { en: 'Mountain climbers',     fr: 'Mountain climbers' },
+  'EX_Crunch bicicleta':         { en: 'Bicycle crunch',        fr: 'Crunch bicyclette' },
+  'EX_V-ups':                    { en: 'V-ups',                 fr: 'V-ups' },
+  'EX_Dead bug':                 { en: 'Dead bug',              fr: 'Dead bug' },
+  'EX_Hollow hold':              { en: 'Hollow hold',           fr: 'Hollow hold' },
+  'EX_Elevacion de piernas colgado': { en: 'Hanging leg raises', fr: 'Releve jambes suspendues' },
+  'EX_Woodchop':                 { en: 'Woodchop',              fr: 'Woodchop' },
+  // Glúteos
+  'EX_Hip thrust':               { en: 'Hip thrust',            fr: 'Hip thrust' },
+  'EX_Patada de gluteo':         { en: 'Glute kickback',        fr: 'Kickback fessier' },
+  'EX_Puente de gluteos':        { en: 'Glute bridge',          fr: 'Pont fessier' },
+  'EX_Abduccion de cadera':      { en: 'Hip abduction',         fr: 'Abduction hanche' },
+  'EX_Kickback en polea':        { en: 'Cable kickback',        fr: 'Kickback poulie' },
+  'EX_Clamshell':                { en: 'Clamshell',             fr: 'Clamshell' },
+  'EX_Peso muerto sumo':         { en: 'Sumo deadlift',         fr: 'Souleve terre sumo' },
+  'EX_Fire hydrant':             { en: 'Fire hydrant',          fr: 'Fire hydrant' },
+
   // === General ===
   Loading:            { es: 'Cargando...',             en: 'Loading...',           fr: 'Chargement...' },
   ServiceUnavailable: { es: 'Servicio no disponible',  en: 'Service unavailable',  fr: 'Service indisponible' },
@@ -562,6 +670,17 @@ export function dayName(day) {
 export function muscleGroup(spanishName) {
   if (_lang === 'es') return spanishName;
   const key = `MG_${spanishName}`;
+  const entry = Strings[key];
+  if (entry && entry[_lang]) return entry[_lang];
+  return spanishName;
+}
+
+/**
+ * Translate an exercise name given its Spanish name (as stored in DB).
+ */
+export function exerciseName(spanishName) {
+  if (_lang === 'es') return spanishName;
+  const key = `EX_${spanishName}`;
   const entry = Strings[key];
   if (entry && entry[_lang]) return entry[_lang];
   return spanishName;

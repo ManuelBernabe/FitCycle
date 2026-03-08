@@ -1,6 +1,6 @@
 // FitCycle Summary Page — shown after completing a workout
 
-import { t, dayName } from '../l10n.js';
+import { t, dayName, muscleGroup as mgTranslate, exerciseName as exTranslate } from '../l10n.js';
 import { api } from '../api.js';
 import { escapeHtml } from '../utils.js';
 
@@ -77,7 +77,7 @@ export function render() {
             <div class="exercise-row">
               <div class="exercise-img">&#127947;</div>
               <div class="exercise-info">
-                <div class="exercise-name">${escapeHtml(ex.exerciseName)}${ex.muscleGroupName ? ` <span class="text-primary" style="font-size:11px;">(${escapeHtml(ex.muscleGroupName)})</span>` : ''}</div>
+                <div class="exercise-name">${escapeHtml(exTranslate(ex.exerciseName))}${ex.muscleGroupName ? ` <span class="text-primary" style="font-size:11px;">(${escapeHtml(mgTranslate(ex.muscleGroupName))})</span>` : ''}</div>
                 <div class="exercise-detail">${setInfo}</div>
               </div>
             </div>
@@ -184,7 +184,7 @@ function detectPRs(currentExercises, pastWorkouts) {
 
     const previousMax = maxWeights[exId] || 0;
     if (currentMax > 0 && previousMax > 0 && currentMax > previousMax) {
-      prs.push({ name: ex.exerciseName || ex.ExerciseName || '', weight: currentMax });
+      prs.push({ name: exTranslate(ex.exerciseName || ex.ExerciseName || ''), weight: currentMax });
     }
   });
 

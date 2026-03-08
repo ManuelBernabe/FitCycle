@@ -1,6 +1,6 @@
 // FitCycle Workout Page — exercise-by-exercise, set-by-set workout with rest timer
 
-import { t, dayName, muscleGroup as mgTranslate } from '../l10n.js';
+import { t, dayName, muscleGroup as mgTranslate, exerciseName as exTranslate } from '../l10n.js';
 import { api } from '../api.js';
 import { escapeHtml } from '../utils.js';
 
@@ -142,7 +142,7 @@ export function destroy() {
 
 function buildExerciseList() {
   return exercises.map((ex, idx) => {
-    const name = ex.exerciseName || ex.ExerciseName || ex.name || ex.Name || '';
+    const name = exTranslate(ex.exerciseName || ex.ExerciseName || ex.name || ex.Name || '');
     const muscle = ex.muscleGroupName || ex.MuscleGroupName || '';
     const totalSets = ex.setDetails.length;
     const maxWeight = Math.max(...ex.setDetails.map(s => s.weight), 0);
@@ -170,7 +170,7 @@ function renderExercise() {
   if (!container || currentIndex >= exercises.length) return;
 
   const ex = exercises[currentIndex];
-  const exName = ex.exerciseName || ex.ExerciseName || ex.name || ex.Name || '';
+  const exName = exTranslate(ex.exerciseName || ex.ExerciseName || ex.name || ex.Name || '');
   const exMuscle = ex.muscleGroupName || ex.MuscleGroupName || '';
   const exImage = ex.imageUrl || ex.ImageUrl || '';
   const totalSets = ex.setDetails.length;
@@ -188,7 +188,7 @@ function renderExercise() {
   // Superset partner info
   const ssGroup = ex.supersetGroup || 0;
   const ssPartner = ssGroup > 0 ? exercises.find((e, i) => i !== currentIndex && (e.supersetGroup || 0) === ssGroup) : null;
-  const ssPartnerName = ssPartner ? (ssPartner.exerciseName || ssPartner.ExerciseName || ssPartner.name || '') : '';
+  const ssPartnerName = ssPartner ? exTranslate(ssPartner.exerciseName || ssPartner.ExerciseName || ssPartner.name || '') : '';
 
   const setDots = ex.setDetails.map((s, i) => {
     const cls = i < currentSet ? 'done' : (i === currentSet ? 'current' : '');
@@ -254,8 +254,10 @@ function renderExercise() {
             <div style="font-size:20px;font-weight:bold;color:#ccc;">x</div>
             <div>
               <div style="font-size:10px;color:gray;">kg</div>
-              <input type="number" id="workout-weight" value="${currentSetData.weight > 0 ? currentSetData.weight : ''}" placeholder="0" step="0.5" min="0"
-                style="width:66px;font-size:18px;font-weight:bold;text-align:center;border:1px solid #ddd;border-radius:8px;padding:5px;">
+              <select id="workout-weight"
+                style="width:72px;font-size:18px;font-weight:bold;text-align:center;border:1px solid #ddd;border-radius:8px;padding:5px;background:#fff;">
+                ${buildWorkoutWeightOptions(currentSetData.weight)}
+              </select>
             </div>
           </div>
           ${(currentSetData.tempoPos > 0 || currentSetData.tempoNeg > 0 || currentSetData.grip) ? `
@@ -408,6 +410,13 @@ function renderExercise() {
 
   stopTimer();
   resetTimerDisplay();
+}
+
+function buildWorkoutWeightOptions(selected) {
+  const vals = [0];
+  for (let i = 0.5; i <= 50; i += 0.5) vals.push(i);
+  if (selected > 0 && !vals.includes(selected)) { vals.push(selected); vals.sort((a, b) => a - b); }
+  return vals.map(v => `<option value="${v}" ${v === selected ? 'selected' : ''}>${v}</option>`).join('');
 }
 
 function saveCurrentSetValues() {

@@ -1,6 +1,6 @@
 // FitCycle Routines Page — weekly routine overview with 7 day cards
 
-import { t, dayName, muscleGroup } from '../l10n.js';
+import { t, dayName, muscleGroup, exerciseName as exTranslate } from '../l10n.js';
 import { api } from '../api.js';
 import { auth } from '../auth.js';
 import { escapeHtml, showAlert, showConfirm } from '../utils.js';
@@ -68,7 +68,7 @@ function renderDays(container) {
 
     // Compact exercise lines with per-set weight details
     const exerciseLines = exercises.map(e => {
-      const name = e.exerciseName || e.ExerciseName || e.name || '';
+      const name = exTranslate(e.exerciseName || e.ExerciseName || e.name || '');
       const sets = e.sets || e.Sets || 0;
       const reps = e.reps || e.Reps || 0;
       const weight = e.weight || e.Weight || 0;

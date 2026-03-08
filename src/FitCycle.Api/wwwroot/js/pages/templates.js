@@ -1,6 +1,6 @@
 // FitCycle Templates Page — routine template library (Superuser only)
 
-import { t, dayName, muscleGroup } from '../l10n.js';
+import { t, dayName, muscleGroup, exerciseName as exTranslate } from '../l10n.js';
 import { api } from '../api.js';
 import { auth } from '../auth.js';
 import { escapeHtml, showAlert, showConfirm } from '../utils.js';
@@ -122,7 +122,7 @@ function renderTemplates(container) {
         if (exercises.length === 0 && !hasCardioAbs) return '';
 
         const exLines = exercises.map(ex => {
-          const name = ex.exerciseName || ex.ExerciseName || '';
+          const name = exTranslate(ex.exerciseName || ex.ExerciseName || '');
           const sets = ex.sets || ex.Sets || 0;
           const reps = ex.reps || ex.Reps || 0;
           const weight = ex.weight || ex.Weight || 0;
