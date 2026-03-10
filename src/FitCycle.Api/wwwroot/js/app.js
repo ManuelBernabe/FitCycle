@@ -87,7 +87,7 @@ function renderShell(route, routeName, params) {
         <div class="header-logo" id="header-logo" style="cursor:pointer;">FC</div>
         <div class="header-title">FitCycle</div>
         <select class="lang-picker" id="header-lang">${langOptions}</select>
-        <a href="https://eathealthycycle-production.up.railway.app/portal.html" target="_blank" style="font-size:18px;text-decoration:none;opacity:0.85;" title="Mis Aplicaciones">&#127968;</a>
+        <a href="https://eathealthycycle-production.up.railway.app/portal.html" target="_blank" style="background:rgba(255,255,255,0.2);color:white;border:none;border-radius:8px;padding:6px 12px;font-size:13px;font-weight:600;text-decoration:none;display:flex;align-items:center;">&#127968; Apps</a>
         <div class="avatar" id="header-avatar">${initial}</div>
       </div>
     `;
