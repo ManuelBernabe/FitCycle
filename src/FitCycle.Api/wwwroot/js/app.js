@@ -51,12 +51,15 @@ function parseHash() {
 function navigate() {
   let { name, params } = parseHash();
 
-  // Auth guard
-  if (!auth.isAuthenticated() && name !== 'login') {
+  // Auth guard — allow offline navigation if user has a previous session
+  const authenticated = auth.isAuthenticated();
+  const hasOfflineSession = !authenticated && !offline.isOnline() && auth.hasSession();
+
+  if (!authenticated && !hasOfflineSession && name !== 'login') {
     location.hash = '#login';
     return;
   }
-  if (auth.isAuthenticated() && name === 'login') {
+  if (authenticated && name === 'login') {
     location.hash = '#home';
     return;
   }

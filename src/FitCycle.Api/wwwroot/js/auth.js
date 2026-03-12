@@ -14,6 +14,14 @@ const auth = {
     return !!localStorage.getItem(AUTH_KEYS.accessToken);
   },
 
+  /**
+   * Returns true if user has ever logged in (tokens + profile in localStorage).
+   * Used for offline mode: allow navigation even if tokens are expired.
+   */
+  hasSession() {
+    return !!localStorage.getItem(AUTH_KEYS.username);
+  },
+
   getAccessToken() {
     return localStorage.getItem(AUTH_KEYS.accessToken);
   },
@@ -56,6 +64,7 @@ const auth = {
 
   /**
    * Clear all auth data (logout).
+   * Preserves offline sync queue (fc_sync_queue) — it syncs after re-login.
    */
   clear() {
     Object.values(AUTH_KEYS).forEach(k => localStorage.removeItem(k));

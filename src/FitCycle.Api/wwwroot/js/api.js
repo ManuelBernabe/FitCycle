@@ -28,6 +28,10 @@ async function request(method, path, body, isRetry = false) {
       if (refreshed) {
         return request(method, path, body, true);
       }
+      // If offline, don't clear auth — let offline cache serve data
+      if (!navigator.onLine && method === 'GET') {
+        throw new TypeError('Failed to fetch');
+      }
       auth.clear();
       location.hash = '#login';
       throw new Error('Unauthorized');

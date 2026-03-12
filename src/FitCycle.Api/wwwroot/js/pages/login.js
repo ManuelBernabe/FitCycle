@@ -3,6 +3,7 @@
 import { t, availableLanguages, languageDisplayName, currentLanguage, setLanguage } from '../l10n.js';
 import { api } from '../api.js';
 import { auth } from '../auth.js';
+import { offline } from '../offline.js';
 import { showPrompt } from '../utils.js';
 
 let registeredEmail = null;
@@ -245,6 +246,8 @@ async function handleSubmit() {
         return;
       }
       auth.store(result);
+      // Sync any offline-queued data after login
+      if (offline.pendingCount() > 0) setTimeout(() => offline.syncAll(), 500);
       location.hash = '#home';
     }
   } catch (err) {
@@ -292,6 +295,8 @@ async function handle2FASubmit() {
     auth.store(result);
     tempToken2FA = null;
     sessionStorage.removeItem('login_show_2fa');
+    // Sync any offline-queued data after 2FA login
+    if (offline.pendingCount() > 0) setTimeout(() => offline.syncAll(), 500);
     location.hash = '#home';
   } catch (err) {
     errorEl.textContent = err.message || t('InvalidCode');

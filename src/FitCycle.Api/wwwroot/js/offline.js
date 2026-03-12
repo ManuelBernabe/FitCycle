@@ -85,6 +85,23 @@ function pendingCount() {
 
 let syncing = false;
 
+async function tryRefreshToken() {
+  const refreshToken = localStorage.getItem('auth_refresh_token');
+  if (!refreshToken) return false;
+  try {
+    const res = await fetch('/auth/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken }),
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    if (data.accessToken) localStorage.setItem('auth_access_token', data.accessToken);
+    if (data.refreshToken) localStorage.setItem('auth_refresh_token', data.refreshToken);
+    return true;
+  } catch { return false; }
+}
+
 async function syncAll(fetchFn) {
   if (syncing) return;
   const queue = getQueue();
@@ -92,6 +109,7 @@ async function syncAll(fetchFn) {
 
   syncing = true;
   let synced = 0;
+  let refreshed = false;
 
   for (const item of queue) {
     try {
@@ -113,11 +131,25 @@ async function syncAll(fetchFn) {
         // 409 = duplicate, consider it synced
         dequeue(item.id);
         synced++;
-      } else if (res.status === 401) {
-        // Token expired — stop syncing, user needs to re-auth
-        break;
+      } else if (res.status === 401 && !refreshed) {
+        // Token expired — try refresh once, then retry this item
+        refreshed = true;
+        const ok = await tryRefreshToken();
+        if (ok) {
+          // Retry this item with new token
+          const newHeaders = { 'Authorization': `Bearer ${localStorage.getItem('auth_access_token')}` };
+          if (item.body !== undefined && item.body !== null) newHeaders['Content-Type'] = 'application/json';
+          const retryOpts = { method: item.method, headers: newHeaders };
+          if (item.body !== undefined && item.body !== null) retryOpts.body = JSON.stringify(item.body);
+          const retryRes = await fetch(item.path, retryOpts);
+          if (retryRes.ok || retryRes.status === 409) { dequeue(item.id); synced++; }
+          else break;
+        } else {
+          // Refresh failed — queue stays, user needs to re-login
+          break;
+        }
       } else {
-        // Server error — retry later
+        // Server error or second 401 — retry later
         break;
       }
     } catch {
