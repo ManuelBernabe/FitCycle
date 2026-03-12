@@ -38,6 +38,13 @@ async function request(method, path, body, isRetry = false) {
     }
 
     if (!res.ok) {
+      // SW returns 503 with {"error":"offline"} when network is down —
+      // try localStorage cache before throwing
+      if (method === 'GET' && res.status === 503) {
+        const cached = offline.getCached(path);
+        if (cached !== null) return cached;
+      }
+
       let errorData;
       try {
         errorData = await res.json();
