@@ -630,6 +630,11 @@ const Strings = {
   CurrentPassword:     { es: 'Contraseña actual',                          en: 'Current password',                   fr: 'Mot de passe actuel' },
   NewPassword:         { es: 'Nueva contraseña',                           en: 'New password',                       fr: 'Nouveau mot de passe' },
   PasswordChanged:     { es: 'Contraseña cambiada correctamente',          en: 'Password changed successfully',      fr: 'Mot de passe changé avec succès' },
+
+  // === Offline ===
+  WorkoutSavedOffline: { es: 'Guardado localmente. Se sincronizará al reconectar.', en: 'Saved locally. Will sync when back online.', fr: 'Sauvegardé localement. Sera synchronisé en ligne.' },
+  MeasSavedOffline:    { es: 'Medida guardada localmente. Se sincronizará al reconectar.', en: 'Saved locally. Will sync when back online.', fr: 'Sauvegardé localement. Sera synchronisé en ligne.' },
+  SyncComplete:        { es: 'Datos sincronizados',                       en: 'Data synced',                        fr: 'Données synchronisées' },
 };
 
 // DayOfWeek in .NET: Sunday=0 ... Saturday=6

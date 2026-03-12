@@ -2,6 +2,7 @@
 
 import { t } from '../l10n.js';
 import { api } from '../api.js';
+import { offline } from '../offline.js';
 import { showAlert, showConfirm, escapeHtml } from '../utils.js';
 
 const FIELDS = [
@@ -205,7 +206,9 @@ function renderContent(container, measurements) {
       const updated = await api.get('/measurements');
       renderContent(container, updated || []);
     } catch (err) {
-      if (statusEl) { statusEl.textContent = t('ErrorFmt', err.message); statusEl.style.color = '#dc3545'; }
+      // Queue for offline sync
+      offline.enqueue('POST', '/measurements', data);
+      if (statusEl) { statusEl.textContent = t('MeasSavedOffline'); statusEl.style.color = '#ff8c00'; }
     }
   });
 

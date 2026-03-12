@@ -3,6 +3,7 @@
 import { t, init as l10nInit, currentLanguage, setLanguage, availableLanguages, languageDisplayName } from './l10n.js';
 import { auth } from './auth.js';
 import { applyTheme } from './utils.js';
+import { offline } from './offline.js';
 
 // Page modules (lazy-ish imports — all bundled but only rendered on demand)
 import * as loginPage from './pages/login.js';
@@ -170,6 +171,15 @@ window.addEventListener('app-rerender', navigate);
 
 // Initial render
 navigate();
+
+// ─── Offline support ─────────────────────────────────────────────────
+offline.initListeners();
+
+// Re-render current page when data syncs successfully
+window.addEventListener('fc-synced', () => {
+  offline.showSyncToast(t('SyncComplete'));
+  navigate();
+});
 
 // ─── Auto-update detection ──────────────────────────────────────────
 let updatePending = false;

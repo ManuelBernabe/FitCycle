@@ -1,6 +1,7 @@
-// FitCycle API client — handles HTTP requests with JWT auth and token refresh
+// FitCycle API client — handles HTTP requests with JWT auth, token refresh, and offline support
 
 import { auth } from './auth.js';
+import { offline } from './offline.js';
 
 const BASE = ''; // same origin
 
@@ -18,37 +19,57 @@ async function request(method, path, body, isRetry = false) {
     opts.body = JSON.stringify(body);
   }
 
-  const res = await fetch(`${BASE}${path}`, opts);
+  try {
+    const res = await fetch(`${BASE}${path}`, opts);
 
-  // On 401 — attempt token refresh (once)
-  if (res.status === 401 && !isRetry) {
-    const refreshed = await tryRefresh();
-    if (refreshed) {
-      return request(method, path, body, true);
+    // On 401 — attempt token refresh (once)
+    if (res.status === 401 && !isRetry) {
+      const refreshed = await tryRefresh();
+      if (refreshed) {
+        return request(method, path, body, true);
+      }
+      auth.clear();
+      location.hash = '#login';
+      throw new Error('Unauthorized');
     }
-    // refresh failed — clear auth and redirect to login
-    auth.clear();
-    location.hash = '#login';
-    throw new Error('Unauthorized');
-  }
 
-  if (!res.ok) {
-    let errorData;
-    try {
-      errorData = await res.json();
-    } catch (e) {
-      errorData = { error: res.statusText };
+    if (!res.ok) {
+      let errorData;
+      try {
+        errorData = await res.json();
+      } catch (e) {
+        errorData = { error: res.statusText };
+      }
+      const err = new Error(errorData.error || errorData.message || `HTTP ${res.status}`);
+      err.status = res.status;
+      err.data = errorData;
+      throw err;
     }
-    const err = new Error(errorData.error || errorData.message || `HTTP ${res.status}`);
-    err.status = res.status;
-    err.data = errorData;
+
+    // 204 No Content or empty body
+    const text = await res.text();
+    const data = text ? JSON.parse(text) : null;
+
+    // Cache successful GET responses for offline use
+    if (method === 'GET' && offline.isCacheableGet(path)) {
+      offline.setCache(path, data);
+    }
+
+    return data;
+  } catch (err) {
+    // Network error (offline) — serve from cache for GETs
+    if (method === 'GET' && isNetworkError(err)) {
+      const cached = offline.getCached(path);
+      if (cached !== null) {
+        return cached;
+      }
+    }
     throw err;
   }
+}
 
-  // 204 No Content or empty body
-  const text = await res.text();
-  if (!text) return null;
-  return JSON.parse(text);
+function isNetworkError(err) {
+  return err instanceof TypeError && err.message.includes('fetch');
 }
 
 async function tryRefresh() {

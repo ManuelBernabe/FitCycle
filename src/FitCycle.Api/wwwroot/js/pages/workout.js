@@ -2,6 +2,7 @@
 
 import { t, dayName, muscleGroup as mgTranslate, exerciseName as exTranslate } from '../l10n.js';
 import { api } from '../api.js';
+import { offline } from '../offline.js';
 import { escapeHtml } from '../utils.js';
 
 let dayNum = 0;
@@ -521,21 +522,22 @@ async function finishWorkout() {
     setDetails: JSON.stringify(ex.setDetails),
   }));
 
+  const workoutPayload = {
+    day: dayNum,
+    startedAt: startedAt.toISOString(),
+    completedAt: completedAt.toISOString(),
+    exercises: exerciseLogs,
+  };
+
   let saved = false;
   try {
-    await api.post('/workouts', {
-      day: dayNum,
-      startedAt: startedAt.toISOString(),
-      completedAt: completedAt.toISOString(),
-      exercises: exerciseLogs,
-    });
+    await api.post('/workouts', workoutPayload);
     saved = true;
   } catch (e) {
-    const toast = document.createElement('div');
-    toast.className = 'toast';
-    toast.textContent = t('WorkoutSaveError');
-    document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), 3000);
+    // Queue for sync when back online
+    offline.enqueue('POST', '/workouts', workoutPayload);
+    saved = true; // Consider it saved locally
+    offline.showSyncToast(t('WorkoutSavedOffline'));
   }
 
   if (saved) clearProgress();
