@@ -415,7 +415,7 @@ function renderExercise() {
 
 function buildWorkoutWeightOptions(selected) {
   const vals = [0];
-  for (let i = 0.5; i <= 50; i += 0.5) vals.push(i);
+  for (let i = 0.25; i <= 150; i += 0.25) vals.push(i);
   if (selected > 0 && !vals.includes(selected)) { vals.push(selected); vals.sort((a, b) => a - b); }
   return vals.map(v => `<option value="${v}" ${v === selected ? 'selected' : ''}>${v}</option>`).join('');
 }

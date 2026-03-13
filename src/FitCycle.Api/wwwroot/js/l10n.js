@@ -631,6 +631,10 @@ const Strings = {
   NewPassword:         { es: 'Nueva contraseña',                           en: 'New password',                       fr: 'Nouveau mot de passe' },
   PasswordChanged:     { es: 'Contraseña cambiada correctamente',          en: 'Password changed successfully',      fr: 'Mot de passe changé avec succès' },
 
+  // === Exercise reorder ===
+  MoveUp:              { es: 'Subir',                                     en: 'Move up',                            fr: 'Monter' },
+  MoveDown:            { es: 'Bajar',                                     en: 'Move down',                          fr: 'Descendre' },
+
   // === Offline ===
   WorkoutSavedOffline: { es: 'Guardado localmente. Se sincronizará al reconectar.', en: 'Saved locally. Will sync when back online.', fr: 'Sauvegardé localement. Sera synchronisé en ligne.' },
   MeasSavedOffline:    { es: 'Medida guardada localmente. Se sincronizará al reconectar.', en: 'Saved locally. Will sync when back online.', fr: 'Sauvegardé localement. Sera synchronisé en ligne.' },
