@@ -4,12 +4,12 @@ import { t } from './l10n.js';
 
 // ── Environment Tag ──
 
-/** Returns (D) for develop, (L) for localhost, empty for production */
+/** Returns (D) for develop, (P) for production, (L) for localhost */
 export function envTag() {
   const h = location.hostname;
-  if (h.includes('develop') || h.includes('-dev')) return ' (D)';
   if (h === 'localhost' || h === '127.0.0.1') return ' (L)';
-  return '';
+  if (h.includes('develop') || h.includes('-dev')) return ' (D)';
+  return ' (P)';
 }
 
 // ── Theme Management ──
