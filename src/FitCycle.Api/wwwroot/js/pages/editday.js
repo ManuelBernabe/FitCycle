@@ -166,6 +166,11 @@ function buildUI() {
   const container = document.getElementById('editday-content');
   if (!container) return;
 
+  // Sort exercises: selected first, then unselected (stable sort preserves order within each group)
+  groups.forEach(group => {
+    group.exercises.sort((a, b) => (b.isSelected ? 1 : 0) - (a.isSelected ? 1 : 0));
+  });
+
   let html = '';
   groups.forEach((group, gi) => {
     const displayName = mgTranslate(group.name);
