@@ -313,9 +313,9 @@ function buildExerciseRows(group, gi) {
           <input type="checkbox" class="ex-check" data-gi="${gi}" data-ei="${ei}" ${checkedAttr}>
           ${imgHtml ? `<div style="flex-shrink:0;">${imgHtml}</div>` : ''}
           <span style="font-size:13px;font-weight:600;flex:1;min-width:0;word-break:break-word;">${escapeHtml(exTranslate(ex.name))}</span>
-          <div style="display:flex;flex-direction:column;gap:0;flex-shrink:0;">
-            <button class="btn-move-ex" data-gi="${gi}" data-ei="${ei}" data-dir="up" style="background:none;border:none;color:#512BD4;font-size:11px;cursor:pointer;padding:0 3px;line-height:1;${ei === 0 ? 'visibility:hidden;' : ''}" title="${t('MoveUp')}">&#9650;</button>
-            <button class="btn-move-ex" data-gi="${gi}" data-ei="${ei}" data-dir="down" style="background:none;border:none;color:#512BD4;font-size:11px;cursor:pointer;padding:0 3px;line-height:1;${ei === group.exercises.length - 1 ? 'visibility:hidden;' : ''}" title="${t('MoveDown')}">&#9660;</button>
+          <div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0;">
+            <button class="btn-move-ex" data-gi="${gi}" data-ei="${ei}" data-dir="up" style="background:#f3f0fc;border:none;color:#512BD4;font-size:16px;cursor:pointer;padding:2px 6px;line-height:1;border-radius:4px;${ei === 0 ? 'visibility:hidden;' : ''}" title="${t('MoveUp')}">&#9650;</button>
+            <button class="btn-move-ex" data-gi="${gi}" data-ei="${ei}" data-dir="down" style="background:#f3f0fc;border:none;color:#512BD4;font-size:16px;cursor:pointer;padding:2px 6px;line-height:1;border-radius:4px;${ei === group.exercises.length - 1 ? 'visibility:hidden;' : ''}" title="${t('MoveDown')}">&#9660;</button>
           </div>
           ${supersetBtn}
           <button class="btn-delete-ex" data-gi="${gi}" data-ei="${ei}" style="background:#dc3545;color:#fff;border:none;border-radius:6px;padding:2px 6px;font-size:12px;cursor:pointer;flex-shrink:0;">&#10005;</button>
