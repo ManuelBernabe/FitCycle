@@ -525,7 +525,7 @@ const Strings = {
   TutCurrentExercise:  { es: 'Ejercicio',                                en: 'Exercise',                          fr: 'Exercice' },
   TutLogSet:           { es: 'Registrar serie',                          en: 'Log set',                           fr: 'Enregistrer série' },
   TutRestTimer:        { es: 'Descanso',                                 en: 'Rest',                              fr: 'Repos' },
-  TutWorkoutTip:       { es: 'El peso se rellena automáticamente con el de la serie anterior si no lo cambias.', en: 'Weight auto-fills from the previous set if you don\'t change it.', fr: 'Le poids se remplit automatiquement depuis la série précédente.' },
+  TutWorkoutTip:       { es: 'Los pesos se cargan automáticamente del último entrenamiento completado para ese día. Dentro de un ejercicio, el peso se copia de la serie anterior.', en: 'Weights auto-load from your last completed workout for that day. Within an exercise, weight copies from the previous set.', fr: 'Les poids se chargent automatiquement du dernier entraînement complété pour ce jour. Dans un exercice, le poids se copie de la série précédente.' },
   TutWorkoutTip2:      { es: 'Usa la lista de ejercicios (arriba) para saltar directamente a cualquier ejercicio.', en: 'Use the exercise list (top) to jump directly to any exercise.', fr: "Utilisez la liste d'exercices pour sauter directement à un exercice." },
   TutWorkoutTip3:      { es: 'En supersets, la app alterna automáticamente entre los ejercicios emparejados.', en: 'In supersets, the app automatically alternates between paired exercises.', fr: "En supersets, l'app alterne automatiquement entre les exercices." },
 

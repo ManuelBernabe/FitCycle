@@ -1039,6 +1039,36 @@ app.MapGet("/workouts/exercise/{exerciseId}/progress", (int exerciseId, FitCycle
 .WithOpenApi()
 .RequireAuthorization();
 
+// Get last weights used per exercise for a given day (from most recent completed workout)
+app.MapGet("/workouts/last-weights/{day}", (int day, FitCycleDbContext db, ClaimsPrincipal user) =>
+{
+    var userId = int.Parse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+
+    // Find the most recent completed workout for this day
+    var lastSession = db.WorkoutSessions
+        .Where(w => w.UserId == userId && w.Day == (DayOfWeek)day)
+        .Include(s => s.ExerciseLogs)
+        .OrderByDescending(s => s.CompletedAt)
+        .FirstOrDefault();
+
+    if (lastSession is null)
+        return Results.Ok(new { exercises = Array.Empty<object>() });
+
+    var exerciseWeights = lastSession.ExerciseLogs.Select(log => new
+    {
+        exerciseId = log.ExerciseId,
+        weight = log.Weight,
+        reps = log.Reps,
+        sets = log.Sets,
+        setDetails = log.SetDetails
+    }).ToList();
+
+    return Results.Ok(new { date = lastSession.CompletedAt, exercises = exerciseWeights });
+})
+.WithName("GetLastWeights")
+.WithOpenApi()
+.RequireAuthorization();
+
 // -- Medidas corporales --
 app.MapGet("/measurements", (FitCycleDbContext db, ClaimsPrincipal user) =>
 {

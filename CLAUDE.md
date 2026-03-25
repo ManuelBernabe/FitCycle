@@ -1,46 +1,30 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-## Build & Run Commands
+## Build & Run
 
 ```bash
-# Build entire solution
-dotnet build FitCycle.sln
-
-# Run the API (HTTP: localhost:5294, HTTPS: localhost:7103)
-dotnet run --project src/FitCycle.Api
-
-# Run the MAUI app (Windows)
-dotnet build src/FitCycle.App -f net8.0-windows10.0.19041.0
-
-# Run all tests
-dotnet test FitCycle.sln
-
-# Run a single test project
-dotnet test tests/FitCycle.Core.Tests
-dotnet test tests/FitCycle.App.Tests
-
-# Run a specific test by name
-dotnet test tests/FitCycle.Core.Tests --filter "FullyQualifiedName~TestMethodName"
+dotnet build FitCycle.sln                    # Build all
+dotnet run --project src/FitCycle.Api         # Run API (HTTP:5294, HTTPS:7103)
+dotnet test FitCycle.sln                     # Run all tests
+dotnet test tests/FitCycle.Core.Tests --filter "FullyQualifiedName~TestName"  # Single test
 ```
 
 ## Architecture
 
-This is a .NET 8.0 solution with a layered architecture and a cross-platform MAUI client.
+.NET 8.0 solution, layered architecture:
 
-**Projects:**
-- **FitCycle.Core** (`src/FitCycle.Core`) — Domain models and business logic. Uses FluentValidation.
-- **FitCycle.Infrastructure** (`src/FitCycle.Infrastructure`) — Data access and external service integrations.
-- **FitCycle.Api** (`src/FitCycle.Api`) — ASP.NET Core minimal API backend. Swagger UI enabled in development at `/`. Endpoints: `/weatherforecast`, `/health`, `/version`.
-- **FitCycle.App** (`src/FitCycle.App`) — .NET MAUI cross-platform app (Android, iOS, macOS, Windows). XAML-based UI with Shell navigation.
+- **FitCycle.Core** — Domain models, FluentValidation
+- **FitCycle.Infrastructure** — EF Core (SQLite), services, repositories
+- **FitCycle.Api** — ASP.NET Core minimal API + vanilla JS SPA frontend (`wwwroot/`)
+- **FitCycle.App** — .NET MAUI cross-platform app (not actively used)
 
-**Test projects** (`tests/`) use xUnit with coverlet for code coverage.
+Tests: xUnit + coverlet (`tests/`)
 
-## Key Patterns
+## Workflow
 
-- **Minimal APIs** in `Program.cs` — no controllers, endpoints defined inline.
-- **Platform-specific code** lives under `src/FitCycle.App/Platforms/{Android,iOS,MacCatalyst,Windows,Tizen}`.
-- **API base URL** differs by platform: Android emulator uses `http://10.0.2.2:5294`, others use `http://localhost:5294`. Configured in `MauiProgram.cs`.
-- **Services** (e.g., `WeatherService`) are registered via DI in `MauiProgram.cs` and injected into pages.
-- **Styles** use XAML resource dictionaries in `Resources/Styles/` with light/dark theme support. Primary color: `#512BD4`.
+- Push to `develop` first, wait for user approval, then merge to `main` for production (Railway)
+- Always check if user manual (`tutorial.js`) needs updating when adding features
+- C# and frontend conventions are in `.claude/rules/`
+- Use `/cache-bump` after modifying frontend files
+- Use `/database-migration MigrationName` for schema changes
+- Use `/deploy` to commit and push

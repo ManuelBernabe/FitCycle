@@ -100,7 +100,33 @@ export async function mount(params) {
       return;
     }
 
-    // Restore saved progress if same day
+    // Pre-fill weights from last completed workout for this day
+    try {
+      const lastWorkout = await api.get(`/workouts/last-weights/${dayNum}`);
+      if (lastWorkout?.exercises?.length) {
+        for (const lastEx of lastWorkout.exercises) {
+          const match = exercises.find(ex =>
+            (ex.exerciseId || ex.ExerciseId || ex.id || ex.Id) === lastEx.exerciseId
+          );
+          if (!match) continue;
+          // Try per-set details first (most accurate)
+          let lastSetDetails = null;
+          try { lastSetDetails = lastEx.setDetails ? JSON.parse(lastEx.setDetails) : null; } catch { }
+          if (Array.isArray(lastSetDetails) && lastSetDetails.length > 0) {
+            for (let i = 0; i < match.setDetails.length; i++) {
+              const src = i < lastSetDetails.length ? lastSetDetails[i] : lastSetDetails[lastSetDetails.length - 1];
+              if (src.weight > 0) match.setDetails[i].weight = src.weight;
+              if (src.reps > 0) match.setDetails[i].reps = src.reps;
+            }
+          } else if (lastEx.weight > 0) {
+            // Fallback: apply the same weight to all sets
+            for (const sd of match.setDetails) sd.weight = lastEx.weight;
+          }
+        }
+      }
+    } catch { /* No previous workout, use routine defaults */ }
+
+    // Restore saved progress if same day (overrides last-workout pre-fill)
     const saved = loadProgress();
     if (saved && saved.dayNum === dayNum && saved.exercises) {
       startedAt = saved.startedAt ? new Date(saved.startedAt) : new Date();
