@@ -6,7 +6,6 @@ using System.Text.RegularExpressions;
 using FitCycle.Core.Models;
 using FitCycle.Infrastructure.Repositories;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using UglyToad.PdfPig;
 
 namespace FitCycle.Infrastructure.Services;
@@ -19,10 +18,9 @@ public interface IPdfImportService
 
 public class PdfImportService : IPdfImportService
 {
-    private readonly GeminiSettings _settings;
+    private readonly IGeminiService _gemini;
     private readonly IRoutineRepository _repo;
     private readonly ILogger<PdfImportService> _logger;
-    private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromMinutes(3) };
 
     private static readonly JsonSerializerOptions _jsonOpts = new()
     {
@@ -30,13 +28,9 @@ public class PdfImportService : IPdfImportService
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
-    public PdfImportService(IOptions<GeminiSettings> settings, IRoutineRepository repo, ILogger<PdfImportService> logger)
+    public PdfImportService(IGeminiService gemini, IRoutineRepository repo, ILogger<PdfImportService> logger)
     {
-        _settings = settings.Value;
-        if (string.IsNullOrWhiteSpace(_settings.ApiKey))
-            _settings.ApiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY")
-                            ?? Environment.GetEnvironmentVariable("Gemini__ApiKey")
-                            ?? "";
+        _gemini = gemini;
         _repo = repo;
         _logger = logger;
     }
@@ -76,7 +70,7 @@ public class PdfImportService : IPdfImportService
 
         // 3. Try Gemini only if local parser found < 3 useful days
         var localUsefulDays = extraction?.Routines?.Count(r => r.Exercises.Count > 0) ?? 0;
-        if (localUsefulDays < 3 && !string.IsNullOrWhiteSpace(_settings.ApiKey))
+        if (localUsefulDays < 3 && _gemini.IsConfigured)
         {
             _logger.LogInformation("Local found only {Days} days, trying Gemini as supplement", localUsefulDays);
             var (extractedJson, apiError) = await CallGeminiWithTextAsync(pdfText);
@@ -342,7 +336,7 @@ public class PdfImportService : IPdfImportService
     {
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        if (string.IsNullOrWhiteSpace(_settings.ApiKey))
+        if (!_gemini.IsConfigured)
         {
             _logger.LogInformation("No Gemini API key, skipping exercise name translation");
             return result;
@@ -368,77 +362,20 @@ Example response format:
 
 Return ONLY the JSON object, no markdown, no explanation.";
 
-        var requestBody = new
+        var (translations, error) = await _gemini.GenerateStructuredAsync<Dictionary<string, string>>(prompt);
+        if (error != null)
         {
-            contents = new[]
-            {
-                new
-                {
-                    parts = new object[]
-                    {
-                        new { text = prompt }
-                    }
-                }
-            },
-            generationConfig = new
-            {
-                temperature = 0.1,
-                maxOutputTokens = 4096,
-            }
-        };
-
-        var json = JsonSerializer.Serialize(requestBody);
-        var url = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key={_settings.ApiKey}";
-
-        try
-        {
-            var httpRequest = new HttpRequestMessage(HttpMethod.Post, url)
-            {
-                Content = new StringContent(json, Encoding.UTF8, "application/json")
-            };
-
-            var response = await _http.SendAsync(httpRequest);
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger.LogWarning("Gemini translation API error {Status}", response.StatusCode);
-                return result;
-            }
-
-            var responseText = await response.Content.ReadAsStringAsync();
-            using var doc = JsonDocument.Parse(responseText);
-            var candidates = doc.RootElement.GetProperty("candidates");
-            foreach (var candidate in candidates.EnumerateArray())
-            {
-                var content = candidate.GetProperty("content");
-                var parts = content.GetProperty("parts");
-                foreach (var part in parts.EnumerateArray())
-                {
-                    if (part.TryGetProperty("text", out var textProp))
-                    {
-                        var text = textProp.GetString() ?? "";
-                        text = text.Trim();
-                        if (text.StartsWith("```json")) text = text[7..];
-                        else if (text.StartsWith("```")) text = text[3..];
-                        if (text.EndsWith("```")) text = text[..^3];
-                        text = text.Trim();
-
-                        var translations = JsonSerializer.Deserialize<Dictionary<string, string>>(text, _jsonOpts);
-                        if (translations != null)
-                        {
-                            foreach (var kvp in translations)
-                            {
-                                if (!string.IsNullOrWhiteSpace(kvp.Value))
-                                    result[kvp.Key] = kvp.Value;
-                            }
-                        }
-                        break;
-                    }
-                }
-            }
+            _logger.LogWarning("Failed to translate exercise names: {Error}", error);
+            return result;
         }
-        catch (Exception ex)
+
+        if (translations != null)
         {
-            _logger.LogWarning(ex, "Failed to translate exercise names with Gemini");
+            foreach (var kvp in translations)
+            {
+                if (!string.IsNullOrWhiteSpace(kvp.Value))
+                    result[kvp.Key] = kvp.Value;
+            }
         }
 
         return result;
@@ -488,94 +425,7 @@ Reglas:
 TEXTO DEL PDF:
 " + pdfText;
 
-        var requestBody = new
-        {
-            contents = new[]
-            {
-                new
-                {
-                    parts = new object[]
-                    {
-                        new { text = prompt }
-                    }
-                }
-            },
-            generationConfig = new
-            {
-                temperature = 0.1,
-                maxOutputTokens = 16384,
-            }
-        };
-
-        var json = JsonSerializer.Serialize(requestBody);
-        var url = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key={_settings.ApiKey}";
-
-        for (int attempt = 0; attempt < 3; attempt++)
-        {
-            if (attempt > 0)
-            {
-                var delay = attempt * 5;
-                _logger.LogInformation("Retrying Gemini API call in {Delay}s (attempt {Attempt}/3)", delay, attempt + 1);
-                await Task.Delay(TimeSpan.FromSeconds(delay));
-            }
-
-            try
-            {
-                var httpRequest = new HttpRequestMessage(HttpMethod.Post, url)
-                {
-                    Content = new StringContent(json, Encoding.UTF8, "application/json")
-                };
-
-                var response = await _http.SendAsync(httpRequest);
-                var responseText = await response.Content.ReadAsStringAsync();
-
-                if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
-                {
-                    _logger.LogWarning("Gemini API 429 (attempt {Attempt}/3)", attempt + 1);
-                    if (attempt < 2) continue;
-                    return (null, "Gemini 429: rate limited");
-                }
-
-                if (!response.IsSuccessStatusCode)
-                {
-                    _logger.LogError("Gemini API error {Status}: {Body}", response.StatusCode, responseText);
-                    return (null, $"Gemini error {response.StatusCode}");
-                }
-
-                using var doc = JsonDocument.Parse(responseText);
-                var candidates = doc.RootElement.GetProperty("candidates");
-                foreach (var candidate in candidates.EnumerateArray())
-                {
-                    var content = candidate.GetProperty("content");
-                    var parts = content.GetProperty("parts");
-                    foreach (var part in parts.EnumerateArray())
-                    {
-                        if (part.TryGetProperty("text", out var textProp))
-                        {
-                            var text = textProp.GetString() ?? "";
-                            text = text.Trim();
-                            if (text.StartsWith("```json")) text = text[7..];
-                            else if (text.StartsWith("```")) text = text[3..];
-                            if (text.EndsWith("```")) text = text[..^3];
-                            return (text.Trim(), null);
-                        }
-                    }
-                }
-
-                return (null, "Gemini returned no text content");
-            }
-            catch (TaskCanceledException)
-            {
-                return (null, "Gemini timeout (>3 min)");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to call Gemini API");
-                return (null, $"Gemini error: {ex.Message}");
-            }
-        }
-
-        return (null, "Gemini: retries exhausted");
+        return await _gemini.GenerateContentAsync(prompt, maxOutputTokens: 16384);
     }
 }
 

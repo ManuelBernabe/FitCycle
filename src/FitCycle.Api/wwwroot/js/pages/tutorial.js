@@ -31,7 +31,8 @@ export function render() {
             ${tocItem('9', t('TutMeasurementsTitle'))}
             ${tocItem('10', t('TutAccountTitle'))}
             ${tocItem('11', t('TutOfflineTitle'))}
-            ${isAdmin ? tocItem('12', t('TutAdminTitle')) : ''}
+            ${tocItem('12', t('TutAITitle'))}
+            ${isAdmin ? tocItem('13', t('TutAdminTitle')) : ''}
           </div>
         </div>
 
@@ -348,8 +349,20 @@ export function render() {
           ${tip(t('TutOfflineTip'))}
         `)}
 
-        <!-- 12. Admin (solo si es admin) -->
-        ${isAdmin ? section('12', '🛠️', t('TutAdminTitle'), t('TutAdminDesc'), `
+        <!-- 12. AI Assistant -->
+        ${section('12', '🤖', t('TutAITitle'), t('TutAIDesc'), `
+          <div style="background:#fff;border-radius:10px;padding:12px;border:1px solid #eee;">
+            <div style="display:flex;flex-direction:column;gap:6px;">
+              ${mockMenuItem('📊', t('TutAIAnalysis'), t('TutAIAnalysisDesc'))}
+              ${mockMenuItem('🏋️', t('TutAIGenerate'), t('TutAIGenerateDesc'))}
+              ${mockMenuItem('🔍', t('TutAISuggest'), t('TutAISuggestDesc'))}
+            </div>
+          </div>
+          ${tip(t('TutAITip'))}
+        `)}
+
+        <!-- 13. Admin (solo si es admin) -->
+        ${isAdmin ? section('13', '🛠️', t('TutAdminTitle'), t('TutAdminDesc'), `
           <div style="background:#fff;border-radius:10px;padding:12px;border:1px solid #eee;">
             <div style="font-weight:600;font-size:13px;color:#333;margin-bottom:8px;">${t('TutAdminFeatures')}</div>
             <div style="display:flex;flex-direction:column;gap:6px;">

@@ -40,8 +40,9 @@ var emailSettings = builder.Configuration.GetSection("Email").Get<EmailSettings>
 builder.Services.AddSingleton(emailSettings);
 builder.Services.AddScoped<IEmailService, EmailService>();
 
-// Gemini (Google AI for PDF import)
+// Gemini AI
 builder.Services.Configure<GeminiSettings>(builder.Configuration.GetSection("Gemini"));
+builder.Services.AddSingleton<IGeminiService, GeminiService>();
 builder.Services.AddScoped<IPdfImportService, PdfImportService>();
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -1345,10 +1346,174 @@ app.MapGet("/admin/backup/download/{name}", (string name, FitCycleDbContext db) 
 .WithOpenApi()
 .RequireAuthorization("SuperuserOnly");
 
+// ====== AI Endpoints ======
+
+app.MapPost("/ai/generate-routine", async (GenerateRoutineRequest request, IGeminiService gemini, IRoutineRepository repo) =>
+{
+    if (!gemini.IsConfigured)
+        return Results.BadRequest(new { error = "Gemini API key not configured" });
+
+    var muscleGroups = repo.GetAllMuscleGroups();
+    var exercises = repo.GetExercises(null);
+    var exerciseList = string.Join("\n", exercises.Select(e => $"- {e.Name} (id:{e.Id}, grupo:{e.MuscleGroup?.Name ?? "?"})"));
+    var mgList = string.Join(", ", muscleGroups.Select(m => $"{m.Name} (id:{m.Id})"));
+
+    var prompt = $@"Eres un entrenador personal experto. Genera una rutina semanal de gimnasio.
+
+DATOS DEL USUARIO:
+- Objetivo: {request.Goal}
+- Nivel: {request.Level}
+- Días disponibles: {request.Days}
+- Equipamiento: {request.Equipment ?? "Gimnasio completo"}
+- Notas adicionales: {request.Notes ?? "Ninguna"}
+
+GRUPOS MUSCULARES DISPONIBLES:
+{mgList}
+
+EJERCICIOS DISPONIBLES (usa SOLO estos IDs y nombres):
+{exerciseList}
+
+Responde SOLO con JSON, sin markdown ni explicaciones.
+Formato:
+{{
+  ""routines"": [
+    {{
+      ""dayOfWeek"": 1,
+      ""muscleGroupIds"": [1, 3],
+      ""exercises"": [
+        {{
+          ""exerciseId"": 5,
+          ""sets"": 4,
+          ""reps"": 12,
+          ""weight"": 0,
+          ""notes"": ""Consejo breve de forma"",
+          ""supersetWith"": null
+        }}
+      ]
+    }}
+  ],
+  ""explanation"": ""Explicación breve de por qué esta rutina es buena para el objetivo""
+}}
+
+Reglas:
+- dayOfWeek: 1=Lunes, 2=Martes, 3=Miércoles, 4=Jueves, 5=Viernes, 6=Sábado
+- Usa SOLO exerciseId de la lista proporcionada
+- Distribuye músculos equilibradamente entre los días
+- 4-6 ejercicios por día, 3-4 series por ejercicio
+- Weight en 0 (el usuario lo ajustará)
+- Incluye superseries cuando tenga sentido (supersetWith = nombre exacto del ejercicio pareja)";
+
+    var (text, error) = await gemini.GenerateContentAsync(prompt, maxOutputTokens: 8192);
+    if (error != null) return Results.BadRequest(new { error });
+
+    return Results.Ok(new { routine = System.Text.Json.JsonSerializer.Deserialize<object>(text!) });
+})
+.WithName("AIGenerateRoutine")
+.WithOpenApi()
+.RequireAuthorization();
+
+app.MapGet("/ai/workout-analysis", async (FitCycleDbContext db, ClaimsPrincipal user, IGeminiService gemini) =>
+{
+    if (!gemini.IsConfigured)
+        return Results.BadRequest(new { error = "Gemini API key not configured" });
+
+    var userId = int.Parse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+    var weeksAgo = DateTime.UtcNow.AddDays(-56); // 8 weeks
+    var sessions = db.WorkoutSessions
+        .Where(w => w.UserId == userId && w.CompletedAt >= weeksAgo)
+        .Include(s => s.ExerciseLogs)
+        .OrderBy(s => s.CompletedAt)
+        .ToList();
+
+    if (sessions.Count < 3)
+        return Results.Ok(new { analysis = "Necesitas al menos 3 entrenamientos para generar un análisis." });
+
+    var workoutSummary = sessions.Select(s => new
+    {
+        date = s.CompletedAt.ToString("yyyy-MM-dd"),
+        day = s.Day.ToString(),
+        duration = (s.CompletedAt - s.StartedAt).TotalMinutes,
+        exercises = s.ExerciseLogs.Select(e => new
+        {
+            name = e.ExerciseName,
+            muscle = e.MuscleGroupName,
+            sets = e.Sets,
+            reps = e.Reps,
+            weight = e.Weight
+        })
+    });
+
+    var jsonData = System.Text.Json.JsonSerializer.Serialize(workoutSummary);
+
+    var prompt = $@"Eres un entrenador personal experto analizando el progreso de un atleta.
+
+HISTORIAL DE ENTRENAMIENTOS (últimas 8 semanas):
+{jsonData}
+
+Analiza y responde en JSON:
+{{
+  ""summary"": ""Resumen general del progreso en 2-3 frases"",
+  ""strengths"": [""Punto fuerte 1"", ""Punto fuerte 2""],
+  ""improvements"": [""Área de mejora 1"", ""Área de mejora 2""],
+  ""plateaus"": [""Ejercicio estancado 1 con explicación""],
+  ""recommendations"": [""Recomendación específica 1"", ""Recomendación 2"", ""Recomendación 3""],
+  ""weeklyConsistency"": ""Evaluación de consistencia semanal"",
+  ""muscleBalance"": ""Evaluación del balance muscular""
+}}
+
+Sé específico con nombres de ejercicios y pesos. Responde SOLO con JSON.";
+
+    var (text, error) = await gemini.GenerateContentAsync(prompt, maxOutputTokens: 4096);
+    if (error != null) return Results.BadRequest(new { error });
+
+    return Results.Ok(new { analysis = System.Text.Json.JsonSerializer.Deserialize<object>(text!) });
+})
+.WithName("AIWorkoutAnalysis")
+.WithOpenApi()
+.RequireAuthorization();
+
+app.MapPost("/ai/exercise-suggestions", async (ExerciseSuggestionRequest request, IGeminiService gemini, IRoutineRepository repo) =>
+{
+    if (!gemini.IsConfigured)
+        return Results.BadRequest(new { error = "Gemini API key not configured" });
+
+    var exercises = repo.GetExercises(null);
+    var exerciseList = string.Join("\n", exercises.Select(e => $"- {e.Name} (grupo: {e.MuscleGroup?.Name ?? "?"})"));
+
+    var prompt = $@"Eres un entrenador personal. El usuario pregunta: ""{request.Query}""
+
+EJERCICIOS DISPONIBLES EN LA APP:
+{exerciseList}
+
+Responde en JSON:
+{{
+  ""suggestions"": [
+    {{ ""name"": ""Nombre exacto del ejercicio"", ""reason"": ""Por qué es buena opción"" }}
+  ],
+  ""tips"": ""Consejo adicional relevante a la consulta""
+}}
+
+Reglas:
+- Usa SOLO ejercicios de la lista proporcionada (nombres exactos)
+- Máximo 5 sugerencias
+- Si preguntan por alternativas, busca ejercicios del mismo grupo muscular
+- Responde SOLO con JSON";
+
+    var (text, error) = await gemini.GenerateContentAsync(prompt);
+    if (error != null) return Results.BadRequest(new { error });
+
+    return Results.Ok(new { result = System.Text.Json.JsonSerializer.Deserialize<object>(text!) });
+})
+.WithName("AIExerciseSuggestions")
+.WithOpenApi()
+.RequireAuthorization();
+
 app.MapFallbackToFile("index.html");
 
 app.Run();
 
+record GenerateRoutineRequest(string Goal, string Level, int Days, string? Equipment = null, string? Notes = null);
+record ExerciseSuggestionRequest(string Query);
 record UpdateProfileRequest(string? Username = null, string? Email = null);
 record ChangeMyPasswordRequest(string CurrentPassword, string NewPassword);
 record SqlQueryRequest(string Query);

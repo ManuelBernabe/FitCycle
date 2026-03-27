@@ -1917,3 +1917,62 @@ html.dark .login-error { background: rgba(255,107,107,0.1); border-color: rgba(2
   box-shadow: var(--shadow-sm);
   font-weight: 600;
 }
+
+/* === AI Page === */
+.ai-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  background: var(--bg-secondary, #f0f0f0);
+  border-radius: 10px;
+  padding: 4px;
+}
+.ai-tab {
+  flex: 1;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted, #888);
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+.ai-tab.active {
+  background: var(--card-bg, #fff);
+  color: var(--primary, #512BD4);
+  font-weight: 600;
+  box-shadow: var(--shadow-sm);
+}
+.ai-card {
+  background: var(--card-bg, #fff);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow-sm);
+}
+.ai-card h3 {
+  margin: 0 0 8px 0;
+  font-size: 15px;
+  color: var(--text);
+}
+.ai-card p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-muted, #666);
+}
+.ai-card ul {
+  margin: 0;
+  padding-left: 20px;
+}
+.ai-card li {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-muted, #666);
+}
+.ai-card-green { border-left: 4px solid #2ecc71; }
+.ai-card-orange { border-left: 4px solid #e67e22; }
+.ai-card-red { border-left: 4px solid #e74c3c; }
+.ai-card-blue { border-left: 4px solid #3498db; }

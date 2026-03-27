@@ -1,10 +1,10 @@
-const CACHE = 'fitcycle-v62';
+const CACHE = 'fitcycle-v64';
 const API_CACHE = 'fitcycle-api-v1';
 const SHELL = ['/', '/css/app.css', '/js/app.js', '/js/api.js', '/js/auth.js', '/js/l10n.js', '/js/exercises.js', '/js/utils.js',
   '/js/qrcode.min.js', '/js/offline.js',
   '/js/pages/login.js', '/js/pages/home.js', '/js/pages/routines.js', '/js/pages/editday.js', '/js/pages/workout.js',
   '/js/pages/summary.js', '/js/pages/stats.js', '/js/pages/account.js', '/js/pages/measurements.js',
-  '/js/pages/templates.js', '/js/pages/admin.js', '/js/pages/tutorial.js'];
+  '/js/pages/templates.js', '/js/pages/admin.js', '/js/pages/tutorial.js', '/js/pages/ai.js'];
 
 // GET API paths to cache for offline reading
 const CACHEABLE_API = ['/routines', '/musclegroups', '/exercises', '/workouts', '/measurements'];

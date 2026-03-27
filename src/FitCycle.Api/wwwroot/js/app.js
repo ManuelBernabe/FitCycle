@@ -18,6 +18,7 @@ import * as templatesPage from './pages/templates.js';
 import * as adminPage from './pages/admin.js';
 import * as homePage from './pages/home.js';
 import * as tutorialPage from './pages/tutorial.js';
+import * as aiPage from './pages/ai.js';
 
 // ─── Init ───────────────────────────────────────────────────────────
 l10nInit();
@@ -40,6 +41,7 @@ const routes = {
   templates:    { mod: templatesPage,    header: true,  tabs: true },
   admin:        { mod: adminPage,       header: true,  tabs: false },
   tutorial:     { mod: tutorialPage,   header: true,  tabs: false },
+  ai:           { mod: aiPage,        header: true,  tabs: true },
 };
 
 // ─── Router ─────────────────────────────────────────────────────────
@@ -107,6 +109,7 @@ function renderShell(route, routeName, params) {
     const isStats = routeName === 'stats';
     const isMeas = routeName === 'measurements';
     const isTmpl = routeName === 'templates';
+    const isAI = routeName === 'ai';
 
     html += `
       <div class="tab-bar">
@@ -121,6 +124,10 @@ function renderShell(route, routeName, params) {
         <button class="tab ${isMeas ? 'active' : ''}" data-tab="measurements">
           <span class="tab-icon">&#128207;</span>
           <span>${t('TabMeasurements')}</span>
+        </button>
+        <button class="tab ${isAI ? 'active' : ''}" data-tab="ai">
+          <span class="tab-icon">&#129302;</span>
+          <span>${t('TabAI')}</span>
         </button>
         ${auth.isAdmin() ? `
         <button class="tab ${isTmpl ? 'active' : ''}" data-tab="templates">

@@ -371,6 +371,34 @@ function renderExercise() {
   document.getElementById('workout-prev')?.addEventListener('click', () => {
     saveCurrentSetValues();
     stopTimer();
+    const ex2 = exercises[currentIndex];
+    const ssGrp = ex2.supersetGroup || 0;
+
+    if (ssGrp > 0) {
+      const partnerIdx = exercises.findIndex((e, i) => i !== currentIndex && (e.supersetGroup || 0) === ssGrp);
+      if (partnerIdx >= 0) {
+        const isFirstInPair = currentIndex < partnerIdx;
+        if (isFirstInPair) {
+          // On first exercise: go to previous exercise before the pair, or decrement set via partner
+          if (currentSet > 0) {
+            // Go to partner at previous set (reverse of: partner→first + set++)
+            currentIndex = partnerIdx;
+            currentSet--;
+          } else {
+            // Set 0 of first exercise — go to exercise before superset pair
+            const minIdx = Math.min(currentIndex, partnerIdx);
+            if (minIdx > 0) { currentIndex = minIdx - 1; currentSet = exercises[currentIndex].setDetails.length - 1; }
+          }
+        } else {
+          // On second exercise: go back to first exercise, same set
+          currentIndex = partnerIdx;
+        }
+        saveProgress();
+        renderExercise();
+        return;
+      }
+    }
+
     if (currentSet > 0) { currentSet--; }
     else if (currentIndex > 0) { currentIndex--; currentSet = exercises[currentIndex].setDetails.length - 1; }
     saveProgress();
@@ -392,13 +420,19 @@ function renderExercise() {
           currentIndex = partnerIdx;
           if (currentSet >= exercises[partnerIdx].setDetails.length) currentSet = exercises[partnerIdx].setDetails.length - 1;
         } else {
+          const origIdx = currentIndex;
           currentIndex = partnerIdx;
           currentSet++;
           if (currentSet >= exercises[partnerIdx].setDetails.length) {
-            const maxIdx = Math.max(currentIndex, partnerIdx);
+            const maxIdx = Math.max(origIdx, partnerIdx);
             currentIndex = maxIdx + 1;
             currentSet = 0;
-            if (currentIndex < exercises.length) { saveProgress(); renderExercise(); return; }
+            if (currentIndex >= exercises.length) {
+              // Last superset pair — stay on final exercise's last set
+              currentIndex = exercises.length - 1;
+              currentSet = exercises[currentIndex].setDetails.length - 1;
+            }
+            saveProgress(); renderExercise(); return;
           }
         }
         saveProgress();
