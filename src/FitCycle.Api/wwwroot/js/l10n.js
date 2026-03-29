@@ -385,6 +385,8 @@ const Strings = {
   ThemeLight: { es: 'Claro',       en: 'Light',       fr: 'Clair' },
   ThemeDark:  { es: 'Oscuro',      en: 'Dark',        fr: 'Sombre' },
 
+  FontSize:   { es: 'Tamaño de letra', en: 'Font Size', fr: 'Taille du texte' },
+
   // === 2FA ===
   TwoFactorAuth:         { es: 'Autenticación en dos pasos',      en: 'Two-factor authentication',     fr: 'Authentification à deux facteurs' },
   Enable2FA:             { es: 'Activar 2FA',                     en: 'Enable 2FA',                    fr: 'Activer 2FA' },

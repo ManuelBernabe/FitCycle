@@ -2,7 +2,7 @@
 
 import { t, init as l10nInit, currentLanguage, setLanguage, availableLanguages, languageDisplayName } from './l10n.js';
 import { auth } from './auth.js';
-import { applyTheme, envTag } from './utils.js';
+import { applyTheme, applyFontSize, envTag } from './utils.js';
 import { offline } from './offline.js';
 
 // Page modules (lazy-ish imports — all bundled but only rendered on demand)
@@ -23,6 +23,7 @@ import * as aiPage from './pages/ai.js';
 // ─── Init ───────────────────────────────────────────────────────────
 l10nInit();
 applyTheme();
+applyFontSize();
 
 const appEl = document.getElementById('app');
 document.title = 'FitCycle' + envTag();

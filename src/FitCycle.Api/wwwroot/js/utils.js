@@ -12,6 +12,27 @@ export function envTag() {
   return ' (P)';
 }
 
+// ── Font Size Management ──
+
+const FONTSIZE_KEY = 'fitcycle_fontsize'; // percentage: 80, 90, 100, 110, 120, 130
+const FONTSIZE_OPTIONS = [80, 90, 100, 110, 120, 130];
+
+export function getFontSize() {
+  return parseInt(localStorage.getItem(FONTSIZE_KEY) || '100', 10);
+}
+
+export function setFontSize(pct) {
+  localStorage.setItem(FONTSIZE_KEY, String(pct));
+  applyFontSize();
+}
+
+export function applyFontSize() {
+  const pct = getFontSize();
+  document.documentElement.style.fontSize = pct === 100 ? '' : `${pct}%`;
+}
+
+export function fontSizeOptions() { return FONTSIZE_OPTIONS; }
+
 // ── Theme Management ──
 
 const THEME_KEY = 'fitcycle_theme'; // 'auto' | 'light' | 'dark'
