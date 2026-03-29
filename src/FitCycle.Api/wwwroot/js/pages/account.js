@@ -3,7 +3,7 @@
 import { t, availableLanguages, languageDisplayName, currentLanguage, setLanguage } from '../l10n.js';
 import { api } from '../api.js';
 import { auth } from '../auth.js';
-import { showAlert, showConfirm, getTheme, setTheme, getFontSize, setFontSize, fontSizeOptions } from '../utils.js';
+import { showAlert, showConfirm, getTheme, setTheme } from '../utils.js';
 
 let allUsers = [];
 
@@ -18,9 +18,6 @@ export function render() {
     .join('');
 
   const currentTheme = getTheme();
-  const currentFS = getFontSize();
-  const fsOpts = fontSizeOptions();
-
   return `
     <div class="page no-tabs">
       <div class="page-content">
@@ -92,20 +89,6 @@ export function render() {
             <button class="theme-toggle-btn ${currentTheme === 'light' ? 'active' : ''}" data-theme="light">${t('ThemeLight')}</button>
             <button class="theme-toggle-btn ${currentTheme === 'dark' ? 'active' : ''}" data-theme="dark">${t('ThemeDark')}</button>
           </div>
-        </div>
-
-        <div class="divider"></div>
-
-        <!-- Font size -->
-        <div class="account-section">
-          <label style="font-size:15px;font-weight:bold;display:block;margin-bottom:8px;">${t('FontSize')}</label>
-          <div style="display:flex;align-items:center;gap:10px;">
-            <span style="font-size:12px;color:var(--text-muted);">A</span>
-            <input type="range" id="fontsize-range" min="0" max="${fsOpts.length - 1}" value="${fsOpts.indexOf(currentFS)}"
-              style="flex:1;accent-color:var(--primary);">
-            <span style="font-size:20px;font-weight:bold;color:var(--text-muted);">A</span>
-          </div>
-          <div id="fontsize-label" style="text-align:center;font-size:13px;color:var(--text-muted);margin-top:4px;">${currentFS}%</div>
         </div>
 
         <div class="divider"></div>
@@ -184,15 +167,6 @@ export async function mount() {
     // Update active state
     document.querySelectorAll('.theme-toggle-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
-  });
-
-  // Font size slider
-  document.getElementById('fontsize-range')?.addEventListener('input', (e) => {
-    const idx = parseInt(e.target.value, 10);
-    const pct = fontSizeOptions()[idx];
-    setFontSize(pct);
-    const label = document.getElementById('fontsize-label');
-    if (label) label.textContent = `${pct}%`;
   });
 
   // Language change

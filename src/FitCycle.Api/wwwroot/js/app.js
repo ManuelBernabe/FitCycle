@@ -2,7 +2,7 @@
 
 import { t, init as l10nInit, currentLanguage, setLanguage, availableLanguages, languageDisplayName } from './l10n.js';
 import { auth } from './auth.js';
-import { applyTheme, applyFontSize, envTag } from './utils.js';
+import { applyTheme, applyFontSize, fontSizeUp, fontSizeDown, getFontSize, envTag } from './utils.js';
 import { offline } from './offline.js';
 
 // Page modules (lazy-ish imports — all bundled but only rendered on demand)
@@ -94,6 +94,11 @@ function renderShell(route, routeName, params) {
       <div class="header">
         <div class="header-logo" id="header-logo" style="cursor:pointer;">FC</div>
         <div class="header-title">FitCycle${envTag()}</div>
+        <div class="fontsize-controls" id="fontsize-controls">
+          <button id="fontsize-down" class="fontsize-btn" title="-">A-</button>
+          <span id="fontsize-label" class="fontsize-label">${getFontSize()}%</span>
+          <button id="fontsize-up" class="fontsize-btn" title="+">A+</button>
+        </div>
         <select class="lang-picker" id="header-lang">${langOptions}</select>
         <a href="https://eathealthycycle-production.up.railway.app/portal.html" target="_blank" style="background:rgba(255,255,255,0.2);color:white;border:none;border-radius:8px;padding:6px 12px;font-size:13px;font-weight:600;text-decoration:none;display:flex;align-items:center;">&#127968; Apps</a>
         <div class="avatar" id="header-avatar">${initial}</div>
@@ -159,6 +164,16 @@ function renderShell(route, routeName, params) {
     document.getElementById('header-logo')?.addEventListener('click', () => {
       location.hash = '#home';
     });
+
+    // Font size controls
+    document.getElementById('fontsize-up')?.addEventListener('click', () => {
+      fontSizeUp();
+      updateFontSizeLabel();
+    });
+    document.getElementById('fontsize-down')?.addEventListener('click', () => {
+      fontSizeDown();
+      updateFontSizeLabel();
+    });
   }
 
   // Bind tab events
@@ -171,10 +186,18 @@ function renderShell(route, routeName, params) {
     });
   }
 
+  // Re-apply font size after render
+  applyFontSize();
+
   // Mount page (async lifecycle)
   if (route.mod.mount) {
     route.mod.mount(params);
   }
+}
+
+function updateFontSizeLabel() {
+  const label = document.getElementById('fontsize-label');
+  if (label) label.textContent = `${getFontSize()}%`;
 }
 
 // ─── Event listeners ────────────────────────────────────────────────

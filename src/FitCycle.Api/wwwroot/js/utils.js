@@ -28,13 +28,27 @@ export function setFontSize(pct) {
 
 export function applyFontSize() {
   const pct = getFontSize();
-  const body = document.body;
-  if (!body) return;
+  const app = document.getElementById('app');
+  if (!app) return;
   if (pct === 100) {
-    body.style.zoom = '';
+    app.style.zoom = '';
+    app.style.transformOrigin = '';
   } else {
-    body.style.zoom = `${pct}%`;
+    app.style.zoom = `${pct}%`;
+    app.style.transformOrigin = 'top center';
   }
+}
+
+export function fontSizeUp() {
+  const cur = getFontSize();
+  const idx = FONTSIZE_OPTIONS.indexOf(cur);
+  if (idx < FONTSIZE_OPTIONS.length - 1) setFontSize(FONTSIZE_OPTIONS[idx + 1]);
+}
+
+export function fontSizeDown() {
+  const cur = getFontSize();
+  const idx = FONTSIZE_OPTIONS.indexOf(cur);
+  if (idx > 0) setFontSize(FONTSIZE_OPTIONS[idx - 1]);
 }
 
 export function fontSizeOptions() { return FONTSIZE_OPTIONS; }
