@@ -28,15 +28,25 @@ export function setFontSize(pct) {
 
 export function applyFontSize() {
   const pct = getFontSize();
-  const app = document.getElementById('app');
-  if (!app) return;
+  let styleEl = document.getElementById('fitcycle-zoom-style');
   if (pct === 100) {
-    app.style.zoom = '';
-    app.style.transformOrigin = '';
-  } else {
-    app.style.zoom = `${pct}%`;
-    app.style.transformOrigin = 'top center';
+    if (styleEl) styleEl.remove();
+    return;
   }
+  if (!styleEl) {
+    styleEl = document.createElement('style');
+    styleEl.id = 'fitcycle-zoom-style';
+    document.head.appendChild(styleEl);
+  }
+  // Scale all text and spacing uniformly via zoom on #app
+  // Fallback to transform for Firefox which doesn't support zoom
+  const scale = pct / 100;
+  styleEl.textContent = `
+    #app { zoom: ${pct}%; }
+    @supports not (zoom: 1) {
+      #app { transform: scale(${scale}); transform-origin: top center; width: ${100 / scale}%; }
+    }
+  `;
 }
 
 export function fontSizeUp() {

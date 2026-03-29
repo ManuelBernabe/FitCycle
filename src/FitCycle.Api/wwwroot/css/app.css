@@ -96,32 +96,62 @@ body {
   white-space: nowrap;
 }
 
-.fontsize-controls {
+/* === Floating Zoom FAB === */
+#zoom-fab {
+  position: fixed;
+  bottom: 72px;
+  right: 12px;
+  z-index: 9998;
   display: flex;
-  align-items: center;
-  gap: 2px;
-  flex-shrink: 0;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
 }
-.fontsize-btn {
-  background: rgba(255,255,255,0.2);
-  color: #fff;
+.zoom-fab-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
   border: none;
-  border-radius: 6px;
-  padding: 4px 7px;
-  font-size: 12px;
+  background: var(--primary, #512BD4);
+  color: #fff;
+  font-size: 16px;
   font-weight: 700;
   cursor: pointer;
-  line-height: 1;
-  min-width: 28px;
-  text-align: center;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-.fontsize-btn:active {
-  background: rgba(255,255,255,0.4);
+.zoom-fab-btn:active { opacity: 0.8; }
+.zoom-fab-panel {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--card-bg, #fff);
+  border-radius: 22px;
+  padding: 4px 8px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.2);
 }
-.fontsize-label {
-  color: rgba(255,255,255,0.7);
-  font-size: 10px;
-  min-width: 30px;
+.zoom-fab-ctrl {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--border, #e0e0e0);
+  background: var(--bg, #f5f5f5);
+  color: var(--text, #333);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.zoom-fab-ctrl:active { background: var(--primary-light, #DFD8F7); }
+.zoom-fab-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text, #333);
+  min-width: 38px;
   text-align: center;
 }
 

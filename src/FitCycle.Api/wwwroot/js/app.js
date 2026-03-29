@@ -94,11 +94,6 @@ function renderShell(route, routeName, params) {
       <div class="header">
         <div class="header-logo" id="header-logo" style="cursor:pointer;">FC</div>
         <div class="header-title">FitCycle${envTag()}</div>
-        <div class="fontsize-controls" id="fontsize-controls">
-          <button id="fontsize-down" class="fontsize-btn" title="-">A-</button>
-          <span id="fontsize-label" class="fontsize-label">${getFontSize()}%</span>
-          <button id="fontsize-up" class="fontsize-btn" title="+">A+</button>
-        </div>
         <select class="lang-picker" id="header-lang">${langOptions}</select>
         <a href="https://eathealthycycle-production.up.railway.app/portal.html" target="_blank" style="background:rgba(255,255,255,0.2);color:white;border:none;border-radius:8px;padding:6px 12px;font-size:13px;font-weight:600;text-decoration:none;display:flex;align-items:center;">&#127968; Apps</a>
         <div class="avatar" id="header-avatar">${initial}</div>
@@ -165,15 +160,6 @@ function renderShell(route, routeName, params) {
       location.hash = '#home';
     });
 
-    // Font size controls
-    document.getElementById('fontsize-up')?.addEventListener('click', () => {
-      fontSizeUp();
-      updateFontSizeLabel();
-    });
-    document.getElementById('fontsize-down')?.addEventListener('click', () => {
-      fontSizeDown();
-      updateFontSizeLabel();
-    });
   }
 
   // Bind tab events
@@ -186,18 +172,10 @@ function renderShell(route, routeName, params) {
     });
   }
 
-  // Re-apply font size after render
-  applyFontSize();
-
   // Mount page (async lifecycle)
   if (route.mod.mount) {
     route.mod.mount(params);
   }
-}
-
-function updateFontSizeLabel() {
-  const label = document.getElementById('fontsize-label');
-  if (label) label.textContent = `${getFontSize()}%`;
 }
 
 // ─── Event listeners ────────────────────────────────────────────────
@@ -206,6 +184,42 @@ window.addEventListener('app-rerender', navigate);
 
 // Initial render
 navigate();
+
+// ─── Floating zoom control ──────────────────────────────────────────
+(function initZoomFab() {
+  // Render outside #app so zoom doesn't affect the FAB itself
+  const fab = document.createElement('div');
+  fab.id = 'zoom-fab';
+  fab.innerHTML = `
+    <button id="zoom-fab-toggle" class="zoom-fab-btn">Aa</button>
+    <div id="zoom-fab-panel" class="zoom-fab-panel" style="display:none;">
+      <button id="zoom-fab-down" class="zoom-fab-ctrl">A-</button>
+      <span id="zoom-fab-label" class="zoom-fab-label">${getFontSize()}%</span>
+      <button id="zoom-fab-up" class="zoom-fab-ctrl">A+</button>
+    </div>
+  `;
+  document.body.appendChild(fab);
+
+  document.getElementById('zoom-fab-toggle').addEventListener('click', () => {
+    const panel = document.getElementById('zoom-fab-panel');
+    panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
+  });
+  document.getElementById('zoom-fab-up').addEventListener('click', () => {
+    fontSizeUp();
+    document.getElementById('zoom-fab-label').textContent = `${getFontSize()}%`;
+  });
+  document.getElementById('zoom-fab-down').addEventListener('click', () => {
+    fontSizeDown();
+    document.getElementById('zoom-fab-label').textContent = `${getFontSize()}%`;
+  });
+  // Close panel on outside click
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('#zoom-fab')) {
+      const panel = document.getElementById('zoom-fab-panel');
+      if (panel) panel.style.display = 'none';
+    }
+  });
+})();
 
 // ─── Offline support ─────────────────────────────────────────────────
 offline.initListeners();
