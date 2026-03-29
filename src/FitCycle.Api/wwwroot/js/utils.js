@@ -28,7 +28,13 @@ export function setFontSize(pct) {
 
 export function applyFontSize() {
   const pct = getFontSize();
-  document.documentElement.style.fontSize = pct === 100 ? '' : `${pct}%`;
+  const body = document.body;
+  if (!body) return;
+  if (pct === 100) {
+    body.style.zoom = '';
+  } else {
+    body.style.zoom = `${pct}%`;
+  }
 }
 
 export function fontSizeOptions() { return FONTSIZE_OPTIONS; }
