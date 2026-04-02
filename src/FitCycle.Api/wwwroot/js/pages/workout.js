@@ -103,36 +103,45 @@ export async function mount(params) {
     // Pre-fill weights from last completed workout for this day
     try {
       const lastWorkout = await api.get(`/workouts/last-weights/${dayNum}`);
+      console.log('[prefill] last-weights response for day', dayNum, lastWorkout);
       if (lastWorkout?.exercises?.length) {
+        let filled = 0;
         for (const lastEx of lastWorkout.exercises) {
-          const match = exercises.find(ex =>
-            (ex.exerciseId || ex.ExerciseId || ex.id || ex.Id) === lastEx.exerciseId
-          );
-          if (!match) continue;
+          const match = exercises.find(ex => {
+            const routineId = ex.exerciseId ?? ex.ExerciseId ?? ex.id ?? ex.Id;
+            return routineId === lastEx.exerciseId;
+          });
+          if (!match) {
+            console.log('[prefill] no match for exerciseId', lastEx.exerciseId);
+            continue;
+          }
           // Try per-set details first (most accurate)
           let lastSetDetails = null;
           try { lastSetDetails = lastEx.setDetails ? JSON.parse(lastEx.setDetails) : null; } catch { }
           if (Array.isArray(lastSetDetails) && lastSetDetails.length > 0) {
             for (let i = 0; i < match.setDetails.length; i++) {
               const src = i < lastSetDetails.length ? lastSetDetails[i] : lastSetDetails[lastSetDetails.length - 1];
-              if (src.weight > 0) match.setDetails[i].weight = src.weight;
+              if (src.weight > 0) { match.setDetails[i].weight = src.weight; filled++; }
               if (src.reps > 0) match.setDetails[i].reps = src.reps;
             }
           } else if (lastEx.weight > 0) {
-            // Fallback: apply the same weight to all sets
-            for (const sd of match.setDetails) sd.weight = lastEx.weight;
+            for (const sd of match.setDetails) { sd.weight = lastEx.weight; filled++; }
           }
         }
+        console.log('[prefill] filled', filled, 'sets with weights');
       }
-    } catch { /* No previous workout, use routine defaults */ }
+    } catch (err) { console.warn('[prefill] failed:', err); }
 
-    // Restore saved progress if same day (overrides last-workout pre-fill)
+    // Restore saved progress if same day AND recent (within 4 hours)
     const saved = loadProgress();
-    if (saved && saved.dayNum === dayNum && saved.exercises) {
+    const savedAge = saved?.startedAt ? (Date.now() - new Date(saved.startedAt).getTime()) : Infinity;
+    const isFreshProgress = saved && saved.dayNum === dayNum && saved.exercises && savedAge < 4 * 60 * 60 * 1000;
+    if (isFreshProgress) {
       startedAt = saved.startedAt ? new Date(saved.startedAt) : new Date();
       currentIndex = Math.min(saved.currentIndex || 0, exercises.length - 1);
       currentSet = saved.currentSet || 0;
-      // Restore saved weights/reps into exercises
+      // Restore saved weights/reps — but only overwrite if saved value is > 0
+      // (don't replace pre-filled weights with zeros from incomplete progress)
       for (const savedEx of saved.exercises) {
         const match = exercises.find(ex =>
           (ex.exerciseId || ex.ExerciseId || ex.id || ex.Id) === savedEx.exerciseId
@@ -146,6 +155,7 @@ export async function mount(params) {
       }
       if (currentSet >= exercises[currentIndex].setDetails.length) currentSet = 0;
     } else {
+      if (saved) clearProgress(); // Discard stale progress
       startedAt = new Date();
       currentIndex = 0;
       currentSet = 0;
