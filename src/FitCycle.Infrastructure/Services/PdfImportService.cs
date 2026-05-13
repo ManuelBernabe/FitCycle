@@ -398,6 +398,9 @@ public class PdfImportService : IPdfImportService
         return merged;
     }
 
+    /// <summary>Marker prefix that flags lines whose words are predominantly in the trainer's "exercise green" colour.</summary>
+    public const string ExerciseMarker = "[EX] ";
+
     public string ExtractTextFromPdf(byte[] pdfBytes)
     {
         var sb = new StringBuilder();
@@ -408,42 +411,70 @@ public class PdfImportService : IPdfImportService
             var words = page.GetWords().ToList();
             if (words.Count == 0) continue;
 
-            sb.AppendLine($"--- Página {page.Number} ---");
+            sb.AppendLine($"--- Pagina {page.Number} ---");
 
-            // Group words into lines by Y-coordinate (vertical position)
-            var lines = new List<(double y, List<(double x, string text)> words)>();
+            // Group words into lines by Y-coordinate. Each word carries a green flag from its glyph colour.
+            var lines = new List<(double y, List<(double x, string text, bool green)> words)>();
 
             foreach (var word in words)
             {
                 var y = Math.Round(word.BoundingBox.Bottom, 1);
+                var green = IsGreenWord(word);
                 var existingLine = lines.FirstOrDefault(l => Math.Abs(l.y - y) < 3);
 
                 if (existingLine.words != null)
                 {
-                    existingLine.words.Add((word.BoundingBox.Left, word.Text));
+                    existingLine.words.Add((word.BoundingBox.Left, word.Text, green));
                 }
                 else
                 {
-                    lines.Add((y, new List<(double x, string text)> { (word.BoundingBox.Left, word.Text) }));
+                    lines.Add((y, new List<(double x, string text, bool green)> { (word.BoundingBox.Left, word.Text, green) }));
                 }
             }
 
-            // Sort lines top-to-bottom (higher Y = higher on page in PDF coords)
             foreach (var line in lines.OrderByDescending(l => l.y))
             {
-                var sortedWords = line.words.OrderBy(w => w.x).Select(w => w.text);
-                sb.AppendLine(string.Join(" ", sortedWords));
+                var sortedWords = line.words.OrderBy(w => w.x).ToList();
+                // If 40%+ of the letters on the line are green, mark the whole line as an exercise header.
+                var greenLetters = sortedWords.Where(w => w.green).Sum(w => w.text.Count(char.IsLetter));
+                var totalLetters = sortedWords.Sum(w => w.text.Count(char.IsLetter));
+                var isExerciseLine = totalLetters > 0 && greenLetters * 100 / totalLetters >= 40;
+
+                if (isExerciseLine) sb.Append(ExerciseMarker);
+                sb.AppendLine(string.Join(" ", sortedWords.Select(w => w.text)));
             }
 
             sb.AppendLine();
         }
 
-        // Normalize Unicode (decomposed → composed: I+accent → Í)
         var text = sb.ToString().Normalize(NormalizationForm.FormC);
-        // Normalize various dash characters to regular hyphen
-        text = text.Replace('\u2013', '-').Replace('\u2014', '-')
-                   .Replace('\u2015', '-').Replace('\u2212', '-');
+        text = text.Replace('–', '-').Replace('—', '-').Replace('―', '-').Replace('−', '-');
         return text;
+    }
+
+    /// <summary>
+    /// True if the first letter of the word is drawn in a green-ish fill colour.
+    /// We accept any shade where G clearly dominates R and B, ignoring dark text.
+    /// </summary>
+    private static bool IsGreenWord(UglyToad.PdfPig.Content.Word word)
+    {
+        var letter = word.Letters?.FirstOrDefault(l => l.Value?.Length > 0 && char.IsLetter(l.Value[0]));
+        if (letter == null) return false;
+        var color = letter.Color;
+        if (color == null) return false;
+        try
+        {
+            var rgb = color.ToRGBValues();
+            var r = (double)rgb.r;
+            var g = (double)rgb.g;
+            var b = (double)rgb.b;
+            if (r < 0.2 && g < 0.2 && b < 0.2) return false;
+            return g > 0.35 && g > r + 0.05 && g > b + 0.05;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private async Task<Dictionary<string, string>> TranslateExerciseNamesAsync(List<string> names, string targetLanguage)
@@ -543,6 +574,10 @@ Reglas:
 - supersetWith: nombre exacto del ejercicio pareja (null si no hay). Indicadores: ""+ super serie..."", ""SUPER SERIE""
 - Nombres de ejercicios en Title Case
 - Extrae notas/instrucciones del entrenador
+- **MUY IMPORTANTE**: las líneas que empiezan con el marcador ""[EX] "" son nombres de ejercicios reales
+  (extraídos del color verde del PDF, que el entrenador usa para distinguir nombres de ejercicios).
+  DEBES incluir TODOS los ejercicios marcados con [EX], aunque la línea sea larga o tenga descripción al lado.
+  Quita el marcador ""[EX] "" del nombre cuando lo incluyas en el JSON.
 
 TEXTO DEL PDF:
 " + pdfText;
@@ -690,6 +725,10 @@ public static class LocalPdfParser
             if (line.StartsWith("---") && line.Contains("Página")) continue; // page separator
             if (line.Length < 3) continue;
 
+            // Strip the [EX] color marker so day-header detection isn't confused by it.
+            if (line.StartsWith(PdfImportService.ExerciseMarker, StringComparison.Ordinal))
+                line = line[PdfImportService.ExerciseMarker.Length..].TrimStart();
+
             // Strategy 1: "DÍA N" format
             var dayNumbers = new List<int>();
 
@@ -816,9 +855,13 @@ public static class LocalPdfParser
 
         for (int idx = 0; idx < lines.Count; idx++)
         {
-            var line = lines[idx].Trim();
-            if (string.IsNullOrWhiteSpace(line)) continue;
-            if (line.StartsWith("---")) continue; // page separator
+            var rawLine = lines[idx].Trim();
+            if (string.IsNullOrWhiteSpace(rawLine)) continue;
+            if (rawLine.StartsWith("---")) continue; // page separator
+
+            // Extract the "[EX] " marker if present — those lines are guaranteed exercises (extracted from green text in the PDF).
+            bool isMarkedExercise = rawLine.StartsWith(PdfImportService.ExerciseMarker, StringComparison.Ordinal);
+            var line = isMarkedExercise ? rawLine[PdfImportService.ExerciseMarker.Length..].Trim() : rawLine;
 
             // "Seg. Ejecución" lines — may contain numbers for a pending Fase row
             if (Regex.IsMatch(line, @"Seg\.?\s*(?:de\s+)?(?:Ejecuci[oó]n|ejecuci[oó]n)", RegexOptions.IgnoreCase))
@@ -879,8 +922,9 @@ public static class LocalPdfParser
                 }
             }
 
-            // Check for exercise name FIRST (before table parsing)
-            if (IsExerciseName(line, lines, idx))
+            // Check for exercise name FIRST (before table parsing).
+            // [EX]-marked lines bypass the heuristic — they come from green-coloured text in the PDF.
+            if (isMarkedExercise || IsExerciseName(line, lines, idx))
             {
                 FinalizeNotes(current, notesBuilder);
                 inTable = false;
