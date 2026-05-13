@@ -124,9 +124,10 @@ async function loadData() {
         .filter(e => (e.muscleGroupId || e.MuscleGroupId) === mgId)
         .map(e => {
           const eId = e.id || e.Id;
-          const existing = selectedExercises.find(se =>
+          const existingIdx = selectedExercises.findIndex(se =>
             (se.exerciseId || se.ExerciseId) === eId
           );
+          const existing = existingIdx >= 0 ? selectedExercises[existingIdx] : null;
           const sets = existing ? (existing.sets || existing.Sets || 3) : 3;
           const reps = existing ? (existing.reps || existing.Reps || 12) : 12;
           const weight = existing ? (existing.weight || existing.Weight || 0) : 0;
@@ -147,6 +148,7 @@ async function loadData() {
             supersetGroup,
             notes,
             expanded: false,
+            position: existingIdx >= 0 ? existingIdx : 9999,
           };
         });
 
@@ -162,6 +164,53 @@ async function loadData() {
 
 // ── UI Building ──
 
+/** Returns all selected exercises across all groups, in their day-order (sorted by position). */
+function getOrderedSelectedExercises() {
+  const items = [];
+  groups.forEach((g, gi) => {
+    g.exercises.forEach((ex, ei) => {
+      if (ex.isSelected) items.push({ gi, ei, ex, mg: g.name });
+    });
+  });
+  items.sort((a, b) => (a.ex.position ?? 9999) - (b.ex.position ?? 9999));
+  // Re-number to keep positions tight (0..n-1)
+  items.forEach((it, i) => { it.ex.position = i; });
+  return items;
+}
+
+function buildDayOrderSection() {
+  const ordered = getOrderedSelectedExercises();
+  if (ordered.length < 2) return ''; // nothing to reorder
+
+  const rows = ordered.map((it, idx) => {
+    const isFirst = idx === 0;
+    const isLast = idx === ordered.length - 1;
+    return `
+      <div class="day-order-row" data-pos="${idx}">
+        <div class="day-order-arrows">
+          <button class="btn-day-order ${isFirst ? 'disabled' : ''}" data-pos="${idx}" data-dir="up" ${isFirst ? 'disabled' : ''}>&#9650;</button>
+          <button class="btn-day-order ${isLast ? 'disabled' : ''}" data-pos="${idx}" data-dir="down" ${isLast ? 'disabled' : ''}>&#9660;</button>
+        </div>
+        <div class="day-order-index">${idx + 1}</div>
+        <div class="day-order-name">
+          <div class="ex-name">${escapeHtml(exTranslate(it.ex.name))}</div>
+          <div class="ex-mg">${mgTranslate(it.mg)}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="card day-order-card" style="margin-bottom:12px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+        <span style="font-weight:700;font-size:15px;">&#8645; ${t('DayOrder')}</span>
+        <span style="font-size:11px;color:var(--text-light);">${t('DayOrderHint')}</span>
+      </div>
+      <div class="day-order-list">${rows}</div>
+    </div>
+  `;
+}
+
 function buildUI() {
   const container = document.getElementById('editday-content');
   if (!container) return;
@@ -171,7 +220,7 @@ function buildUI() {
     group.exercises.sort((a, b) => (b.isSelected ? 1 : 0) - (a.isSelected ? 1 : 0));
   });
 
-  let html = '';
+  let html = buildDayOrderSection();
   groups.forEach((group, gi) => {
     const displayName = mgTranslate(group.name);
     const checkedAttr = group.isSelected ? 'checked' : '';
@@ -482,7 +531,16 @@ function attachEvents(container) {
     cb.addEventListener('change', () => {
       const gi = parseInt(cb.dataset.gi);
       const ei = parseInt(cb.dataset.ei);
-      groups[gi].exercises[ei].isSelected = cb.checked;
+      const ex = groups[gi].exercises[ei];
+      ex.isSelected = cb.checked;
+      if (cb.checked) {
+        // Assign position at the end of the day order
+        const maxPos = Math.max(-1, ...groups.flatMap(g => g.exercises.filter(e => e.isSelected && e !== ex).map(e => e.position ?? -1)));
+        ex.position = maxPos + 1;
+      } else {
+        ex.position = 9999;
+      }
+      buildUI();
     });
   });
 
@@ -611,7 +669,7 @@ function attachEvents(container) {
     });
   });
 
-  // Move exercise up/down
+  // Move exercise up/down within muscle group
   container.querySelectorAll('.btn-move-ex').forEach(btn => {
     btn.addEventListener('click', () => {
       const gi = parseInt(btn.dataset.gi);
@@ -623,6 +681,23 @@ function attachEvents(container) {
         buildUI();
       } else if (dir === 'down' && ei < exercises.length - 1) {
         [exercises[ei], exercises[ei + 1]] = [exercises[ei + 1], exercises[ei]];
+        buildUI();
+      }
+    });
+  });
+
+  // Day Order: reorder across muscle groups via the flat list
+  container.querySelectorAll('.btn-day-order').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const pos = parseInt(btn.dataset.pos);
+      const dir = btn.dataset.dir;
+      const ordered = getOrderedSelectedExercises();
+      if (dir === 'up' && pos > 0) {
+        // Swap positions with previous item
+        [ordered[pos].ex.position, ordered[pos - 1].ex.position] = [ordered[pos - 1].ex.position, ordered[pos].ex.position];
+        buildUI();
+      } else if (dir === 'down' && pos < ordered.length - 1) {
+        [ordered[pos].ex.position, ordered[pos + 1].ex.position] = [ordered[pos + 1].ex.position, ordered[pos].ex.position];
         buildUI();
       }
     });
@@ -685,19 +760,17 @@ async function doSave() {
     if (statusEl) statusEl.textContent = t('Saving');
 
     const selectedMgIds = groups.filter(g => g.isSelected).map(g => g.id);
-    const selectedExercises = groups
-      .filter(g => g.isSelected)
-      .flatMap(g => g.exercises)
-      .filter(ex => ex.isSelected)
-      .map(ex => ({
-        exerciseId: ex.exerciseId,
-        sets: ex.setDetails.length,
-        reps: ex.setDetails.length > 0 ? ex.setDetails[0].reps : ex.reps,
-        weight: Math.max(...ex.setDetails.map(s => s.weight), 0),
-        setDetails: JSON.stringify(ex.setDetails),
-        supersetGroup: ex.supersetGroup || 0,
-        notes: ex.notes || '',
-      }));
+    // Send exercises in day order (by position) so the backend persists the order.
+    const ordered = getOrderedSelectedExercises();
+    const selectedExercises = ordered.map(it => ({
+      exerciseId: it.ex.exerciseId,
+      sets: it.ex.setDetails.length,
+      reps: it.ex.setDetails.length > 0 ? it.ex.setDetails[0].reps : it.ex.reps,
+      weight: Math.max(...it.ex.setDetails.map(s => s.weight), 0),
+      setDetails: JSON.stringify(it.ex.setDetails),
+      supersetGroup: it.ex.supersetGroup || 0,
+      notes: it.ex.notes || '',
+    }));
 
     await api.put(`/routines/${dayNum}`, {
       muscleGroupIds: selectedMgIds,
@@ -810,6 +883,7 @@ async function createAndAddExercise(group, name, imageUrl) {
 
     clearCache();
 
+    const maxPos = Math.max(-1, ...groups.flatMap(g => g.exercises.filter(e => e.isSelected).map(e => e.position ?? -1)));
     group.exercises.push({
       exerciseId: newEx.id || newEx.Id,
       name: newEx.name || newEx.Name || name,
@@ -822,6 +896,7 @@ async function createAndAddExercise(group, name, imageUrl) {
       supersetGroup: 0,
       notes: '',
       expanded: false,
+      position: maxPos + 1,
     });
 
     buildUI();

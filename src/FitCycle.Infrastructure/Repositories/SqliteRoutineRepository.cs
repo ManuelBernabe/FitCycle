@@ -444,9 +444,10 @@ public class SqliteRoutineRepository : IRoutineRepository
             _db.DayMuscleGroups.Add(new DayMuscleGroupEntity { Day = day, MuscleGroupId = mgId, UserId = userId });
         }
 
-        // Add exercises
-        foreach (var input in exercises)
+        // Add exercises — preserve incoming order via Position
+        for (int i = 0; i < exercises.Count; i++)
         {
+            var input = exercises[i];
             if (_db.Exercises.Any(e => e.Id == input.ExerciseId))
             {
                 _db.DayExercises.Add(new DayExerciseEntity
@@ -459,6 +460,7 @@ public class SqliteRoutineRepository : IRoutineRepository
                     SetDetails = input.SetDetails ?? string.Empty,
                     SupersetGroup = input.SupersetGroup,
                     Notes = input.Notes ?? string.Empty,
+                    Position = i,
                     UserId = userId
                 });
             }
@@ -513,6 +515,7 @@ public class SqliteRoutineRepository : IRoutineRepository
         var dayExercises = _db.DayExercises
             .Where(d => d.Day == day && d.UserId == userId)
             .Include(d => d.Exercise)
+            .OrderBy(d => d.Position).ThenBy(d => d.Id)
             .ToList();
 
         var routineExercises = dayExercises.Select(de =>

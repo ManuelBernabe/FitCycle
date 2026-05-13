@@ -14,5 +14,7 @@ public class DayExerciseEntity
     public string SetDetails { get; set; } = string.Empty;
     public int SupersetGroup { get; set; }
     public string Notes { get; set; } = string.Empty;
+    /// <summary>0-based position within the day. Persists the user-defined exercise order across the whole day.</summary>
+    public int Position { get; set; }
     public Exercise? Exercise { get; set; }
 }

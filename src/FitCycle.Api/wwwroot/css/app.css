@@ -2036,3 +2036,59 @@ html.dark .login-error { background: rgba(255,107,107,0.1); border-color: rgba(2
 .ai-card-red { border-left: 4px solid #e74c3c; }
 .ai-card-blue { border-left: 4px solid #3498db; }
 
+/* === Day Order Section (editday.js) === */
+.day-order-card { background: var(--primary-faint, #f3f0fc); }
+.day-order-list { display: flex; flex-direction: column; gap: 4px; }
+.day-order-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--card-bg, #fff);
+  border: 1px solid var(--border, #e0e0e0);
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+.day-order-arrows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.btn-day-order {
+  width: 28px;
+  height: 24px;
+  border: 1px solid var(--border, #ccc);
+  background: var(--bg, #f5f5f5);
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.btn-day-order:active { background: var(--primary-light, #DFD8F7); }
+.btn-day-order.disabled, .btn-day-order:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+.day-order-index {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--primary, #512BD4);
+  min-width: 20px;
+  text-align: center;
+}
+.day-order-name { flex: 1; min-width: 0; }
+.day-order-name .ex-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text, #333);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.day-order-name .ex-mg {
+  font-size: 11px;
+  color: var(--text-light, #888);
+}
+

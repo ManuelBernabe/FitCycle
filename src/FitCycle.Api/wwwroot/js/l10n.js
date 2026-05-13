@@ -182,6 +182,8 @@ const Strings = {
   Sets:                   { es: 'Series:',                                            en: 'Sets:',                                 fr: 'Séries :' },
   Reps:                   { es: 'Reps:',                                              en: 'Reps:',                                 fr: 'Reps :' },
   AddExercise:            { es: '+ Agregar ejercicio',                                en: '+ Add exercise',                        fr: '+ Ajouter un exercice' },
+  DayOrder:               { es: 'Orden del día',                                     en: 'Day order',                             fr: 'Ordre du jour' },
+  DayOrderHint:           { es: 'Reordena los ejercicios libremente',                 en: 'Reorder exercises freely',              fr: 'Réorganisez librement les exercices' },
   CustomName:             { es: 'Escribir nombre personalizado...',                   en: 'Type custom name...',                   fr: 'Saisir un nom personnalisé...' },
   NewExercise:            { es: 'Nuevo ejercicio',                                    en: 'New exercise',                          fr: 'Nouvel exercice' },
   ExerciseNameFor:        { es: 'Nombre del ejercicio para {0}:',                     en: 'Exercise name for {0}:',                fr: "Nom de l'exercice pour {0} :" },
