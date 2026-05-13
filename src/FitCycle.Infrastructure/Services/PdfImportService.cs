@@ -18,7 +18,7 @@ public interface IPdfImportService
 
 public class PdfImportService : IPdfImportService
 {
-    private readonly IGeminiService _gemini;
+    private readonly IAiService _ai;
     private readonly IRoutineRepository _repo;
     private readonly ILogger<PdfImportService> _logger;
 
@@ -28,9 +28,9 @@ public class PdfImportService : IPdfImportService
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
-    public PdfImportService(IGeminiService gemini, IRoutineRepository repo, ILogger<PdfImportService> logger)
+    public PdfImportService(IAiService ai, IRoutineRepository repo, ILogger<PdfImportService> logger)
     {
-        _gemini = gemini;
+        _ai = ai;
         _repo = repo;
         _logger = logger;
     }
@@ -70,9 +70,9 @@ public class PdfImportService : IPdfImportService
 
         // 3. Try Gemini only if local parser found < 3 useful days
         var localUsefulDays = extraction?.Routines?.Count(r => r.Exercises.Count > 0) ?? 0;
-        if (localUsefulDays < 3 && _gemini.IsConfigured)
+        if (localUsefulDays < 3 && _ai.IsConfigured)
         {
-            _logger.LogInformation("Local found only {Days} days, trying Gemini as supplement", localUsefulDays);
+            _logger.LogInformation("Local found only {Days} days, trying AI ({Provider}) as supplement", localUsefulDays, _ai.ProviderName);
             var (extractedJson, apiError) = await CallGeminiWithTextAsync(pdfText);
             if (extractedJson != null)
             {
@@ -82,18 +82,18 @@ public class PdfImportService : IPdfImportService
                     var geminiUseful = gemini?.Routines?.Count(r => r.Exercises.Count > 0) ?? 0;
                     if (geminiUseful > localUsefulDays)
                     {
-                        _logger.LogInformation("Using Gemini result ({G} days vs local {L} days)", geminiUseful, localUsefulDays);
+                        _logger.LogInformation("Using AI result ({G} days vs local {L} days)", geminiUseful, localUsefulDays);
                         extraction = gemini;
                     }
                 }
                 catch (JsonException ex)
                 {
-                    _logger.LogWarning(ex, "Failed to parse Gemini JSON");
+                    _logger.LogWarning(ex, "Failed to parse AI JSON response");
                 }
             }
             else
             {
-                _logger.LogWarning("Gemini failed: {Error}", apiError);
+                _logger.LogWarning("AI failed: {Error}", apiError);
             }
         }
 
@@ -336,9 +336,9 @@ public class PdfImportService : IPdfImportService
     {
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        if (!_gemini.IsConfigured)
+        if (!_ai.IsConfigured)
         {
-            _logger.LogInformation("No Gemini API key, skipping exercise name translation");
+            _logger.LogInformation("No AI provider configured, skipping exercise name translation");
             return result;
         }
 
@@ -362,7 +362,7 @@ Example response format:
 
 Return ONLY the JSON object, no markdown, no explanation.";
 
-        var (translations, error) = await _gemini.GenerateStructuredAsync<Dictionary<string, string>>(prompt);
+        var (translations, error) = await _ai.GenerateStructuredAsync<Dictionary<string, string>>(prompt);
         if (error != null)
         {
             _logger.LogWarning("Failed to translate exercise names: {Error}", error);
@@ -431,7 +431,7 @@ Reglas:
 TEXTO DEL PDF:
 " + pdfText;
 
-        return await _gemini.GenerateContentAsync(prompt, maxOutputTokens: 16384);
+        return await _ai.GenerateContentAsync(prompt, maxOutputTokens: 16384);
     }
 }
 
@@ -569,7 +569,6 @@ public static class LocalPdfParser
             if (line.Length < 3) continue;
 
             // Strategy 1: "DÍA N" format
-            int? primaryDay = null;
             var dayNumbers = new List<int>();
 
             if (Regex.IsMatch(line, @"D[IÍ]A", RegexOptions.IgnoreCase))

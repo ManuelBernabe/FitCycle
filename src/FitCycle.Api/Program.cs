@@ -40,9 +40,25 @@ var emailSettings = builder.Configuration.GetSection("Email").Get<EmailSettings>
 builder.Services.AddSingleton(emailSettings);
 builder.Services.AddScoped<IEmailService, EmailService>();
 
-// Gemini AI
+// AI providers (Groq primary, OpenRouter fallback, Gemini as last resort)
+var groqSettings = builder.Configuration.GetSection("Groq").Get<GroqSettings>() ?? new GroqSettings();
+var openRouterSettings = builder.Configuration.GetSection("OpenRouter").Get<OpenRouterSettings>() ?? new OpenRouterSettings();
+var geminiSettings = builder.Configuration.GetSection("Gemini").Get<GeminiSettings>() ?? new GeminiSettings();
+builder.Services.AddSingleton(groqSettings);
+builder.Services.AddSingleton(openRouterSettings);
 builder.Services.Configure<GeminiSettings>(builder.Configuration.GetSection("Gemini"));
-builder.Services.AddSingleton<IGeminiService, GeminiService>();
+builder.Services.AddSingleton<GroqAiService>();
+builder.Services.AddSingleton<OpenRouterAiService>();
+builder.Services.AddSingleton<GeminiService>();
+// Order matters: Groq → OpenRouter → Gemini
+builder.Services.AddSingleton<IAiService>(sp => new AiServiceWithFallback(
+    new IAiService[]
+    {
+        sp.GetRequiredService<GroqAiService>(),
+        sp.GetRequiredService<OpenRouterAiService>(),
+        sp.GetRequiredService<GeminiService>(),
+    },
+    sp.GetRequiredService<ILogger<AiServiceWithFallback>>()));
 builder.Services.AddScoped<IPdfImportService, PdfImportService>();
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -1348,10 +1364,10 @@ app.MapGet("/admin/backup/download/{name}", (string name, FitCycleDbContext db) 
 
 // ====== AI Endpoints ======
 
-app.MapPost("/ai/generate-routine", async (GenerateRoutineRequest request, IGeminiService gemini, IRoutineRepository repo) =>
+app.MapPost("/ai/generate-routine", async (GenerateRoutineRequest request, IAiService ai, IRoutineRepository repo) =>
 {
-    if (!gemini.IsConfigured)
-        return Results.BadRequest(new { error = "Gemini API key not configured" });
+    if (!ai.IsConfigured)
+        return Results.BadRequest(new { error = "No AI provider configured" });
 
     var muscleGroups = repo.GetAllMuscleGroups();
     var exercises = repo.GetExercises(null);
@@ -1403,7 +1419,7 @@ Reglas:
 - Weight en 0 (el usuario lo ajustará)
 - Incluye superseries cuando tenga sentido (supersetWith = nombre exacto del ejercicio pareja)";
 
-    var (text, error) = await gemini.GenerateContentAsync(prompt, maxOutputTokens: 8192);
+    var (text, error) = await ai.GenerateContentAsync(prompt, maxOutputTokens: 8192);
     if (error != null) return Results.BadRequest(new { error });
 
     return Results.Ok(new { routine = System.Text.Json.JsonSerializer.Deserialize<object>(text!) });
@@ -1412,10 +1428,10 @@ Reglas:
 .WithOpenApi()
 .RequireAuthorization();
 
-app.MapGet("/ai/workout-analysis", async (FitCycleDbContext db, ClaimsPrincipal user, IGeminiService gemini) =>
+app.MapGet("/ai/workout-analysis", async (FitCycleDbContext db, ClaimsPrincipal user, IAiService ai) =>
 {
-    if (!gemini.IsConfigured)
-        return Results.BadRequest(new { error = "Gemini API key not configured" });
+    if (!ai.IsConfigured)
+        return Results.BadRequest(new { error = "No AI provider configured" });
 
     var userId = int.Parse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
     var weeksAgo = DateTime.UtcNow.AddDays(-56); // 8 weeks
@@ -1463,7 +1479,7 @@ Analiza y responde en JSON:
 
 Sé específico con nombres de ejercicios y pesos. Responde SOLO con JSON.";
 
-    var (text, error) = await gemini.GenerateContentAsync(prompt, maxOutputTokens: 4096);
+    var (text, error) = await ai.GenerateContentAsync(prompt, maxOutputTokens: 4096);
     if (error != null) return Results.BadRequest(new { error });
 
     return Results.Ok(new { analysis = System.Text.Json.JsonSerializer.Deserialize<object>(text!) });
@@ -1472,10 +1488,10 @@ Sé específico con nombres de ejercicios y pesos. Responde SOLO con JSON.";
 .WithOpenApi()
 .RequireAuthorization();
 
-app.MapPost("/ai/exercise-suggestions", async (ExerciseSuggestionRequest request, IGeminiService gemini, IRoutineRepository repo) =>
+app.MapPost("/ai/exercise-suggestions", async (ExerciseSuggestionRequest request, IAiService ai, IRoutineRepository repo) =>
 {
-    if (!gemini.IsConfigured)
-        return Results.BadRequest(new { error = "Gemini API key not configured" });
+    if (!ai.IsConfigured)
+        return Results.BadRequest(new { error = "No AI provider configured" });
 
     var exercises = repo.GetExercises(null);
     var exerciseList = string.Join("\n", exercises.Select(e => $"- {e.Name} (grupo: {e.MuscleGroup?.Name ?? "?"})"));
@@ -1499,7 +1515,7 @@ Reglas:
 - Si preguntan por alternativas, busca ejercicios del mismo grupo muscular
 - Responde SOLO con JSON";
 
-    var (text, error) = await gemini.GenerateContentAsync(prompt);
+    var (text, error) = await ai.GenerateContentAsync(prompt);
     if (error != null) return Results.BadRequest(new { error });
 
     return Results.Ok(new { result = System.Text.Json.JsonSerializer.Deserialize<object>(text!) });

@@ -5,7 +5,7 @@ using Microsoft.Extensions.Options;
 
 namespace FitCycle.Infrastructure.Services;
 
-public class GeminiService : IGeminiService
+public class GeminiService : IAiService
 {
     private readonly string _apiKey;
     private readonly ILogger<GeminiService> _logger;
@@ -28,12 +28,15 @@ public class GeminiService : IGeminiService
     }
 
     public bool IsConfigured => !string.IsNullOrWhiteSpace(_apiKey);
+    public string ProviderName => "Gemini";
 
     public async Task<(string? Text, string? Error)> GenerateContentAsync(
-        string prompt, string model = "gemini-2.0-flash-lite", double temperature = 0.1, int maxOutputTokens = 4096)
+        string prompt, string? model = null, double temperature = 0.1, int maxOutputTokens = 4096)
     {
         if (!IsConfigured)
             return (null, "Gemini API key not configured");
+
+        model ??= "gemini-2.0-flash-lite";
 
         var requestBody = new
         {
@@ -94,7 +97,7 @@ public class GeminiService : IGeminiService
     }
 
     public async Task<(T? Result, string? Error)> GenerateStructuredAsync<T>(
-        string prompt, string model = "gemini-2.0-flash-lite", double temperature = 0.1, int maxOutputTokens = 4096) where T : class
+        string prompt, string? model = null, double temperature = 0.1, int maxOutputTokens = 4096) where T : class
     {
         var (text, error) = await GenerateContentAsync(prompt, model, temperature, maxOutputTokens);
         if (error != null) return (null, error);
