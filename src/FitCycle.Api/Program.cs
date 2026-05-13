@@ -209,6 +209,18 @@ if (!app.Environment.IsDevelopment())
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
+// Serve user-uploaded exercise images from the persistent volume.
+// Falls back to wwwroot/uploads in local dev when DATA_DIR is not set.
+var uploadsRoot = !string.IsNullOrEmpty(dataDir)
+    ? Path.Combine(dataDir, "uploads")
+    : Path.Combine(app.Environment.WebRootPath ?? "wwwroot", "uploads");
+Directory.CreateDirectory(uploadsRoot);
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(uploadsRoot),
+    RequestPath = "/uploads"
+});
+
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -631,6 +643,53 @@ app.MapPost("/exercises", (CreateExerciseRequest request, IRoutineRepository rep
 .WithName("CreateExercise")
 .WithOpenApi()
 .RequireAuthorization();
+
+// -- Subir imagen para un ejercicio --
+app.MapPost("/exercises/{id:int}/image", async (int id, HttpRequest request, IRoutineRepository repo) =>
+{
+    if (!request.HasFormContentType)
+        return Results.BadRequest(new { error = "Se esperaba multipart/form-data." });
+
+    var form = await request.ReadFormAsync();
+    var file = form.Files["image"] ?? form.Files.FirstOrDefault();
+    if (file == null || file.Length == 0)
+        return Results.BadRequest(new { error = "No se proporcionó imagen." });
+
+    if (file.Length > 5 * 1024 * 1024)
+        return Results.BadRequest(new { error = "La imagen excede 5 MB." });
+
+    var allowed = new[] { "image/jpeg", "image/png", "image/webp", "image/gif" };
+    if (!allowed.Contains(file.ContentType, StringComparer.OrdinalIgnoreCase))
+        return Results.BadRequest(new { error = "Formato no soportado. Usa JPG, PNG, WEBP o GIF." });
+
+    var ext = file.ContentType switch
+    {
+        "image/png" => ".png",
+        "image/webp" => ".webp",
+        "image/gif" => ".gif",
+        _ => ".jpg"
+    };
+
+    var fileName = $"ex_{id}_{DateTime.UtcNow:yyyyMMddHHmmss}{ext}";
+    var filePath = Path.Combine(uploadsRoot, fileName);
+
+    await using (var fs = File.Create(filePath))
+        await file.CopyToAsync(fs);
+
+    var url = $"/uploads/{fileName}";
+    var updated = repo.SetExerciseImageUrl(id, url);
+    if (updated == null)
+    {
+        try { File.Delete(filePath); } catch { /* best-effort cleanup */ }
+        return Results.NotFound(new { error = "Ejercicio no encontrado." });
+    }
+
+    return Results.Ok(updated);
+})
+.WithName("UploadExerciseImage")
+.WithOpenApi()
+.RequireAuthorization()
+.DisableAntiforgery();
 
 // -- Rutina semanal --
 app.MapGet("/routines", (IRoutineRepository repo, ClaimsPrincipal user) =>

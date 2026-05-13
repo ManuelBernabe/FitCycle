@@ -4,7 +4,7 @@
 import { t, dayName, muscleGroup as mgTranslate, exerciseName as exTranslate } from '../l10n.js';
 import { api } from '../api.js';
 import { getSuggestions, clearCache } from '../exercises.js';
-import { escapeHtml, showConfirm, showPrompt } from '../utils.js';
+import { escapeHtml, showConfirm, showPrompt, showAlert } from '../utils.js';
 
 let dayNum = 0;
 let allMuscleGroups = [];
@@ -296,9 +296,17 @@ function buildUI() {
 function buildExerciseRows(group, gi) {
   return group.exercises.map((ex, ei) => {
     const checkedAttr = ex.isSelected ? 'checked' : '';
-    const imgHtml = ex.imageUrl
-      ? `<img src="${ex.imageUrl}" alt="" style="width:32px;height:32px;object-fit:cover;border-radius:4px;" onerror="this.onerror=null;this.src=''">`
+    // Image thumbnail acts as an upload button. Click → file picker → POST /exercises/{id}/image.
+    const imgInner = ex.imageUrl
+      ? `<img src="${ex.imageUrl}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:4px;" onerror="this.onerror=null;this.style.display='none';this.parentElement.querySelector('.ex-img-placeholder').style.display='flex';">`
       : '';
+    const imgHtml = `
+      <div class="ex-img-thumb btn-upload-image" data-gi="${gi}" data-ei="${ei}" title="${t('ChangeImage')}"
+           style="position:relative;width:36px;height:36px;border-radius:4px;background:#f3f0fc;flex-shrink:0;cursor:pointer;overflow:hidden;">
+        ${imgInner}
+        <span class="ex-img-placeholder" style="display:${ex.imageUrl ? 'none' : 'flex'};position:absolute;inset:0;align-items:center;justify-content:center;font-size:16px;color:#512BD4;">&#128247;</span>
+      </div>
+    `;
 
     const summaryParts = ex.setDetails.map((s, i) => `S${i + 1}:${s.reps}r/${s.weight > 0 ? s.weight + 'kg' : '-'}`);
     const summaryText = summaryParts.join(' · ');
@@ -365,7 +373,7 @@ function buildExerciseRows(group, gi) {
       <div style="margin-bottom:8px;border:1px solid ${isInSuperset ? '#e67e22' : '#eee'};border-radius:8px;padding:6px;">
         <div style="display:flex;align-items:center;gap:4px;">
           <input type="checkbox" class="ex-check" data-gi="${gi}" data-ei="${ei}" ${checkedAttr}>
-          ${imgHtml ? `<div style="flex-shrink:0;">${imgHtml}</div>` : ''}
+          ${imgHtml}
           <span style="font-size:13px;font-weight:600;flex:1;min-width:0;word-break:break-word;">${escapeHtml(exTranslate(ex.name))}</span>
           <div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0;">
             <button class="btn-move-ex" data-gi="${gi}" data-ei="${ei}" data-dir="up" style="background:#f3f0fc;border:none;color:#512BD4;font-size:16px;cursor:pointer;padding:2px 6px;line-height:1;border-radius:4px;${ei === 0 ? 'visibility:hidden;' : ''}" title="${t('MoveUp')}">&#9650;</button>
@@ -703,6 +711,15 @@ function attachEvents(container) {
     });
   });
 
+  // Upload exercise image
+  container.querySelectorAll('.btn-upload-image').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const gi = parseInt(btn.dataset.gi);
+      const ei = parseInt(btn.dataset.ei);
+      pickAndUploadImage(gi, ei);
+    });
+  });
+
   // Delete exercise buttons
   container.querySelectorAll('.btn-delete-ex').forEach(btn => {
     btn.addEventListener('click', async () => {
@@ -903,4 +920,47 @@ async function createAndAddExercise(group, name, imageUrl) {
   } catch (err) {
     if (statusEl) statusEl.textContent = t('ErrorFmt', err.message);
   }
+}
+
+function pickAndUploadImage(gi, ei) {
+  const ex = groups[gi]?.exercises[ei];
+  if (!ex || !ex.exerciseId) return;
+
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/jpeg,image/png,image/webp,image/gif';
+  input.style.display = 'none';
+  document.body.appendChild(input);
+
+  input.addEventListener('change', async () => {
+    const file = input.files?.[0];
+    document.body.removeChild(input);
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      showAlert(t('ImageTooLarge'));
+      return;
+    }
+
+    const statusEl = document.getElementById('editday-status');
+    if (statusEl) statusEl.textContent = t('UploadingImage');
+
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+      const updated = await api.postForm(`/exercises/${ex.exerciseId}/image`, formData);
+      const newUrl = updated.imageUrl || updated.ImageUrl || '';
+      // Update every reference to this exercise across all muscle groups
+      groups.forEach(g => g.exercises.forEach(e => {
+        if (e.exerciseId === ex.exerciseId) e.imageUrl = newUrl;
+      }));
+      clearCache();
+      if (statusEl) statusEl.textContent = '';
+      buildUI();
+    } catch (err) {
+      if (statusEl) statusEl.textContent = t('ErrorFmt', err.message || err);
+    }
+  });
+
+  input.click();
 }

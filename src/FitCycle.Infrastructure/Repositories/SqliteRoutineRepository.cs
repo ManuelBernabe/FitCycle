@@ -407,6 +407,15 @@ public class SqliteRoutineRepository : IRoutineRepository
         return exercise;
     }
 
+    public Exercise? SetExerciseImageUrl(int exerciseId, string imageUrl)
+    {
+        var exercise = _db.Exercises.FirstOrDefault(e => e.Id == exerciseId);
+        if (exercise == null) return null;
+        exercise.ImageUrl = imageUrl ?? string.Empty;
+        _db.SaveChanges();
+        return exercise;
+    }
+
     public WeekRoutine GetWeekRoutine(int userId)
     {
         var validDays = new[]

@@ -1,4 +1,4 @@
-const CACHE = 'fitcycle-v75';
+const CACHE = 'fitcycle-v76';
 const API_CACHE = 'fitcycle-api-v1';
 const SHELL = ['/', '/css/app.css', '/js/app.js', '/js/api.js', '/js/auth.js', '/js/l10n.js', '/js/exercises.js', '/js/utils.js',
   '/js/qrcode.min.js', '/js/offline.js',
