@@ -412,13 +412,19 @@ Formato requerido:
 }
 
 Reglas:
-- dayOfWeek: 1=Lunes(DÍA 1), 2=Martes(DÍA 2), 3=Miércoles(DÍA 3), 4=Jueves(DÍA 4), 5=Viernes(DÍA 5)
+- dayOfWeek: 1=Lunes, 2=Martes, 3=Miércoles, 4=Jueves, 5=Viernes, 6=Sábado, 7=Domingo
+- Las cabeceras de día pueden venir en formatos como:
+    * ""DÍA 1"", ""DÍA 2 ESPALDA"", ""DÍA3---CUADRICEPS""
+    * ""PECTORAL+TRÍCEPS+HOMBRO (MARTES)"", ""ESPALDA+ BÍCEPS (MIÉRCOLES)""
+    * ""CUADRICEPS (LUNES-VIERNES)"" — un rango/lista de días significa que la MISMA rutina se repite en cada día.
+      DEBES crear UNA entrada ""routines"" por cada día listado con los mismos ejercicios.
 - Grupos musculares válidos: Pecho, Espalda, Hombros, Bíceps, Tríceps, Piernas, Abdominales, Glúteos
-- Mapea: PECTORAL→Pecho, ESPALDA→Espalda, HOMBRO(S)→Hombros, BÍCEPS→Bíceps, TRÍCEPS→Tríceps, CUADRICEPS/FEMORAL/ABDUCTOR/ADUCTOR/GEMELO→Piernas
+- Mapea: PECTORAL→Pecho, ESPALDA→Espalda, HOMBRO(S)→Hombros, BÍCEPS→Bíceps, TRÍCEPS→Tríceps, CUADRICEPS/FEMORAL/ABDUCTOR/ADUCTOR/GEMELO→Piernas, GLÚTEO→Glúteos
 - Tipos de agarre (grip): prono, supino, neutro (o vacío)
 - Crea un objeto por cada serie en ""sets"" con sus reps
 - tempoPos y tempoNeg: segundos de fase concéntrica/excéntrica (0 si no se especifica)
-- supersetWith: nombre exacto del ejercicio pareja (null si no hay)
+- Las tablas con filas ""Serie / Reps / Fase positiva / Fase negativa"" indican una serie por columna con sus reps y tempos correspondientes
+- supersetWith: nombre exacto del ejercicio pareja (null si no hay). Indicadores: ""+ super serie..."", ""SUPER SERIE""
 - Nombres de ejercicios en Title Case
 - Extrae notas/instrucciones del entrenador
 
@@ -455,6 +461,21 @@ public static class LocalPdfParser
     private static readonly Regex DayHeaderRegex = new(
         @"D[IÍ]A\s*[-–—:]*\s*(\d+)",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    // Regex for headers that use Spanish day names like "(LUNES)", "(MARTES)", "(LUNES-VIERNES)"
+    // Captures one or two day names so we can handle ranges/duplicates.
+    private static readonly Regex SpanishDayHeaderRegex = new(
+        @"\b(LUNES|MARTES|MI[EÉ]RCOLES|JUEVES|VIERNES|S[AÁ]BADO|DOMINGO)\b(?:\s*[-–—/,y\s]+\s*(LUNES|MARTES|MI[EÉ]RCOLES|JUEVES|VIERNES|S[AÁ]BADO|DOMINGO))?",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static readonly Dictionary<string, int> SpanishDayMap = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["LUNES"] = 1, ["MARTES"] = 2,
+        ["MIÉRCOLES"] = 3, ["MIERCOLES"] = 3,
+        ["JUEVES"] = 4, ["VIERNES"] = 5,
+        ["SÁBADO"] = 6, ["SABADO"] = 6,
+        ["DOMINGO"] = 7,
+    };
 
     private static readonly Regex RestLine = new(
         @"(?:TIEMPO\s+DE\s+)?DESCANSO", RegexOptions.IgnoreCase | RegexOptions.Compiled);
@@ -547,17 +568,34 @@ public static class LocalPdfParser
             if (line.StartsWith("---") && line.Contains("Página")) continue; // page separator
             if (line.Length < 3) continue;
 
-            // Must contain DÍA/DIA keyword
-            if (!Regex.IsMatch(line, @"D[IÍ]A", RegexOptions.IgnoreCase)) continue;
+            // Strategy 1: "DÍA N" format
+            int? primaryDay = null;
+            var dayNumbers = new List<int>();
 
-            var match = DayHeaderRegex.Match(line);
-            if (!match.Success) continue;
+            if (Regex.IsMatch(line, @"D[IÍ]A", RegexOptions.IgnoreCase))
+            {
+                var match = DayHeaderRegex.Match(line);
+                if (match.Success)
+                {
+                    var dayNum = int.Parse(match.Groups[1].Value);
+                    if (dayNum >= 1 && dayNum <= 7)
+                        dayNumbers.Add(dayNum);
+                }
+            }
 
-            var dayNum = int.Parse(match.Groups[1].Value);
-            if (dayNum < 1 || dayNum > 7) continue;
+            // Strategy 2: Spanish day names — "(LUNES)", "(LUNES-VIERNES)", etc.
+            if (dayNumbers.Count == 0)
+            {
+                var sMatch = SpanishDayHeaderRegex.Match(line);
+                if (sMatch.Success)
+                {
+                    if (SpanishDayMap.TryGetValue(sMatch.Groups[1].Value, out var d1)) dayNumbers.Add(d1);
+                    if (sMatch.Groups[2].Success && SpanishDayMap.TryGetValue(sMatch.Groups[2].Value, out var d2) && !dayNumbers.Contains(d2))
+                        dayNumbers.Add(d2);
+                }
+            }
 
-            // Avoid duplicate day numbers
-            if (dayBoundaries.Any(d => d.dayNum == dayNum)) continue;
+            if (dayNumbers.Count == 0) continue;
 
             // Extract muscle groups from the entire line
             var muscleGroups = ExtractMuscleGroups(line);
@@ -570,13 +608,22 @@ public static class LocalPdfParser
                     var nextLine = lines[j].Trim();
                     if (string.IsNullOrWhiteSpace(nextLine) || nextLine.StartsWith("---")) continue;
                     if (Regex.IsMatch(nextLine, @"D[IÍ]A", RegexOptions.IgnoreCase)) break;
+                    if (SpanishDayHeaderRegex.IsMatch(nextLine)) break;
                     var mg = ExtractMuscleGroups(nextLine);
                     if (mg.Count > 0) { muscleGroups = mg; break; }
                 }
             }
 
-            dayBoundaries.Add((i, dayNum, muscleGroups));
+            // Add one entry per detected day (handles LUNES-VIERNES = 2 entries with same content)
+            foreach (var dayNum in dayNumbers)
+            {
+                if (dayBoundaries.Any(d => d.dayNum == dayNum)) continue; // avoid duplicates
+                dayBoundaries.Add((i, dayNum, muscleGroups));
+            }
         }
+
+        // Sort by line index so subsequent slicing works
+        dayBoundaries.Sort((a, b) => a.lineIndex.CompareTo(b.lineIndex));
 
         if (dayBoundaries.Count == 0)
             return extraction;
@@ -585,7 +632,16 @@ public static class LocalPdfParser
         for (int d = 0; d < dayBoundaries.Count; d++)
         {
             var (startLine, dayNum, muscleGroups) = dayBoundaries[d];
-            var endLine = d + 1 < dayBoundaries.Count ? dayBoundaries[d + 1].lineIndex : lines.Count;
+            // Find next boundary with a DIFFERENT line index — siblings (LUNES-VIERNES) share the same content
+            int endLine = lines.Count;
+            for (int n = d + 1; n < dayBoundaries.Count; n++)
+            {
+                if (dayBoundaries[n].lineIndex != startLine)
+                {
+                    endLine = dayBoundaries[n].lineIndex;
+                    break;
+                }
+            }
 
             var sectionLines = lines.Skip(startLine + 1).Take(endLine - startLine - 1).ToList();
 
