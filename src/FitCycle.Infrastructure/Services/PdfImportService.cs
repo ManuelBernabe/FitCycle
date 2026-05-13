@@ -68,23 +68,23 @@ public class PdfImportService : IPdfImportService
             _logger.LogError(ex, "Local parser failed");
         }
 
-        // 3. Try Gemini only if local parser found < 3 useful days
+        // 3. Always try AI when configured — local parser may miss exercises within days
         var localUsefulDays = extraction?.Routines?.Count(r => r.Exercises.Count > 0) ?? 0;
-        if (localUsefulDays < 3 && _ai.IsConfigured)
+        var localExerciseCount = extraction?.Routines?.Sum(r => r.Exercises.Count) ?? 0;
+        if (_ai.IsConfigured)
         {
-            _logger.LogInformation("Local found only {Days} days, trying AI ({Provider}) as supplement", localUsefulDays, _ai.ProviderName);
+            _logger.LogInformation("Calling AI ({Provider}) — local found {Days} days, {Ex} exercises", _ai.ProviderName, localUsefulDays, localExerciseCount);
             var (extractedJson, apiError) = await CallGeminiWithTextAsync(pdfText);
             if (extractedJson != null)
             {
                 try
                 {
-                    var gemini = JsonSerializer.Deserialize<PdfExtraction>(extractedJson, _jsonOpts);
-                    var geminiUseful = gemini?.Routines?.Count(r => r.Exercises.Count > 0) ?? 0;
-                    if (geminiUseful > localUsefulDays)
-                    {
-                        _logger.LogInformation("Using AI result ({G} days vs local {L} days)", geminiUseful, localUsefulDays);
-                        extraction = gemini;
-                    }
+                    var aiExtraction = JsonSerializer.Deserialize<PdfExtraction>(extractedJson, _jsonOpts);
+                    var aiUsefulDays = aiExtraction?.Routines?.Count(r => r.Exercises.Count > 0) ?? 0;
+                    var aiExerciseCount = aiExtraction?.Routines?.Sum(r => r.Exercises.Count) ?? 0;
+                    _logger.LogInformation("AI found {Days} days, {Ex} exercises", aiUsefulDays, aiExerciseCount);
+
+                    extraction = MergeExtractions(extraction, aiExtraction, _logger);
                 }
                 catch (JsonException ex)
                 {
@@ -220,14 +220,18 @@ public class PdfImportService : IPdfImportService
                 if (muscleGroupId == 0 && allMuscleGroups.Count > 0)
                     muscleGroupId = allMuscleGroups[0].Id;
 
+                var pdfExName = pdfEx.Name ?? "Ejercicio";
+                var normalizedPdfName = NormalizeExerciseName(pdfExName);
                 var exercise = allExercises.FirstOrDefault(e =>
-                    string.Equals(e.Name, pdfEx.Name, StringComparison.OrdinalIgnoreCase));
+                    string.Equals(e.Name, pdfExName, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(NormalizeExerciseName(e.Name), normalizedPdfName, StringComparison.OrdinalIgnoreCase));
 
                 if (exercise == null)
                 {
-                    exercise = _repo.AddExercise(pdfEx.Name ?? "Ejercicio", muscleGroupId);
+                    exercise = _repo.AddExercise(pdfExName, muscleGroupId);
                     allExercises = _repo.GetExercises();
                     summary.NewExercisesCreated++;
+                    _logger.LogInformation("Created new exercise '{Name}' for muscle group {Mg}", pdfExName, exMg?.Name ?? "?");
                 }
 
                 var setDetails = (pdfEx.Sets ?? new()).Select(s => new
@@ -269,6 +273,7 @@ public class PdfImportService : IPdfImportService
             }
 
             summary.ExerciseCount = exerciseInputs.Count;
+            _logger.LogInformation("Day {Day}: saving {Count} exercises", dayOfWeek, exerciseInputs.Count);
 
             try
             {
@@ -282,6 +287,64 @@ public class PdfImportService : IPdfImportService
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Normalizes an exercise name for fuzzy matching: lowercase, no accents,
+    /// collapsed whitespace. Used to dedupe variants like "Press Banca" vs "press banca".
+    /// </summary>
+    private static string NormalizeExerciseName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "";
+        var lower = name.Trim().ToLowerInvariant();
+        // Remove accents
+        var normalized = lower.Normalize(System.Text.NormalizationForm.FormD);
+        var sb = new StringBuilder();
+        foreach (var ch in normalized)
+        {
+            if (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(ch) != System.Globalization.UnicodeCategory.NonSpacingMark)
+                sb.Append(ch);
+        }
+        // Collapse multiple spaces
+        return Regex.Replace(sb.ToString(), @"\s+", " ").Trim();
+    }
+
+    /// <summary>
+    /// Merges local-parser and AI extractions: for each day-of-week, keeps the
+    /// version with more exercises. Days only present in one source are kept as-is.
+    /// </summary>
+    private static PdfExtraction MergeExtractions(PdfExtraction? local, PdfExtraction? ai, ILogger logger)
+    {
+        if (ai == null || ai.Routines.Count == 0) return local ?? new PdfExtraction();
+        if (local == null || local.Routines.Count == 0) return ai;
+
+        var merged = new PdfExtraction();
+        var allDays = local.Routines.Select(r => r.DayOfWeek)
+            .Union(ai.Routines.Select(r => r.DayOfWeek))
+            .Distinct();
+
+        foreach (var day in allDays)
+        {
+            var localDay = local.Routines.FirstOrDefault(r => r.DayOfWeek == day);
+            var aiDay = ai.Routines.FirstOrDefault(r => r.DayOfWeek == day);
+
+            if (localDay == null) { merged.Routines.Add(aiDay!); continue; }
+            if (aiDay == null) { merged.Routines.Add(localDay); continue; }
+
+            // Both sources have this day — pick the one with more exercises
+            if (aiDay.Exercises.Count > localDay.Exercises.Count)
+            {
+                logger.LogInformation("Day {Day}: AI wins ({AiCount} vs local {LocalCount})", day, aiDay.Exercises.Count, localDay.Exercises.Count);
+                merged.Routines.Add(aiDay);
+            }
+            else
+            {
+                logger.LogInformation("Day {Day}: local wins ({LocalCount} vs AI {AiCount})", day, localDay.Exercises.Count, aiDay.Exercises.Count);
+                merged.Routines.Add(localDay);
+            }
+        }
+
+        return merged;
     }
 
     public string ExtractTextFromPdf(byte[] pdfBytes)
@@ -383,8 +446,10 @@ Return ONLY the JSON object, no markdown, no explanation.";
 
     private async Task<(string? Json, string? Error)> CallGeminiWithTextAsync(string pdfText)
     {
-        if (pdfText.Length > 30000)
-            pdfText = pdfText[..30000];
+        // Modern LLMs (Llama 3.3, Gemini 2.0) handle 100K+ tokens easily;
+        // 80K chars (~20K tokens) covers ~30-page training plans comfortably.
+        if (pdfText.Length > 80000)
+            pdfText = pdfText[..80000];
 
         var prompt = @"Analiza este texto extraído de un PDF de plan de entrenamiento y extrae TODA la información en formato JSON.
 
@@ -431,7 +496,8 @@ Reglas:
 TEXTO DEL PDF:
 " + pdfText;
 
-        return await _ai.GenerateContentAsync(prompt, maxOutputTokens: 16384);
+        // 32K output tokens leaves headroom for 50+ exercises across 7 days
+        return await _ai.GenerateContentAsync(prompt, maxOutputTokens: 32768);
     }
 }
 
@@ -508,16 +574,21 @@ public static class LocalPdfParser
         "BANCO", "CUERDA", "MULTIPOWER", "SMITH", "NAUTILUS", "NAUTILIUS", "TRX",
         // Movements
         "PRESS", "CURL", "EXTENSIÓN", "EXTENSION", "PRENSA", "REMO", "ELEVACIÓN", "ELEVACION",
-        "FONDOS", "APERTURA", "APERTURAS", "PULL", "JALÓN", "JALON", "DOMINADA", "DOMINADAS",
-        "SENTADILLA", "SENTADILLAS", "BÚLGARA", "BULGARA", "PATADA", "CRUCE", "CRUCES",
-        "MUERTO", // for "peso muerto"
+        "ELEVACIONES", "FONDOS", "APERTURA", "APERTURAS", "PULL", "JALÓN", "JALON",
+        "DOMINADA", "DOMINADAS", "SENTADILLA", "SENTADILLAS", "BÚLGARA", "BULGARA",
+        "PATADA", "PATADAS", "CRUCE", "CRUCES", "MUERTO", // peso muerto
+        "ZANCADA", "ZANCADAS", "PASO", "PASOS", "HIP", "THRUST", "PESO",
+        "CRUNCH", "CRUNCHES", "PLANCHA", "ABDOMINAL", "ABDOMINALES",
         // Types/modifiers
         "UNILATERAL", "BILATERAL", "INCLINADO", "INCLINADA", "PREDICADOR", "GIRONDA",
-        "MARTILLO", "FRONTAL", "MILITAR", "TUMBADO", "TUMBADA",
+        "MARTILLO", "FRONTAL", "MILITAR", "TUMBADO", "TUMBADA", "SENTADO", "SENTADA",
+        "DE PIE",
         // Body parts used as exercise name starters
-        "FEMORAL", "TRAPECIO", "POSTERIOR", "LATERAL", "LATERALES", "GEMELO",
-        "ABDUCTOR", "ADUCTOR", "LUMBAR", "BÍCEPS", "BICEPS", "TRÍCEPS", "TRICEPS",
-        "GLÚTEO", "GLUTEO",
+        "FEMORAL", "FEMORALES", "TRAPECIO", "TRAPECIOS", "POSTERIOR", "POSTERIORES",
+        "LATERAL", "LATERALES", "GEMELO", "GEMELOS", "ABDUCTOR", "ADUCTOR",
+        "LUMBAR", "LUMBARES", "BÍCEPS", "BICEPS", "TRÍCEPS", "TRICEPS",
+        "GLÚTEO", "GLUTEO", "HOMBRO", "HOMBROS", "CUADRICEPS", "CUÁDRICEPS",
+        "PECHO", "PECTORAL", "ESPALDA", "PIERNA", "PIERNAS",
     };
 
     // Words that start instruction/note sentences — NOT exercise names
