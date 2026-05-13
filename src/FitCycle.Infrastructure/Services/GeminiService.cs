@@ -128,11 +128,7 @@ public class GeminiService : IAiService
                 if (part.TryGetProperty("text", out var textProp))
                 {
                     var text = textProp.GetString() ?? "";
-                    text = text.Trim();
-                    if (text.StartsWith("```json")) text = text[7..];
-                    else if (text.StartsWith("```")) text = text[3..];
-                    if (text.EndsWith("```")) text = text[..^3];
-                    return text.Trim();
+                    return OpenAiCompatibleService.CleanJsonResponse(text);
                 }
             }
         }

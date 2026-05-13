@@ -42,16 +42,26 @@ public abstract class OpenAiCompatibleService : IAiService
 
         model ??= DefaultModel;
 
-        var requestBody = new
-        {
-            model,
-            messages = new[]
+        // Detect if the caller expects a JSON response and turn on the provider's
+        // native JSON mode so the model doesn't wrap with prose or markdown.
+        var wantsJson = prompt.Contains("JSON", StringComparison.OrdinalIgnoreCase);
+
+        object requestBody = wantsJson
+            ? new
             {
-                new { role = "user", content = prompt }
-            },
-            temperature,
-            max_tokens = maxOutputTokens,
-        };
+                model,
+                messages = new[] { new { role = "user", content = prompt } },
+                temperature,
+                max_tokens = maxOutputTokens,
+                response_format = new { type = "json_object" },
+            }
+            : new
+            {
+                model,
+                messages = new[] { new { role = "user", content = prompt } },
+                temperature,
+                max_tokens = maxOutputTokens,
+            };
 
         var json = JsonSerializer.Serialize(requestBody);
 
@@ -134,12 +144,56 @@ public abstract class OpenAiCompatibleService : IAiService
             if (!choice.TryGetProperty("message", out var message)) continue;
             if (!message.TryGetProperty("content", out var content)) continue;
             var text = content.GetString() ?? "";
-            text = text.Trim();
-            if (text.StartsWith("```json")) text = text[7..];
-            else if (text.StartsWith("```")) text = text[3..];
-            if (text.EndsWith("```")) text = text[..^3];
-            return text.Trim();
+            return CleanJsonResponse(text);
         }
         return null;
+    }
+
+    /// <summary>
+    /// Strips markdown fences and extracts the largest top-level JSON object/array
+    /// from a free-form LLM response. Falls back to the trimmed input.
+    /// </summary>
+    public static string CleanJsonResponse(string text)
+    {
+        text = text.Trim();
+        // Strip markdown fences
+        if (text.StartsWith("```json")) text = text[7..];
+        else if (text.StartsWith("```")) text = text[3..];
+        if (text.EndsWith("```")) text = text[..^3];
+        text = text.Trim();
+
+        // If still wrapped in prose, find first '{' or '[' and matching close
+        var firstObj = text.IndexOf('{');
+        var firstArr = text.IndexOf('[');
+        int firstBracket;
+        char openChar, closeChar;
+        if (firstObj < 0 && firstArr < 0) return text;
+        if (firstObj < 0 || (firstArr >= 0 && firstArr < firstObj))
+        { firstBracket = firstArr; openChar = '['; closeChar = ']'; }
+        else
+        { firstBracket = firstObj; openChar = '{'; closeChar = '}'; }
+
+        if (firstBracket == 0 && text.EndsWith(closeChar.ToString())) return text;
+
+        // Walk the string with a simple bracket counter (respects strings)
+        int depth = 0;
+        bool inString = false;
+        bool escape = false;
+        for (int i = firstBracket; i < text.Length; i++)
+        {
+            var c = text[i];
+            if (escape) { escape = false; continue; }
+            if (c == '\\') { escape = true; continue; }
+            if (c == '"') { inString = !inString; continue; }
+            if (inString) continue;
+            if (c == openChar) depth++;
+            else if (c == closeChar)
+            {
+                depth--;
+                if (depth == 0) return text.Substring(firstBracket, i - firstBracket + 1);
+            }
+        }
+        // Unbalanced — return slice from first bracket onwards (might still be parseable if truncated)
+        return text.Substring(firstBracket);
     }
 }

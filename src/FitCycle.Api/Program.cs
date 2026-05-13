@@ -709,6 +709,50 @@ app.MapPost("/routines/import-pdf", async (HttpRequest request, IPdfImportServic
 .DisableAntiforgery();
 
 // -- Debug: ver texto extraído del PDF --
+// -- Diagnose PDF: run parser + AI without saving so we can see what each found --
+app.MapPost("/routines/diagnose-pdf", async (HttpRequest request, IPdfImportService importService) =>
+{
+    var form = await request.ReadFormAsync();
+    var file = form.Files["pdf"];
+    if (file == null || file.Length == 0)
+        return Results.BadRequest(new { error = "No se proporcionó archivo PDF." });
+
+    using var ms = new MemoryStream();
+    await file.CopyToAsync(ms);
+    var diag = await importService.DiagnosePdfAsync(ms.ToArray());
+
+    // Build a compact summary that's easy to read
+    var summary = new
+    {
+        textLength = diag.PdfTextLength,
+        aiProvider = diag.AiProvider,
+        aiError = diag.AiError,
+        localError = diag.LocalError,
+        localSummary = diag.LocalRoutines.Select(r => new
+        {
+            day = r.DayOfWeek,
+            muscleGroups = r.MuscleGroups,
+            exerciseCount = r.Exercises.Count,
+            exercises = r.Exercises
+        }).ToList(),
+        aiSummary = diag.AiRoutines.Select(r => new
+        {
+            day = r.DayOfWeek,
+            muscleGroups = r.MuscleGroups,
+            exerciseCount = r.Exercises.Count,
+            exercises = r.Exercises
+        }).ToList(),
+        aiRawResponseSnippet = diag.AiRawResponse != null && diag.AiRawResponse.Length > 4000
+            ? diag.AiRawResponse[..4000] + "...[truncated]"
+            : diag.AiRawResponse,
+    };
+    return Results.Ok(summary);
+})
+.WithName("DiagnosePdf")
+.WithOpenApi()
+.RequireAuthorization("AdminOrAbove")
+.DisableAntiforgery();
+
 app.MapPost("/routines/debug-pdf", async (HttpRequest request, IPdfImportService importService) =>
 {
     var form = await request.ReadFormAsync();

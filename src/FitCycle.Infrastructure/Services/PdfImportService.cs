@@ -14,6 +14,7 @@ public interface IPdfImportService
 {
     Task<PdfImportResult> ImportFromPdfAsync(byte[] pdfBytes, int targetUserId, string language = "es");
     string ExtractTextFromPdf(byte[] pdfBytes);
+    Task<PdfDiagnosticResult> DiagnosePdfAsync(byte[] pdfBytes);
 }
 
 public class PdfImportService : IPdfImportService
@@ -283,6 +284,56 @@ public class PdfImportService : IPdfImportService
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to set routine for day {Day}", dayOfWeek);
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Runs the parser + AI without saving anything. Returns each source's
+    /// extraction so you can see exactly which exercises each one found.
+    /// </summary>
+    public async Task<PdfDiagnosticResult> DiagnosePdfAsync(byte[] pdfBytes)
+    {
+        var result = new PdfDiagnosticResult();
+
+        try { result.PdfText = ExtractTextFromPdf(pdfBytes); }
+        catch (Exception ex) { result.Error = $"PDF extract failed: {ex.Message}"; return result; }
+
+        result.PdfTextLength = result.PdfText.Length;
+
+        try
+        {
+            var local = LocalPdfParser.Parse(result.PdfText);
+            result.LocalRoutines = local.Routines.Select(r => new DiagDayRoutine
+            {
+                DayOfWeek = r.DayOfWeek,
+                MuscleGroups = r.MuscleGroups,
+                Exercises = r.Exercises.Select(e => e.Name ?? "").ToList(),
+            }).ToList();
+        }
+        catch (Exception ex) { result.LocalError = ex.Message; }
+
+        if (_ai.IsConfigured)
+        {
+            result.AiProvider = _ai.ProviderName;
+            var (json, err) = await CallGeminiWithTextAsync(result.PdfText);
+            result.AiRawResponse = json;
+            result.AiError = err;
+            if (json != null)
+            {
+                try
+                {
+                    var ai = JsonSerializer.Deserialize<PdfExtraction>(json, _jsonOpts);
+                    result.AiRoutines = ai?.Routines?.Select(r => new DiagDayRoutine
+                    {
+                        DayOfWeek = r.DayOfWeek,
+                        MuscleGroups = r.MuscleGroups,
+                        Exercises = r.Exercises.Select(e => e.Name ?? "").ToList(),
+                    }).ToList() ?? new();
+                }
+                catch (JsonException ex) { result.AiError = $"JSON parse error: {ex.Message}"; }
             }
         }
 
@@ -1405,4 +1456,26 @@ public class DayImportSummary
     public int ExerciseCount { get; set; }
     public int NewExercisesCreated { get; set; }
     public List<string> ExerciseNames { get; set; } = new();
+}
+
+// -- Diagnostic DTOs (for /routines/diagnose-pdf) --
+
+public class PdfDiagnosticResult
+{
+    public string? Error { get; set; }
+    public string PdfText { get; set; } = "";
+    public int PdfTextLength { get; set; }
+    public List<DiagDayRoutine> LocalRoutines { get; set; } = new();
+    public string? LocalError { get; set; }
+    public string? AiProvider { get; set; }
+    public List<DiagDayRoutine> AiRoutines { get; set; } = new();
+    public string? AiRawResponse { get; set; }
+    public string? AiError { get; set; }
+}
+
+public class DiagDayRoutine
+{
+    public int DayOfWeek { get; set; }
+    public List<string> MuscleGroups { get; set; } = new();
+    public List<string> Exercises { get; set; } = new();
 }
