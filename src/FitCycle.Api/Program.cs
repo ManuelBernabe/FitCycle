@@ -60,6 +60,7 @@ builder.Services.AddSingleton<IAiService>(sp => new AiServiceWithFallback(
     },
     sp.GetRequiredService<ILogger<AiServiceWithFallback>>()));
 builder.Services.AddScoped<IPdfImportService, PdfImportService>();
+builder.Services.AddScoped<IExerciseImageAutoFiller, ExerciseImageAutoFiller>();
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -841,6 +842,16 @@ app.MapPost("/routines/debug-pdf", async (HttpRequest request, IPdfImportService
 .RequireAuthorization("AdminOrAbove")
 .DisableAntiforgery();
 
+// -- Admin: AI-powered fallback to fill in real images for user-created exercises --
+app.MapPost("/admin/exercises/auto-populate-images", async (IExerciseImageAutoFiller filler) =>
+{
+    var count = await filler.AutoPopulateImagesAsync();
+    return Results.Ok(new { updated = count });
+})
+.WithName("AutoPopulateExerciseImages")
+.WithOpenApi()
+.RequireAuthorization("AdminOrAbove");
+
 // -- Copiar rutinas de un usuario a otro (solo Superuser) --
 app.MapPost("/routines/copy", (CopyRoutinesRequest req, IRoutineRepository repo) =>
 {
@@ -1160,6 +1171,45 @@ app.MapGet("/workouts/exercise/{exerciseId}/progress", (int exerciseId, FitCycle
 .RequireAuthorization();
 
 // Get last weights used per exercise for a given day (from most recent completed workout)
+// Diagnostic: list every workout this user has saved for a given day so we can verify the pre-fill source.
+app.MapGet("/workouts/diag/{day}", (int day, FitCycleDbContext db, ClaimsPrincipal user) =>
+{
+    var userId = int.Parse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+    var sessions = db.WorkoutSessions
+        .Where(w => w.UserId == userId && w.Day == (DayOfWeek)day)
+        .Include(s => s.ExerciseLogs)
+        .OrderByDescending(s => s.CompletedAt)
+        .Take(20)
+        .ToList();
+
+    return Results.Ok(new
+    {
+        userId,
+        day,
+        dayName = ((DayOfWeek)day).ToString(),
+        totalSessions = sessions.Count,
+        sessions = sessions.Select(s => new
+        {
+            id = s.Id,
+            startedAt = s.StartedAt,
+            completedAt = s.CompletedAt,
+            exerciseCount = s.ExerciseLogs.Count,
+            exercises = s.ExerciseLogs.Select(l => new
+            {
+                exerciseId = l.ExerciseId,
+                name = l.ExerciseName,
+                sets = l.Sets,
+                reps = l.Reps,
+                weight = l.Weight,
+                setDetails = l.SetDetails
+            })
+        })
+    });
+})
+.WithName("DiagWorkouts")
+.WithOpenApi()
+.RequireAuthorization();
+
 app.MapGet("/workouts/last-weights/{day}", (int day, FitCycleDbContext db, ClaimsPrincipal user) =>
 {
     var userId = int.Parse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");

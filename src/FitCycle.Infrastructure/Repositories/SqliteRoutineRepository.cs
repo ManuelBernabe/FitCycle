@@ -31,7 +31,7 @@ public class SqliteRoutineRepository : IRoutineRepository
     }
 
     // Known exercise images from wger.de
-    private static readonly Dictionary<string, string> KnownExerciseImages = new(StringComparer.OrdinalIgnoreCase)
+    internal static readonly Dictionary<string, string> KnownExerciseImages = new(StringComparer.OrdinalIgnoreCase)
     {
         // Pecho
         ["Press banca"] = "https://wger.de/media/exercise-images/192/Bench-press-1.png",
@@ -307,7 +307,7 @@ public class SqliteRoutineRepository : IRoutineRepository
     /// Find the best matching image URL for an exercise name.
     /// Tries: exact match → alias → normalized fuzzy match.
     /// </summary>
-    private static string? FindImageUrl(string name)
+    internal static string? FindImageUrl(string name)
     {
         // 1. Exact match (case-insensitive)
         if (KnownExerciseImages.TryGetValue(name, out var url))

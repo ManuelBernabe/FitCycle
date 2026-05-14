@@ -14,6 +14,7 @@ let timerSeconds = 60;
 let timerRunning = false;
 let timerInterval = null;
 let showExerciseList = false;
+let prefillSource = null; // { date, count } when pre-fill applied weights from a previous workout
 
 const STORAGE_KEY = 'workout_progress';
 
@@ -101,11 +102,13 @@ export async function mount(params) {
     }
 
     // Pre-fill weights from last completed workout for this day
+    prefillSource = null;
     try {
       const lastWorkout = await api.get(`/workouts/last-weights/${dayNum}`);
       console.log('[prefill] last-weights response for day', dayNum, lastWorkout);
       if (lastWorkout?.exercises?.length) {
         let filled = 0;
+        let matchedExercises = 0;
         for (const lastEx of lastWorkout.exercises) {
           const match = exercises.find(ex => {
             const routineId = ex.exerciseId ?? ex.ExerciseId ?? ex.id ?? ex.Id;
@@ -115,7 +118,7 @@ export async function mount(params) {
             console.log('[prefill] no match for exerciseId', lastEx.exerciseId);
             continue;
           }
-          // Try per-set details first (most accurate)
+          matchedExercises++;
           let lastSetDetails = null;
           try { lastSetDetails = lastEx.setDetails ? JSON.parse(lastEx.setDetails) : null; } catch { }
           if (Array.isArray(lastSetDetails) && lastSetDetails.length > 0) {
@@ -128,7 +131,16 @@ export async function mount(params) {
             for (const sd of match.setDetails) { sd.weight = lastEx.weight; filled++; }
           }
         }
-        console.log('[prefill] filled', filled, 'sets with weights');
+        console.log('[prefill] filled', filled, 'sets across', matchedExercises, 'exercises');
+        if (filled > 0) {
+          prefillSource = {
+            date: lastWorkout.date,
+            exerciseCount: matchedExercises,
+            setCount: filled
+          };
+        }
+      } else {
+        console.log('[prefill] no previous workout for this day');
       }
     } catch (err) { console.warn('[prefill] failed:', err); }
 
@@ -262,6 +274,13 @@ function renderExercise() {
       <div class="progress-bar" style="margin-bottom:6px;">
         <div class="fill" style="width:${progressPct}%"></div>
       </div>
+
+      ${prefillSource ? `
+        <div id="prefill-banner" style="background:#e8f5e9;border:1px solid #a5d6a7;color:#2e7d32;border-radius:8px;padding:6px 10px;margin-bottom:6px;font-size:12px;display:flex;align-items:center;justify-content:space-between;gap:6px;">
+          <span>&#9989; ${t('PrefilledFrom', new Date(prefillSource.date).toLocaleDateString(), prefillSource.exerciseCount, prefillSource.setCount)}</span>
+          <button id="prefill-dismiss" style="background:none;border:none;color:#2e7d32;font-size:16px;cursor:pointer;line-height:1;">&#10005;</button>
+        </div>
+      ` : ''}
 
       <div class="card workout-exercise">
         <div style="display:flex;align-items:center;gap:12px;text-align:left;margin-bottom:6px;">
@@ -442,6 +461,11 @@ function renderExercise() {
   document.getElementById('workout-switch-partner')?.addEventListener('click', () => switchSupersetPartner());
 
   document.getElementById('workout-exercise-image')?.addEventListener('click', () => pickAndUploadExerciseImage());
+
+  document.getElementById('prefill-dismiss')?.addEventListener('click', () => {
+    prefillSource = null;
+    document.getElementById('prefill-banner')?.remove();
+  });
 
   document.getElementById('workout-finish')?.addEventListener('click', () => { saveCurrentSetValues(); finishWorkout(); });
 

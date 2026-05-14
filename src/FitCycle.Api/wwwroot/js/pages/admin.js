@@ -39,6 +39,18 @@ export function render() {
 
         <div class="divider"></div>
 
+        <!-- Auto-populate exercise images -->
+        <div class="account-section">
+          <div class="account-section-title">${t('AutoPopulateImagesTitle')}</div>
+          <div class="card">
+            <p style="font-size:13px;color:var(--text-light);margin-bottom:8px;">${t('AutoPopulateImagesDesc')}</p>
+            <button id="auto-populate-images-btn" class="btn btn-outline" style="width:100%;color:#512BD4;border-color:#512BD4;">${t('AutoPopulateImagesBtn')}</button>
+            <div id="auto-populate-status" class="status-text mt-8"></div>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
         <!-- Backups -->
         <div class="account-section">
           <div class="account-section-title">${t('Backups')}</div>
@@ -89,8 +101,33 @@ export async function mount() {
   });
 
   document.getElementById('create-backup-btn')?.addEventListener('click', createBackup);
+  document.getElementById('auto-populate-images-btn')?.addEventListener('click', autoPopulateImages);
 
   await loadBackups();
+}
+
+async function autoPopulateImages() {
+  const btn = document.getElementById('auto-populate-images-btn');
+  const statusEl = document.getElementById('auto-populate-status');
+  if (!btn) return;
+  if (!await showConfirm(t('AutoPopulateImagesConfirm'))) return;
+
+  const oldText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = t('AutoPopulateImagesRunning');
+  if (statusEl) statusEl.textContent = '';
+
+  try {
+    const res = await api.post('/admin/exercises/auto-populate-images');
+    const count = res?.updated ?? 0;
+    if (statusEl) statusEl.textContent = t('AutoPopulateImagesDone', count);
+    await showAlert(t('AutoPopulateImagesDone', count));
+  } catch (err) {
+    if (statusEl) statusEl.textContent = t('ErrorFmt', err.message || err);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = oldText;
+  }
 }
 
 export function destroy() {}

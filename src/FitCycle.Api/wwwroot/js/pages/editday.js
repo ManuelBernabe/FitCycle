@@ -286,6 +286,7 @@ function buildUI() {
   `;
 
   html += `
+    <button id="editday-restore-weights" class="btn btn-outline btn-block mt-16" style="border-color:#e67e22;color:#e67e22;">${t('RestoreFromLastWorkout')}</button>
     <button id="editday-save" class="btn btn-primary btn-block btn-lg mt-16">${t('Save')}</button>
   `;
 
@@ -749,6 +750,8 @@ function attachEvents(container) {
 
   // Global save button
   document.getElementById('editday-save')?.addEventListener('click', () => doSave());
+
+  document.getElementById('editday-restore-weights')?.addEventListener('click', () => restoreWeightsFromLastWorkout());
 }
 
 function parseIndices(el) {
@@ -963,4 +966,55 @@ function pickAndUploadImage(gi, ei) {
   });
 
   input.click();
+}
+
+/**
+ * Pulls weights from the most recent completed workout for this day and writes them
+ * into the in-memory routine model so the user can save them back.
+ * Useful when the routine template is empty (or got reset) but workout history exists.
+ */
+async function restoreWeightsFromLastWorkout() {
+  const statusEl = document.getElementById('editday-status');
+  if (statusEl) statusEl.textContent = t('Loading');
+
+  try {
+    const last = await api.get(`/workouts/last-weights/${dayNum}`);
+    if (!last?.exercises?.length) {
+      if (statusEl) statusEl.textContent = '';
+      await showAlert(t('PrefilledNone'));
+      return;
+    }
+
+    let restored = 0;
+    for (const lastEx of last.exercises) {
+      for (const g of groups) {
+        const match = g.exercises.find(e => e.exerciseId === lastEx.exerciseId);
+        if (!match) continue;
+
+        let lastSetDetails = null;
+        try { lastSetDetails = lastEx.setDetails ? JSON.parse(lastEx.setDetails) : null; } catch { }
+
+        if (Array.isArray(lastSetDetails) && lastSetDetails.length > 0) {
+          // Ensure match.setDetails has enough entries
+          while (match.setDetails.length < lastSetDetails.length) {
+            const last = match.setDetails[match.setDetails.length - 1] || { reps: 12, weight: 0, tempoPos: 0, tempoNeg: 0, grip: '' };
+            match.setDetails.push({ ...last });
+          }
+          for (let i = 0; i < lastSetDetails.length; i++) {
+            const src = lastSetDetails[i];
+            if (src.weight > 0) { match.setDetails[i].weight = src.weight; restored++; }
+            if (src.reps > 0) match.setDetails[i].reps = src.reps;
+          }
+        } else if (lastEx.weight > 0) {
+          for (const sd of match.setDetails) { sd.weight = lastEx.weight; restored++; }
+        }
+      }
+    }
+
+    if (statusEl) statusEl.textContent = '';
+    buildUI();
+    await showAlert(t('RestoredFromLast', new Date(last.date).toLocaleDateString(), restored));
+  } catch (err) {
+    if (statusEl) statusEl.textContent = t('ErrorFmt', err.message || err);
+  }
 }
