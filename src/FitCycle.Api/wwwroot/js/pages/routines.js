@@ -3,7 +3,7 @@
 import { t, dayName, muscleGroup, exerciseName as exTranslate, currentLanguage } from '../l10n.js';
 import { api } from '../api.js';
 import { auth } from '../auth.js';
-import { escapeHtml, showAlert, showConfirm } from '../utils.js';
+import { escapeHtml, showAlert, showConfirm, skeleton } from '../utils.js';
 
 let weekData = null;
 
@@ -17,7 +17,7 @@ export function render() {
         </div>
         <div class="section-subtitle">${t('ConfigureWeekly')}</div>
         <div id="routines-list">
-          <div class="loading-page"><div class="spinner"></div><span>${t('Loading')}</span></div>
+          ${skeleton('list')}
         </div>
       </div>
     </div>
@@ -110,9 +110,12 @@ function renderDays(container) {
       const notesIcon = exNotes ? '<span class="notes-icon" title="' + exNotes.replace(/"/g, '&quot;') + '">&#128221;</span>' : '';
 
       const ssGroup = e.supersetGroup || e.SupersetGroup || 0;
-      const ssIcon = ssGroup > 0 ? `<span class="superset-icon" title="Superset #${ssGroup}">&#8644;</span> ` : '';
-      return `<div class="exercise-line-compact">
-        <div class="ex-name-line">${ssIcon}${escapeHtml(name)} ${notesIcon}</div>
+      const ssBadge = ssGroup > 0
+        ? `<span class="superset-badge" title="Superset #${ssGroup}">SS ${ssGroup}</span> `
+        : '';
+      const ssClass = ssGroup > 0 ? 'superset-pair' : '';
+      return `<div class="exercise-line-compact ${ssClass}">
+        <div class="ex-name-line">${ssBadge}${escapeHtml(name)} ${notesIcon}</div>
         <div class="ex-detail-line">${setInfo} ${tempoInfo} ${mgTag}</div>
       </div>`;
     }).join('');

@@ -3,7 +3,7 @@
 import { t } from '../l10n.js';
 import { api } from '../api.js';
 import { offline } from '../offline.js';
-import { showAlert, showConfirm, escapeHtml } from '../utils.js';
+import { showAlert, showConfirm, escapeHtml, skeleton } from '../utils.js';
 
 const FIELDS = [
   { key: 'weight', label: 'MeasWeight', step: '0.1', unit: 'kg' },
@@ -30,7 +30,7 @@ export function render() {
       <div class="page-content">
         <div class="section-title">${t('MyMeasurements')}</div>
         <div id="meas-content">
-          <div class="loading-page"><div class="spinner"></div><span>${t('Loading')}</span></div>
+          ${skeleton('card')}${skeleton('list')}
         </div>
       </div>
     </div>

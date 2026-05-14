@@ -3,7 +3,7 @@
 import { t } from '../l10n.js';
 import { api } from '../api.js';
 import { auth } from '../auth.js';
-import { calculateStreak, envTag } from '../utils.js';
+import { calculateStreak, envTag, checkStreakMilestone } from '../utils.js';
 
 export function render() {
   const username = auth.getUsername() || '?';
@@ -69,11 +69,13 @@ export async function mount() {
     const totalEl = document.getElementById('home-total-workouts');
     if (totalEl && stats) totalEl.textContent = stats.totalWorkouts || 0;
 
-    // Calculate streak
+    // Calculate streak (and celebrate milestones)
     const streakEl = document.getElementById('home-streak');
     if (streakEl && workouts && workouts.length > 0) {
       const streak = calculateStreak(workouts);
       streakEl.textContent = streak;
+      // Show celebration modal once per milestone crossed
+      checkStreakMilestone(streak);
     } else if (streakEl) {
       streakEl.textContent = '0';
     }

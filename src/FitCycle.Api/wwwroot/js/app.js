@@ -92,11 +92,11 @@ function renderShell(route, routeName, params) {
 
     html += `
       <div class="header">
-        <div class="header-logo" id="header-logo" style="cursor:pointer;">FC</div>
+        <div class="header-logo" id="header-logo" style="cursor:pointer;" role="button" tabindex="0" aria-label="Inicio">FC</div>
         <div class="header-title">FitCycle${envTag()}</div>
         <select class="lang-picker" id="header-lang">${langOptions}</select>
         <a href="https://eathealthycycle-production.up.railway.app/portal.html" target="_blank" style="background:rgba(255,255,255,0.2);color:white;border:none;border-radius:8px;padding:6px 12px;font-size:13px;font-weight:600;text-decoration:none;display:flex;align-items:center;">&#127968; Apps</a>
-        <div class="avatar" id="header-avatar">${initial}</div>
+        <div class="avatar" id="header-avatar" role="button" tabindex="0" aria-label="Cuenta">${initial}</div>
       </div>
     `;
   }
@@ -191,11 +191,11 @@ navigate();
   const fab = document.createElement('div');
   fab.id = 'zoom-fab';
   fab.innerHTML = `
-    <button id="zoom-fab-toggle" class="zoom-fab-btn">Aa</button>
-    <div id="zoom-fab-panel" class="zoom-fab-panel" style="display:none;">
-      <button id="zoom-fab-down" class="zoom-fab-ctrl">A-</button>
-      <span id="zoom-fab-label" class="zoom-fab-label">${getFontSize()}%</span>
-      <button id="zoom-fab-up" class="zoom-fab-ctrl">A+</button>
+    <button id="zoom-fab-toggle" class="zoom-fab-btn" aria-label="Cambiar tamaño de letra" aria-expanded="false">Aa</button>
+    <div id="zoom-fab-panel" class="zoom-fab-panel" style="display:none;" role="group" aria-label="Tamaño de letra">
+      <button id="zoom-fab-down" class="zoom-fab-ctrl" aria-label="Reducir tamaño">A-</button>
+      <span id="zoom-fab-label" class="zoom-fab-label" aria-live="polite">${getFontSize()}%</span>
+      <button id="zoom-fab-up" class="zoom-fab-ctrl" aria-label="Aumentar tamaño">A+</button>
     </div>
   `;
   document.body.appendChild(fab);

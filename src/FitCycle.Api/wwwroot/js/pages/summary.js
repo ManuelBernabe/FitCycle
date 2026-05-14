@@ -101,15 +101,25 @@ export async function mount() {
     const raw = sessionStorage.getItem('workout_summary');
     if (raw) {
       const data = JSON.parse(raw);
-      const workouts = await api.get('/workouts');
-      const prs = detectPRs(data.exercises, workouts || []);
-      if (prs.length > 0) {
+      // Server-side PRs from the POST /workouts response are the source of truth.
+      // Fall back to client-side detection for older clients / offline-queued workouts.
+      let prs = Array.isArray(data.prs) && data.prs.length > 0
+        ? data.prs.map(p => ({ name: p.exerciseName, weight: p.newMax, prev: p.previousMax }))
+        : null;
+      if (!prs) {
+        const workouts = await api.get('/workouts');
+        prs = detectPRs(data.exercises, workouts || []);
+      }
+      if (prs && prs.length > 0) {
         const prContainer = document.getElementById('pr-banner');
         if (prContainer) {
           prContainer.style.display = 'block';
-          prContainer.innerHTML = prs.map(pr =>
-            `<div style="font-size:14px;font-weight:600;">${t('PRExercise', escapeHtml(pr.name), pr.weight)}</div>`
-          ).join('');
+          prContainer.innerHTML = `
+            <div class="pr-banner-title">&#127942; ${t('NewPR')} ${prs.length > 1 ? '(' + prs.length + ')' : ''}</div>
+            <div class="pr-banner-list">${prs.map(pr =>
+              t('PRExercise', escapeHtml(exTranslate(pr.name)), pr.weight)
+            ).join('<br>')}</div>
+          `;
         }
       }
     }

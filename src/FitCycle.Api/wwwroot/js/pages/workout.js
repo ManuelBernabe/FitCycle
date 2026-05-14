@@ -3,7 +3,7 @@
 import { t, dayName, muscleGroup as mgTranslate, exerciseName as exTranslate } from '../l10n.js';
 import { api } from '../api.js';
 import { offline } from '../offline.js';
-import { escapeHtml } from '../utils.js';
+import { escapeHtml, haptic, estimate1RM, celebrate, confetti } from '../utils.js';
 
 let dayNum = 0;
 let exercises = [];
@@ -336,6 +336,12 @@ function renderExercise() {
               </div>
             </div>
           </div>
+          ${(() => {
+            const oneRM = estimate1RM(currentSetData.weight, currentSetData.reps);
+            return oneRM > 0
+              ? `<div style="text-align:center;margin-top:6px;"><span class="one-rm-badge" title="${t('OneRMTooltip')}">${t('OneRM')}: ${oneRM} kg</span></div>`
+              : '';
+          })()}
           ${(currentSetData.tempoPos > 0 || currentSetData.tempoNeg > 0 || currentSetData.grip) ? `
             <div style="margin-top:8px;display:flex;justify-content:center;gap:8px;flex-wrap:wrap;">
               ${currentSetData.tempoPos > 0 || currentSetData.tempoNeg > 0 ? `
@@ -549,6 +555,7 @@ function saveCurrentSetValues() {
 function advanceToNext() {
   saveCurrentSetValues();
   stopTimer();
+  haptic('success');
   const ex2 = exercises[currentIndex];
   if (!ex2) return;
   const ssGrp = ex2.supersetGroup || 0;
@@ -694,12 +701,15 @@ function showRestEndAlert() {
 
   const overlay = document.createElement('div');
   overlay.id = 'rest-end-alert';
+  overlay.setAttribute('role', 'alert');
+  overlay.setAttribute('aria-live', 'assertive');
   overlay.style.cssText = `
     position:fixed; top:0; left:0; right:0; z-index:10000;
     background:#28a745; color:#fff; padding:18px 16px;
     font-size:20px; font-weight:700; text-align:center;
     box-shadow:0 4px 12px rgba(0,0,0,0.2);
     animation:slideDown 0.25s ease-out;
+    cursor:pointer;
   `;
   overlay.textContent = `⏰ ${t('RestEnded')}`;
   document.body.appendChild(overlay);
@@ -749,9 +759,11 @@ async function finishWorkout() {
   };
 
   let saved = false;
+  let prs = [];
   try {
-    await api.post('/workouts', workoutPayload);
+    const result = await api.post('/workouts', workoutPayload);
     saved = true;
+    if (result && Array.isArray(result.prs)) prs = result.prs;
   } catch (e) {
     // Queue for sync when back online
     offline.enqueue('POST', '/workouts', workoutPayload);
@@ -761,11 +773,16 @@ async function finishWorkout() {
 
   if (saved) clearProgress();
 
+  // Celebration: vibration + confetti, plus extra punch on PR
+  haptic(prs.length > 0 ? 'pr' : 'finish');
+  confetti(prs.length > 0 ? 3500 : 2000);
+
   sessionStorage.setItem('workout_summary', JSON.stringify({
     day: dayNum,
     startedAt: startedAt.toISOString(),
     completedAt: completedAt.toISOString(),
     exercises: exerciseLogs,
+    prs,
   }));
 
   location.hash = '#summary';

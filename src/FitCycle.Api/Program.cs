@@ -1035,6 +1035,34 @@ app.MapGet("/templates/{id}/debug", (int id, FitCycleDbContext db) =>
 app.MapPost("/workouts", (SaveWorkoutRequest request, FitCycleDbContext db, ClaimsPrincipal user) =>
 {
     var userId = int.Parse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+
+    // 1. Compute PRs BEFORE saving the new session so we compare against the previous best
+    var prs = new List<object>();
+    var historicalMaxByExerciseId = db.WorkoutSessions
+        .Where(s => s.UserId == userId)
+        .SelectMany(s => s.ExerciseLogs)
+        .Where(l => l.Weight > 0)
+        .GroupBy(l => l.ExerciseId)
+        .Select(g => new { ExerciseId = g.Key, MaxWeight = g.Max(l => l.Weight) })
+        .ToDictionary(x => x.ExerciseId, x => x.MaxWeight);
+
+    foreach (var ex in request.Exercises)
+    {
+        if (ex.Weight <= 0) continue;
+        var prevMax = historicalMaxByExerciseId.TryGetValue(ex.ExerciseId, out var p) ? p : 0m;
+        if (ex.Weight > prevMax)
+        {
+            prs.Add(new
+            {
+                exerciseId = ex.ExerciseId,
+                exerciseName = ex.ExerciseName,
+                type = "weight",
+                previousMax = prevMax,
+                newMax = ex.Weight
+            });
+        }
+    }
+
     var session = new WorkoutSession
     {
         UserId = userId,
@@ -1055,7 +1083,7 @@ app.MapPost("/workouts", (SaveWorkoutRequest request, FitCycleDbContext db, Clai
 
     db.WorkoutSessions.Add(session);
     db.SaveChanges();
-    return Results.Created($"/workouts/{session.Id}", session);
+    return Results.Created($"/workouts/{session.Id}", new { session, prs });
 })
 .WithName("SaveWorkout")
 .WithOpenApi()

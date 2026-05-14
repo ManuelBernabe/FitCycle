@@ -258,3 +258,136 @@ export function showPrompt(msg, placeholder = '') {
     });
   });
 }
+
+// ── 1RM Calculator (Epley formula) ──
+
+/**
+ * Estimate one-rep max from a working set using the Epley formula.
+ * 1RM ≈ weight * (1 + reps/30). Returns 0 for invalid inputs.
+ */
+export function estimate1RM(weight, reps) {
+  const w = parseFloat(weight) || 0;
+  const r = parseInt(reps) || 0;
+  if (w <= 0 || r <= 0) return 0;
+  if (r === 1) return w;
+  return Math.round(w * (1 + r / 30) * 10) / 10; // 1 decimal
+}
+
+// ── Haptic feedback ──
+
+/**
+ * Unified haptic feedback. Silently no-ops on iOS Safari which doesn't expose vibrate.
+ * Types: 'tap' (light), 'success' (medium), 'pr' (strong), 'error' (warning), 'finish' (long).
+ */
+export function haptic(type = 'tap') {
+  if (!navigator.vibrate) return;
+  try {
+    switch (type) {
+      case 'tap': navigator.vibrate(20); break;
+      case 'success': navigator.vibrate([30, 50, 30]); break;
+      case 'pr': navigator.vibrate([200, 80, 200, 80, 300]); break;
+      case 'error': navigator.vibrate([60, 60, 60]); break;
+      case 'finish': navigator.vibrate([100, 50, 100, 50, 300]); break;
+      default: navigator.vibrate(20);
+    }
+  } catch { /* ignore */ }
+}
+
+// ── Visual celebrations ──
+
+/**
+ * Pulse-success animation on an element (green flash + scale).
+ * Adds .celebrate-pulse class for 600ms.
+ */
+export function celebrate(element) {
+  if (!element) return;
+  element.classList.remove('celebrate-pulse');
+  // Force reflow so re-adding the class re-triggers the animation
+  void element.offsetWidth;
+  element.classList.add('celebrate-pulse');
+  setTimeout(() => element.classList.remove('celebrate-pulse'), 700);
+}
+
+/**
+ * Show confetti at the bottom of the viewport. Used on workout finish or PR.
+ * Duration in ms, defaults to 2500.
+ */
+export function confetti(duration = 2500) {
+  const container = document.createElement('div');
+  container.className = 'confetti-container';
+  container.setAttribute('aria-hidden', 'true');
+  const colors = ['#512BD4', '#28a745', '#e67e22', '#ffc107', '#dc3545', '#17a2b8'];
+  for (let i = 0; i < 40; i++) {
+    const piece = document.createElement('div');
+    piece.className = 'confetti-piece';
+    piece.style.left = `${Math.random() * 100}%`;
+    piece.style.background = colors[Math.floor(Math.random() * colors.length)];
+    piece.style.animationDelay = `${Math.random() * 0.5}s`;
+    piece.style.animationDuration = `${1.5 + Math.random() * 1.5}s`;
+    container.appendChild(piece);
+  }
+  document.body.appendChild(container);
+  setTimeout(() => container.remove(), duration);
+}
+
+// ── Skeleton helpers ──
+
+/**
+ * Returns HTML for a generic skeleton loader. Use instead of <div class="loading-page"><div class="spinner"></div></div>.
+ * @param {('card'|'row'|'list')} variant
+ */
+export function skeleton(variant = 'card') {
+  if (variant === 'row') {
+    return `<div class="skeleton-row" aria-busy="true" aria-label="Loading">
+      <div class="skeleton skeleton-circle"></div>
+      <div style="flex:1;">
+        <div class="skeleton skeleton-line" style="width:60%;"></div>
+        <div class="skeleton skeleton-line" style="width:30%;"></div>
+      </div>
+    </div>`;
+  }
+  if (variant === 'list') {
+    return Array.from({ length: 4 }).map(() => skeleton('row')).join('');
+  }
+  return `<div class="skeleton-card" aria-busy="true" aria-label="Loading">
+    <div class="skeleton skeleton-line" style="width:40%;"></div>
+    <div class="skeleton skeleton-line" style="width:80%;"></div>
+    <div class="skeleton skeleton-line" style="width:70%;"></div>
+  </div>`;
+}
+
+// ── Streak celebration ──
+
+const STREAK_KEY = 'fitcycle_last_streak_celebrated';
+
+/**
+ * Show a celebration modal when the user crosses a streak milestone (3, 5, 7, 14, 30 days).
+ * Persists "last celebrated" to localStorage to avoid duplicate shows.
+ */
+export function checkStreakMilestone(streak) {
+  if (!streak || streak < 3) return;
+  const milestones = [3, 5, 7, 14, 21, 30, 60, 100];
+  const last = parseInt(localStorage.getItem(STREAK_KEY) || '0', 10);
+  // Find the highest milestone reached that's higher than the last celebrated
+  const reached = milestones.filter(m => streak >= m && m > last).pop();
+  if (!reached) return;
+  localStorage.setItem(STREAK_KEY, String(reached));
+  showStreakModal(streak, reached);
+}
+
+function showStreakModal(streak, milestone) {
+  const overlay = createModalOverlay();
+  overlay.innerHTML = `
+    <div class="modal-content" style="max-width:340px;text-align:center;">
+      <div style="font-size:60px;margin-bottom:8px;">&#128293;</div>
+      <div style="font-size:22px;font-weight:700;color:#e67e22;margin-bottom:4px;">${milestone} ${t('StreakDays') || 'días seguidos'}</div>
+      <div style="font-size:14px;color:#666;margin-bottom:16px;">${t('StreakCelebration') || '¡Sigue así! Llevas un buen ritmo.'}</div>
+      <button class="btn btn-primary btn-block" id="streak-modal-ok">${t('LetsGo') || '¡A por más!'}</button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  haptic('pr');
+  confetti(2000);
+  overlay.querySelector('#streak-modal-ok').addEventListener('click', () => overlay.remove());
+  setTimeout(() => overlay.remove(), 10000);
+}

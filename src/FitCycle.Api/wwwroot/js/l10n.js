@@ -462,8 +462,13 @@ const Strings = {
   SelectField:     { es: 'Seleccionar campo',                   en: 'Select field',                    fr: 'Sélectionner champ' },
 
   // === Summary extras ===
-  NewPR:           { es: 'Nuevo récord personal!',              en: 'New personal record!',            fr: 'Nouveau record personnel !' },
+  NewPR:           { es: '¡Nuevo récord personal!',             en: 'New personal record!',            fr: 'Nouveau record personnel !' },
   PRExercise:      { es: '{0}: {1} kg',                         en: '{0}: {1} kg',                     fr: '{0} : {1} kg' },
+  OneRM:           { es: '1RM',                                  en: '1RM',                             fr: '1RM' },
+  OneRMTooltip:    { es: 'Repetición máxima estimada (fórmula Epley)', en: 'Estimated 1-rep max (Epley formula)', fr: 'Max estimé à 1 rép (formule Epley)' },
+  StreakDays:      { es: 'días seguidos',                        en: 'days in a row',                   fr: 'jours d\'affilée' },
+  StreakCelebration: { es: '¡Sigue así! Llevas un buen ritmo.', en: 'Keep going! Great pace.',         fr: 'Continue ! Bon rythme.' },
+  LetsGo:          { es: '¡A por más!',                          en: "Let's go!",                       fr: 'Allons-y !' },
 
   // === Admin Panel ===
   AdminPanel:          { es: 'Panel Admin',                              en: 'Admin Panel',                       fr: 'Panneau Admin' },
@@ -587,6 +592,8 @@ const Strings = {
   TutWorkoutTip:       { es: 'Los pesos se cargan automáticamente del último entrenamiento completado para ese día. Dentro de un ejercicio, el peso se copia de la serie anterior.', en: 'Weights auto-load from your last completed workout for that day. Within an exercise, weight copies from the previous set.', fr: 'Les poids se chargent automatiquement du dernier entraînement complété pour ce jour. Dans un exercice, le poids se copie de la série précédente.' },
   TutWorkoutTip2:      { es: 'Usa la lista de ejercicios (arriba) para saltar directamente a cualquier ejercicio.', en: 'Use the exercise list (top) to jump directly to any exercise.', fr: "Utilisez la liste d'exercices pour sauter directement à un exercice." },
   TutWorkoutTip3:      { es: 'En supersets, la app alterna automáticamente entre los ejercicios emparejados.', en: 'In supersets, the app automatically alternates between paired exercises.', fr: "En supersets, l'app alterne automatiquement entre les exercices." },
+  TutWorkoutTip4:      { es: 'El descanso por defecto es 1 min. Al terminar el cronómetro, pasa automáticamente a la siguiente serie.', en: 'Default rest is 1 min. When the timer ends, it auto-advances to the next set.', fr: "Repos par défaut 1 min. À la fin du chrono, passe automatiquement à la série suivante." },
+  TutWorkoutTip5:      { es: 'Se muestra tu 1RM estimado (Epley) y se celebra cada PR con animación.', en: 'Your estimated 1RM (Epley) is shown and each PR is celebrated with an animation.', fr: 'Votre 1RM estimé (Epley) est affiché et chaque PR célébré.' },
 
   // Summary
   TutSummaryTitle:     { es: 'Resumen del entrenamiento',                en: 'Workout Summary',                   fr: "Résumé de l'entraînement" },

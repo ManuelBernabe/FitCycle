@@ -2,7 +2,7 @@
 
 import { t, dayName, exerciseName as exTranslate } from '../l10n.js';
 import { api } from '../api.js';
-import { escapeHtml, calculateStreak } from '../utils.js';
+import { escapeHtml, calculateStreak, skeleton } from '../utils.js';
 
 export function render() {
   return `
@@ -10,7 +10,7 @@ export function render() {
       <div class="page-content">
         <div class="section-title">${t('YourProgress')}</div>
         <div id="stats-content">
-          <div class="loading-page"><div class="spinner"></div><span>${t('Loading')}</span></div>
+          ${skeleton('card')}${skeleton('list')}
         </div>
       </div>
     </div>
