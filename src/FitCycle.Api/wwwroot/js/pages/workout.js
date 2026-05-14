@@ -10,7 +10,7 @@ let exercises = [];
 let currentIndex = 0;
 let currentSet = 0;
 let startedAt = null;
-let timerSeconds = 90;
+let timerSeconds = 60;
 let timerRunning = false;
 let timerInterval = null;
 let showExerciseList = false;
@@ -232,12 +232,15 @@ function renderExercise() {
     return `<div class="set-dot ${cls}" title="S${i + 1}: ${s.reps}r / ${s.weight}kg"></div>`;
   }).join('');
 
+  // Default timer: 1 minute (1:00). Pickers reflect the current `timerSeconds` state.
+  const currentMin = Math.floor(timerSeconds / 60);
+  const currentSec = timerSeconds % 60;
   const minOptions = Array.from({ length: 11 }, (_, i) =>
-    `<option value="${i}" ${i === 1 ? 'selected' : ''}>${String(i).padStart(2, '0')}</option>`
+    `<option value="${i}" ${i === currentMin ? 'selected' : ''}>${String(i).padStart(2, '0')}</option>`
   ).join('');
   const secOptions = Array.from({ length: 12 }, (_, i) => {
     const val = i * 5;
-    return `<option value="${val}" ${val === 30 ? 'selected' : ''}>${String(val).padStart(2, '0')}</option>`;
+    return `<option value="${val}" ${val === currentSec ? 'selected' : ''}>${String(val).padStart(2, '0')}</option>`;
   }).join('');
 
   container.innerHTML = `
@@ -262,17 +265,25 @@ function renderExercise() {
 
       <div class="card workout-exercise">
         <div style="display:flex;align-items:center;gap:12px;text-align:left;margin-bottom:6px;">
-          <div class="workout-exercise-image" style="margin:0;flex-shrink:0;">
+          <div id="workout-exercise-image" class="workout-exercise-image" style="margin:0;flex-shrink:0;cursor:pointer;position:relative;" title="${t('ChangeImage')}">
             ${exImage
-              ? `<img src="${exImage}" alt="${escapeHtml(exName)}" onerror="this.onerror=null;this.parentElement.innerHTML='<div style=&quot;font-size:40px;opacity:0.3;&quot;>&#127947;</div>'">`
-              : `<div style="font-size:40px;opacity:0.3;">&#127947;</div>`
+              ? `<img src="${exImage}" alt="${escapeHtml(exName)}" onerror="this.onerror=null;this.parentElement.querySelector('.workout-img-placeholder').style.display='flex';this.style.display='none';">`
+              : ''
             }
+            <div class="workout-img-placeholder" style="display:${exImage ? 'none' : 'flex'};align-items:center;justify-content:center;width:100%;height:100%;font-size:40px;opacity:0.3;">&#128247;</div>
           </div>
           <div style="min-width:0;">
             <div style="font-size:12px;color:#512BD4;font-weight:600;">${t('ExerciseProgress', currentIndex + 1, exercises.length)}</div>
             <div class="workout-exercise-name">${escapeHtml(exName)}</div>
             <div style="font-size:13px;color:gray;">${mgTranslate(exMuscle)}</div>
-            ${ssPartnerName ? `<div style="margin-top:3px;font-size:11px;color:#e67e22;font-weight:600;">&#8644; ${t('Superset')}: ${escapeHtml(ssPartnerName)}</div>` : ''}
+            ${ssPartnerName ? `
+              <div style="margin-top:3px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                <span style="font-size:11px;color:#e67e22;font-weight:600;">&#8644; ${t('Superset')}: ${escapeHtml(ssPartnerName)}</span>
+                <button id="workout-switch-partner" style="background:#e67e22;color:#fff;border:none;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:600;cursor:pointer;">
+                  &#8644; ${t('SwitchPartner')}
+                </button>
+              </div>
+            ` : ''}
           </div>
         </div>
 
@@ -285,27 +296,38 @@ function renderExercise() {
           <div style="display:flex;align-items:center;justify-content:center;gap:10px;">
             <div>
               <div style="font-size:10px;color:gray;">${t('Reps')}</div>
-              <input type="number" id="workout-reps" value="${currentSetData.reps}" min="1" max="100"
-                style="width:56px;font-size:18px;font-weight:bold;text-align:center;border:1px solid #ddd;border-radius:8px;padding:5px;">
+              <select id="workout-reps"
+                style="width:64px;font-size:18px;font-weight:bold;text-align:center;border:1px solid #ddd;border-radius:8px;padding:5px;background:#fff;">
+                ${buildWorkoutRepsOptions(currentSetData.reps)}
+              </select>
             </div>
             <div style="font-size:20px;font-weight:bold;color:#ccc;">x</div>
             <div>
               <div style="font-size:10px;color:gray;">kg</div>
-              <select id="workout-weight"
-                style="width:72px;font-size:18px;font-weight:bold;text-align:center;border:1px solid #ddd;border-radius:8px;padding:5px;background:#fff;">
-                ${buildWorkoutWeightOptions(currentSetData.weight)}
-              </select>
+              <div style="display:flex;gap:4px;align-items:center;">
+                <select id="workout-weight"
+                  style="width:72px;font-size:18px;font-weight:bold;text-align:center;border:1px solid #ddd;border-radius:8px;padding:5px;background:#fff;">
+                  ${buildWorkoutWeightOptions(currentSetData.weight)}
+                </select>
+                <input type="number" id="workout-weight-manual" step="0.25" min="0" max="500"
+                  value="${currentSetData.weight}"
+                  placeholder="kg"
+                  title="${t('ManualWeight')}"
+                  style="width:64px;font-size:16px;font-weight:bold;text-align:center;border:1px solid #ddd;border-radius:8px;padding:5px;">
+              </div>
             </div>
           </div>
           ${(currentSetData.tempoPos > 0 || currentSetData.tempoNeg > 0 || currentSetData.grip) ? `
-            <div style="margin-top:6px;display:flex;justify-content:center;gap:12px;flex-wrap:wrap;">
+            <div style="margin-top:8px;display:flex;justify-content:center;gap:8px;flex-wrap:wrap;">
               ${currentSetData.tempoPos > 0 || currentSetData.tempoNeg > 0 ? `
-                <div style="display:flex;gap:8px;align-items:center;">
-                  <span style="font-size:11px;color:#512BD4;background:#f3f0fc;padding:2px 6px;border-radius:6px;">&#8593; ${currentSetData.tempoPos}s <span style="font-size:9px;">${t('TempoAsc')}</span></span>
-                  <span style="font-size:11px;color:#512BD4;background:#f3f0fc;padding:2px 6px;border-radius:6px;">&#8595; ${currentSetData.tempoNeg}s <span style="font-size:9px;">${t('TempoDesc')}</span></span>
+                <div style="display:flex;gap:6px;align-items:center;background:#f3f0fc;padding:4px 10px;border-radius:8px;border:1px solid #d4c4f5;">
+                  <span style="font-size:13px;font-weight:700;color:#512BD4;">⏱</span>
+                  <span style="font-size:13px;font-weight:600;color:#512BD4;">${currentSetData.tempoPos}s ${t('TempoAsc')}</span>
+                  <span style="color:#999;font-size:11px;">·</span>
+                  <span style="font-size:13px;font-weight:600;color:#512BD4;">${currentSetData.tempoNeg}s ${t('TempoDesc')}</span>
                 </div>
               ` : ''}
-              ${currentSetData.grip ? `<span style="font-size:11px;color:#e67e22;background:#fff3e0;padding:2px 6px;border-radius:6px;">&#9994; ${t('Grip')}: ${t('Grip' + currentSetData.grip.charAt(0).toUpperCase() + currentSetData.grip.slice(1).toLowerCase()) || currentSetData.grip}</span>` : ''}
+              ${currentSetData.grip ? `<span style="font-size:12px;font-weight:600;color:#e67e22;background:#fff3e0;padding:4px 10px;border-radius:8px;border:1px solid #ffe0b2;">✊ ${t('Grip')}: ${t('Grip' + currentSetData.grip.charAt(0).toUpperCase() + currentSetData.grip.slice(1).toLowerCase()) || currentSetData.grip}</span>` : ''}
             </div>
           ` : ''}
         </div>
@@ -322,7 +344,7 @@ function renderExercise() {
         <div style="border-top:1px solid #eee;margin-top:8px;padding-top:6px;">
           <div style="display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;">
             <span style="font-size:11px;color:#512BD4;font-weight:bold;letter-spacing:1px;">${t('Rest')}</span>
-            <div id="timer-display" style="font-size:24px;font-weight:bold;color:#333;background:#f5f5f5;border-radius:10px;padding:2px 12px;">01:30</div>
+            <div id="timer-display" style="font-size:24px;font-weight:bold;color:#333;background:#f5f5f5;border-radius:10px;padding:2px 12px;">${String(currentMin).padStart(2, '0')}:${String(currentSec).padStart(2, '0')}</div>
             <div id="timer-picker-row" class="flex items-center gap-4" style="font-size:12px;">
               <select id="timer-min" class="picker-select" style="width:50px;font-size:12px;padding:3px;">${minOptions}</select>
               <span style="color:gray;">:</span>
@@ -415,53 +437,36 @@ function renderExercise() {
     renderExercise();
   });
 
-  document.getElementById('workout-next')?.addEventListener('click', () => {
-    saveCurrentSetValues();
-    stopTimer();
-    const ex2 = exercises[currentIndex];
-    const ssGrp = ex2.supersetGroup || 0;
+  document.getElementById('workout-next')?.addEventListener('click', () => advanceToNext());
 
-    if (ssGrp > 0) {
-      // Superset logic: alternate between paired exercises
-      const partnerIdx = exercises.findIndex((e, i) => i !== currentIndex && (e.supersetGroup || 0) === ssGrp);
-      if (partnerIdx >= 0) {
-        const isFirstInPair = currentIndex < partnerIdx;
-        if (isFirstInPair) {
-          currentIndex = partnerIdx;
-          if (currentSet >= exercises[partnerIdx].setDetails.length) currentSet = exercises[partnerIdx].setDetails.length - 1;
-        } else {
-          const origIdx = currentIndex;
-          currentIndex = partnerIdx;
-          currentSet++;
-          if (currentSet >= exercises[partnerIdx].setDetails.length) {
-            const maxIdx = Math.max(origIdx, partnerIdx);
-            currentIndex = maxIdx + 1;
-            currentSet = 0;
-            if (currentIndex >= exercises.length) {
-              // Last superset pair — stay on final exercise's last set
-              currentIndex = exercises.length - 1;
-              currentSet = exercises[currentIndex].setDetails.length - 1;
-            }
-            saveProgress(); renderExercise(); return;
-          }
-        }
-        saveProgress();
-        renderExercise();
-        return;
-      }
-    }
+  document.getElementById('workout-switch-partner')?.addEventListener('click', () => switchSupersetPartner());
 
-    // Normal flow
-    if (currentSet < ex2.setDetails.length - 1) { currentSet++; }
-    else if (currentIndex < exercises.length - 1) { currentIndex++; currentSet = 0; }
-    saveProgress();
-    renderExercise();
-  });
+  document.getElementById('workout-exercise-image')?.addEventListener('click', () => pickAndUploadExerciseImage());
 
   document.getElementById('workout-finish')?.addEventListener('click', () => { saveCurrentSetValues(); finishWorkout(); });
 
-  // Auto-save on weight/reps input change
-  document.getElementById('workout-weight')?.addEventListener('change', () => { saveCurrentSetValues(); saveProgress(); });
+  // Auto-save on weight/reps input change. Keep the manual input and the dropdown in sync.
+  document.getElementById('workout-weight')?.addEventListener('change', (e) => {
+    const manual = document.getElementById('workout-weight-manual');
+    if (manual) manual.value = e.target.value;
+    saveCurrentSetValues(); saveProgress();
+  });
+  document.getElementById('workout-weight-manual')?.addEventListener('change', (e) => {
+    const val = parseFloat(e.target.value);
+    if (!isNaN(val) && val >= 0) {
+      const select = document.getElementById('workout-weight');
+      if (select) {
+        // Add option dynamically if not present so the select shows the manual value
+        if (![...select.options].some(o => parseFloat(o.value) === val)) {
+          const opt = document.createElement('option');
+          opt.value = val; opt.textContent = val;
+          select.appendChild(opt);
+        }
+        select.value = val;
+      }
+    }
+    saveCurrentSetValues(); saveProgress();
+  });
   document.getElementById('workout-reps')?.addEventListener('change', () => { saveCurrentSetValues(); saveProgress(); });
 
   document.getElementById('workout-notes-toggle')?.addEventListener('click', () => {
@@ -490,13 +495,88 @@ function buildWorkoutWeightOptions(selected) {
   return vals.map(v => `<option value="${v}" ${v === selected ? 'selected' : ''}>${v}</option>`).join('');
 }
 
+function buildWorkoutRepsOptions(selected) {
+  const vals = [];
+  for (let i = 1; i <= 50; i++) vals.push(i);
+  if (selected > 0 && !vals.includes(selected)) { vals.push(selected); vals.sort((a, b) => a - b); }
+  return vals.map(v => `<option value="${v}" ${v === selected ? 'selected' : ''}>${v}</option>`).join('');
+}
+
 function saveCurrentSetValues() {
   const ex = exercises[currentIndex];
   if (!ex) return;
   const repsEl = document.getElementById('workout-reps');
   const weightEl = document.getElementById('workout-weight');
+  const weightManualEl = document.getElementById('workout-weight-manual');
   if (repsEl) ex.setDetails[currentSet].reps = parseInt(repsEl.value) || 12;
-  if (weightEl) ex.setDetails[currentSet].weight = parseFloat(weightEl.value) || 0;
+  // Prefer the manual input if non-empty AND different from the dropdown — that means the user typed a custom value
+  let weightVal = weightEl ? (parseFloat(weightEl.value) || 0) : 0;
+  if (weightManualEl && weightManualEl.value !== '') {
+    const manualVal = parseFloat(weightManualEl.value);
+    if (!isNaN(manualVal) && manualVal !== weightVal) weightVal = manualVal;
+  }
+  ex.setDetails[currentSet].weight = weightVal;
+}
+
+/**
+ * Advances to the next set/exercise. Used by the Next button AND by the
+ * rest-timer auto-advance. Handles superset alternation transparently.
+ */
+function advanceToNext() {
+  saveCurrentSetValues();
+  stopTimer();
+  const ex2 = exercises[currentIndex];
+  if (!ex2) return;
+  const ssGrp = ex2.supersetGroup || 0;
+
+  if (ssGrp > 0) {
+    const partnerIdx = exercises.findIndex((e, i) => i !== currentIndex && (e.supersetGroup || 0) === ssGrp);
+    if (partnerIdx >= 0) {
+      const isFirstInPair = currentIndex < partnerIdx;
+      if (isFirstInPair) {
+        currentIndex = partnerIdx;
+        if (currentSet >= exercises[partnerIdx].setDetails.length) currentSet = exercises[partnerIdx].setDetails.length - 1;
+      } else {
+        const origIdx = currentIndex;
+        currentIndex = partnerIdx;
+        currentSet++;
+        if (currentSet >= exercises[partnerIdx].setDetails.length) {
+          const maxIdx = Math.max(origIdx, partnerIdx);
+          currentIndex = maxIdx + 1;
+          currentSet = 0;
+          if (currentIndex >= exercises.length) {
+            currentIndex = exercises.length - 1;
+            currentSet = exercises[currentIndex].setDetails.length - 1;
+          }
+        }
+      }
+      saveProgress();
+      renderExercise();
+      return;
+    }
+  }
+
+  if (currentSet < ex2.setDetails.length - 1) { currentSet++; }
+  else if (currentIndex < exercises.length - 1) { currentIndex++; currentSet = 0; }
+  saveProgress();
+  renderExercise();
+}
+
+/** Switches to the partner exercise of the current superset, keeping the same set index. */
+function switchSupersetPartner() {
+  const ex = exercises[currentIndex];
+  if (!ex) return;
+  const ssGrp = ex.supersetGroup || 0;
+  if (ssGrp <= 0) return;
+  const partnerIdx = exercises.findIndex((e, i) => i !== currentIndex && (e.supersetGroup || 0) === ssGrp);
+  if (partnerIdx < 0) return;
+  saveCurrentSetValues();
+  stopTimer();
+  currentIndex = partnerIdx;
+  // Clamp set to valid range for the partner
+  if (currentSet >= exercises[partnerIdx].setDetails.length) currentSet = exercises[partnerIdx].setDetails.length - 1;
+  saveProgress();
+  renderExercise();
 }
 
 // ── Timer ──
@@ -537,15 +617,10 @@ function onTimerStartClicked() {
       if (pickerRow) pickerRow.style.display = '';
       const display = document.getElementById('timer-display');
       if (display) display.style.color = '#28a745';
-      // Visual + audio alert instead of vibrate (vibrate triggers iOS "undo" dialog)
-      try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        osc.frequency.value = 880;
-        osc.connect(ctx.destination);
-        osc.start();
-        setTimeout(() => { osc.stop(); ctx.close(); }, 300);
-      } catch (e) { /* */ }
+      playRestEndSound();
+      showRestEndAlert();
+      // Auto-advance to the next set/exercise so the user doesn't have to tap
+      advanceToNext();
     }
   }, 1000);
 }
@@ -566,6 +641,56 @@ function resetTimerDisplay() {
   if (pickerRow) pickerRow.style.display = '';
   if (display) display.style.color = '#333';
   updateTimerDisplay();
+}
+
+function playRestEndSound() {
+  // Two short beeps so it's clearly audible over background noise / earbuds
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const beep = (when, duration = 250) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.frequency.value = 880;
+      osc.type = 'sine';
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime + when);
+      gain.gain.exponentialRampToValueAtTime(0.4, ctx.currentTime + when + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + when + duration / 1000);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(ctx.currentTime + when);
+      osc.stop(ctx.currentTime + when + duration / 1000 + 0.05);
+    };
+    beep(0); beep(0.35); beep(0.7);
+    setTimeout(() => ctx.close(), 1500);
+  } catch (e) { /* audio not available */ }
+}
+
+function showRestEndAlert() {
+  // Remove any previous one to avoid stacking
+  document.getElementById('rest-end-alert')?.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'rest-end-alert';
+  overlay.style.cssText = `
+    position:fixed; top:0; left:0; right:0; z-index:10000;
+    background:#28a745; color:#fff; padding:18px 16px;
+    font-size:20px; font-weight:700; text-align:center;
+    box-shadow:0 4px 12px rgba(0,0,0,0.2);
+    animation:slideDown 0.25s ease-out;
+  `;
+  overlay.textContent = `⏰ ${t('RestEnded')}`;
+  document.body.appendChild(overlay);
+
+  // Try to vibrate too (Android only, iOS silently ignores)
+  try { navigator.vibrate?.([200, 100, 200, 100, 200]); } catch { /* */ }
+
+  // Auto-dismiss after 5 seconds, or on tap
+  const dismiss = () => {
+    overlay.style.transition = 'opacity 0.3s';
+    overlay.style.opacity = '0';
+    setTimeout(() => overlay.remove(), 300);
+  };
+  overlay.addEventListener('click', dismiss);
+  setTimeout(dismiss, 5000);
 }
 
 function updateTimerDisplay() {
@@ -620,4 +745,47 @@ async function finishWorkout() {
   }));
 
   location.hash = '#summary';
+}
+
+/** Opens the OS file picker and uploads the chosen image for the current exercise. */
+function pickAndUploadExerciseImage() {
+  const ex = exercises[currentIndex];
+  const exId = ex?.exerciseId || ex?.ExerciseId || ex?.id || ex?.Id;
+  if (!exId) return;
+
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/jpeg,image/png,image/webp,image/gif';
+  input.style.display = 'none';
+  document.body.appendChild(input);
+
+  input.addEventListener('change', async () => {
+    const file = input.files?.[0];
+    document.body.removeChild(input);
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      alert(t('ImageTooLarge'));
+      return;
+    }
+
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+      const updated = await api.postForm(`/exercises/${exId}/image`, formData);
+      const newUrl = updated.imageUrl || updated.ImageUrl || '';
+      // Update every reference to this exercise in the loaded list (it may appear twice as a superset partner)
+      for (const e of exercises) {
+        if ((e.exerciseId || e.ExerciseId || e.id || e.Id) === exId) {
+          e.imageUrl = newUrl;
+          e.ImageUrl = newUrl;
+        }
+      }
+      saveProgress();
+      renderExercise();
+    } catch (err) {
+      alert(t('ErrorFmt', err.message || err));
+    }
+  });
+
+  input.click();
 }
