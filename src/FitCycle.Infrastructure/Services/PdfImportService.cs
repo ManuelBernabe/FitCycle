@@ -382,17 +382,48 @@ public class PdfImportService : IPdfImportService
             if (localDay == null) { merged.Routines.Add(aiDay!); continue; }
             if (aiDay == null) { merged.Routines.Add(localDay); continue; }
 
-            // Both sources have this day — pick the one with more exercises
-            if (aiDay.Exercises.Count > localDay.Exercises.Count)
+            // Strategy:
+            //  1. Start from local order (it always reflects the PDF reading order).
+            //  2. Build a map of canonical names for fast lookup.
+            //  3. Walk the AI list IN ORDER. Each AI exercise that isn't already in
+            //     local gets inserted right after its predecessor's position (if found),
+            //     otherwise appended. This preserves PDF order while still adding
+            //     exercises the local parser missed.
+            var combined = new PdfDayRoutine
             {
-                logger.LogInformation("Day {Day}: AI wins ({AiCount} vs local {LocalCount})", day, aiDay.Exercises.Count, localDay.Exercises.Count);
-                merged.Routines.Add(aiDay);
-            }
-            else
+                DayOfWeek = day,
+                MuscleGroups = (localDay.MuscleGroups.Count > 0 ? localDay.MuscleGroups : aiDay.MuscleGroups).ToList(),
+                Exercises = localDay.Exercises.Select(e => e).ToList(),
+            };
+
+            string Norm(string? n) => (n ?? "").Trim().ToLowerInvariant();
+            var seen = new HashSet<string>(combined.Exercises.Select(e => Norm(e.Name)));
+            string? lastSeenLocalName = null;
+
+            foreach (var aiEx in aiDay.Exercises)
             {
-                logger.LogInformation("Day {Day}: local wins ({LocalCount} vs AI {AiCount})", day, localDay.Exercises.Count, aiDay.Exercises.Count);
-                merged.Routines.Add(localDay);
+                var key = Norm(aiEx.Name);
+                if (string.IsNullOrEmpty(key)) continue;
+                if (seen.Contains(key))
+                {
+                    lastSeenLocalName = key;
+                    continue;
+                }
+                // Insert after the last seen local exercise if any, else at the end
+                int insertAt = combined.Exercises.Count;
+                if (lastSeenLocalName != null)
+                {
+                    var idx = combined.Exercises.FindIndex(e => Norm(e.Name) == lastSeenLocalName);
+                    if (idx >= 0) insertAt = idx + 1;
+                }
+                combined.Exercises.Insert(insertAt, aiEx);
+                seen.Add(key);
+                lastSeenLocalName = key;
             }
+
+            logger.LogInformation("Day {Day} merged: local={LocalCount}, ai={AiCount}, combined={Total} (PDF order preserved)",
+                day, localDay.Exercises.Count, aiDay.Exercises.Count, combined.Exercises.Count);
+            merged.Routines.Add(combined);
         }
 
         return merged;
@@ -440,6 +471,15 @@ public class PdfImportService : IPdfImportService
                 var totalLetters = sortedWords.Sum(w => w.text.Count(char.IsLetter));
                 var isExerciseLine = totalLetters > 0 && greenLetters * 100 / totalLetters >= 40;
 
+                // Don't mark notes/instructions even if they're rendered in green.
+                // The trainer sometimes uses green for emphasis on rest cues or muscle group section labels.
+                if (isExerciseLine && sortedWords.Count > 0)
+                {
+                    var firstGreenWord = sortedWords.FirstOrDefault(w => w.green).text;
+                    if (!string.IsNullOrWhiteSpace(firstGreenWord) && LooksLikeNoteHeader(firstGreenWord, sortedWords))
+                        isExerciseLine = false;
+                }
+
                 if (isExerciseLine) sb.Append(ExerciseMarker);
                 sb.AppendLine(string.Join(" ", sortedWords.Select(w => w.text)));
             }
@@ -450,6 +490,41 @@ public class PdfImportService : IPdfImportService
         var text = sb.ToString().Normalize(NormalizationForm.FormC);
         text = text.Replace('–', '-').Replace('—', '-').Replace('―', '-').Replace('−', '-');
         return text;
+    }
+
+    // Words that flag a green line as a note/instruction header, NOT an exercise.
+    private static readonly HashSet<string> GreenNoteStarters = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "TIEMPO", "DESCANSO", "REST", "MOVILIDAD", "NOTA", "NOTAS",
+        "CALENTAMIENTO", "ENFRIAMIENTO", "ESTIRAMIENTO", "ESTIRAMIENTOS",
+        "RECUERDA", "IMPORTANTE", "CUIDADO", "EVITA",
+        "INICIO", "FIN", "FINAL", "PAUSA",
+        // Pure muscle-group labels — these are section headers, not exercises
+        "PECTORAL", "PECTORALES", "ESPALDA", "HOMBROS", "PIERNAS",
+        "CUADRICEPS", "FEMORAL", "GLUTEO", "GLÚTEO", "GLUTEOS", "GLÚTEOS",
+        "BICEPS", "BÍCEPS", "TRICEPS", "TRÍCEPS",
+        "ABDOMINALES", "GEMELO", "GEMELOS", "TRAPECIO",
+    };
+
+    /// <summary>
+    /// True when a "green" line is actually a note/section-header rather than an exercise.
+    /// We look at:
+    ///  • The very first word — if it's a known note-starter (e.g. "TIEMPO", "DESCANSO").
+    ///  • Pure muscle-group labels that appear alone (e.g. "PECTORAL:" used as a section divider).
+    ///  • Lines that contain only one or two short words (likely a header, not a movement).
+    /// Multi-word movement names ("Press banca plano", "Curl predicador") will pass through.
+    /// </summary>
+    private static bool LooksLikeNoteHeader(string firstWord, List<(double x, string text, bool green)> words)
+    {
+        var cleanFirst = firstWord.TrimEnd(':', '.', ',').ToUpperInvariant();
+        if (GreenNoteStarters.Contains(cleanFirst)) return true;
+
+        // Pure single-word green muscle group with colon (e.g. "Pectoral:")
+        var joined = string.Join(" ", words.Select(w => w.text)).Trim();
+        var stripped = joined.TrimEnd(':', '.', ',').Trim();
+        if (GreenNoteStarters.Contains(stripped.ToUpperInvariant())) return true;
+
+        return false;
     }
 
     /// <summary>
@@ -578,6 +653,8 @@ Reglas:
   (extraídos del color verde del PDF, que el entrenador usa para distinguir nombres de ejercicios).
   DEBES incluir TODOS los ejercicios marcados con [EX], aunque la línea sea larga o tenga descripción al lado.
   Quita el marcador ""[EX] "" del nombre cuando lo incluyas en el JSON.
+- **ORDEN**: dentro de cada día, los ejercicios DEBEN aparecer en el JSON EN EL MISMO ORDEN en el que aparecen en el texto del PDF (de arriba hacia abajo). No reordenes nunca.
+- **NO inventes ejercicios**. Si una línea verde es claramente un encabezado de sección o una nota (ej. ""Tiempo de descanso"", ""Movilidad articular"", ""Calentamiento"", o simplemente el nombre de un grupo muscular como ""Pectoral:""), NO la incluyas como ejercicio.
 
 TEXTO DEL PDF:
 " + pdfText;
