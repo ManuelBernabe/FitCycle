@@ -1,4 +1,4 @@
-const CACHE = 'fitcycle-v83';
+const CACHE = 'fitcycle-v84';
 const API_CACHE = 'fitcycle-api-v1';
 const IMG_CACHE = 'fitcycle-img-v1';
 const IMG_CACHE_MAX = 100; // LRU cap for exercise images

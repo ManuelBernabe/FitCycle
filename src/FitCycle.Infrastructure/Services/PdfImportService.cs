@@ -472,22 +472,49 @@ public class PdfImportService : IPdfImportService
             foreach (var line in lines.OrderByDescending(l => l.y))
             {
                 var sortedWords = line.words.OrderBy(w => w.x).ToList();
-                // If 40%+ of the letters on the line are green, mark the whole line as an exercise header.
-                var greenLetters = sortedWords.Where(w => w.green).Sum(w => w.text.Count(char.IsLetter));
-                var totalLetters = sortedWords.Sum(w => w.text.Count(char.IsLetter));
-                var isExerciseLine = totalLetters > 0 && greenLetters * 100 / totalLetters >= 40;
 
-                // Don't mark notes/instructions even if they're rendered in green.
-                // The trainer sometimes uses green for emphasis on rest cues or muscle group section labels.
-                if (isExerciseLine && sortedWords.Count > 0)
+                // Find the LEADING green segment of the line — that's the exercise name.
+                // Any black text after it becomes the description / note on the following line.
+                // This handles the very common case "Extensión de cuadriceps: Calentamiento 3 series con peso..."
+                // where the green is only ~20% of letters but is unambiguously an exercise title.
+                int leadingGreenEnd = 0;
+                int leadingGreenLetters = 0;
+                while (leadingGreenEnd < sortedWords.Count && sortedWords[leadingGreenEnd].green)
                 {
-                    var firstGreenWord = sortedWords.FirstOrDefault(w => w.green).text;
-                    if (!string.IsNullOrWhiteSpace(firstGreenWord) && LooksLikeNoteHeader(firstGreenWord, sortedWords))
-                        isExerciseLine = false;
+                    leadingGreenLetters += sortedWords[leadingGreenEnd].text.Count(char.IsLetter);
+                    leadingGreenEnd++;
                 }
 
-                if (isExerciseLine) sb.Append(ExerciseMarker);
-                sb.AppendLine(string.Join(" ", sortedWords.Select(w => w.text)));
+                bool hasLeadingGreen = leadingGreenLetters >= 2;
+                if (hasLeadingGreen)
+                {
+                    var greenWords = sortedWords.Take(leadingGreenEnd).ToList();
+                    var greenSegment = string.Join(" ", greenWords.Select(w => w.text));
+                    var firstGreenWord = greenWords[0].text;
+
+                    // Filter out lines whose leading green is actually a note (Tiempo, Descanso, Movilidad...)
+                    // or a bare muscle-group section label ("Pectoral:", "Femoral:").
+                    if (LooksLikeNoteHeader(firstGreenWord, greenWords))
+                    {
+                        sb.AppendLine(string.Join(" ", sortedWords.Select(w => w.text)));
+                        continue;
+                    }
+
+                    sb.Append(ExerciseMarker).AppendLine(greenSegment);
+
+                    // Black portion (if any) goes on the next logical line as a note for the exercise.
+                    var blackWords = sortedWords.Skip(leadingGreenEnd).ToList();
+                    if (blackWords.Count > 0)
+                    {
+                        var blackSegment = string.Join(" ", blackWords.Select(w => w.text));
+                        if (!string.IsNullOrWhiteSpace(blackSegment))
+                            sb.AppendLine(blackSegment);
+                    }
+                }
+                else
+                {
+                    sb.AppendLine(string.Join(" ", sortedWords.Select(w => w.text)));
+                }
             }
 
             sb.AppendLine();
@@ -498,37 +525,45 @@ public class PdfImportService : IPdfImportService
         return text;
     }
 
-    // Words that flag a green line as a note/instruction header, NOT an exercise.
-    private static readonly HashSet<string> GreenNoteStarters = new(StringComparer.OrdinalIgnoreCase)
+    // Words that, when they are the FIRST green word of a line, mean the line is a
+    // note/instruction (never an exercise) — e.g. "Tiempo de descanso", "Movilidad articular".
+    private static readonly HashSet<string> NoteOnlyStarters = new(StringComparer.OrdinalIgnoreCase)
     {
         "TIEMPO", "DESCANSO", "REST", "MOVILIDAD", "NOTA", "NOTAS",
         "CALENTAMIENTO", "ENFRIAMIENTO", "ESTIRAMIENTO", "ESTIRAMIENTOS",
         "RECUERDA", "IMPORTANTE", "CUIDADO", "EVITA",
-        "INICIO", "FIN", "FINAL", "PAUSA",
-        // Pure muscle-group labels — these are section headers, not exercises
-        "PECTORAL", "PECTORALES", "ESPALDA", "HOMBROS", "PIERNAS",
-        "CUADRICEPS", "FEMORAL", "GLUTEO", "GLÚTEO", "GLUTEOS", "GLÚTEOS",
+        "INICIO", "FIN", "FINAL", "PAUSA", "PAUSAS",
+        "PROCURA", "MANTÉN", "MANTEN", "INTENTA", "ASEGÚRATE", "ASEGURATE",
+    };
+
+    // Pure muscle-group section labels — only reject if the ENTIRE line (minus punctuation)
+    // is exactly one of these. "Femoral sentado:" must still be accepted as an exercise.
+    private static readonly HashSet<string> PureSectionHeaders = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "PECTORAL", "PECTORALES", "PECHO",
+        "ESPALDA", "HOMBROS", "HOMBRO",
+        "PIERNAS", "PIERNA",
+        "CUADRICEPS", "CUÁDRICEPS",
+        "GLUTEO", "GLÚTEO", "GLUTEOS", "GLÚTEOS",
         "BICEPS", "BÍCEPS", "TRICEPS", "TRÍCEPS",
-        "ABDOMINALES", "GEMELO", "GEMELOS", "TRAPECIO",
+        "ABDOMINALES", "TRAPECIO", "TRAPECIOS",
     };
 
     /// <summary>
-    /// True when a "green" line is actually a note/section-header rather than an exercise.
-    /// We look at:
-    ///  • The very first word — if it's a known note-starter (e.g. "TIEMPO", "DESCANSO").
-    ///  • Pure muscle-group labels that appear alone (e.g. "PECTORAL:" used as a section divider).
-    ///  • Lines that contain only one or two short words (likely a header, not a movement).
-    /// Multi-word movement names ("Press banca plano", "Curl predicador") will pass through.
+    /// True when a "green" line is actually a note or a bare section header rather than an exercise.
+    ///  • First green word is a note-starter (TIEMPO, DESCANSO, MOVILIDAD, …) → note.
+    ///  • Whole line trimmed of punctuation is exactly a muscle-group word (PECTORAL, ESPALDA, …) → section header.
+    /// Multi-word movement names like "Femoral sentado", "Press banca plano", "Curl predicador" are accepted.
     /// </summary>
     private static bool LooksLikeNoteHeader(string firstWord, List<(double x, string text, bool green)> words)
     {
         var cleanFirst = firstWord.TrimEnd(':', '.', ',').ToUpperInvariant();
-        if (GreenNoteStarters.Contains(cleanFirst)) return true;
+        if (NoteOnlyStarters.Contains(cleanFirst)) return true;
 
         // Pure single-word green muscle group with colon (e.g. "Pectoral:")
         var joined = string.Join(" ", words.Select(w => w.text)).Trim();
         var stripped = joined.TrimEnd(':', '.', ',').Trim();
-        if (GreenNoteStarters.Contains(stripped.ToUpperInvariant())) return true;
+        if (PureSectionHeaders.Contains(stripped.ToUpperInvariant())) return true;
 
         return false;
     }
