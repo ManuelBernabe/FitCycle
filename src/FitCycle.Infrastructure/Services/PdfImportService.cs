@@ -687,7 +687,9 @@ Reglas:
 - Crea un objeto por cada serie en ""sets"" con sus reps
 - tempoPos y tempoNeg: segundos de fase concéntrica/excéntrica (0 si no se especifica)
 - Las tablas con filas ""Serie / Reps / Fase positiva / Fase negativa"" indican una serie por columna con sus reps y tempos correspondientes
-- supersetWith: nombre exacto del ejercicio pareja (null si no hay). Indicadores: ""+ super serie..."", ""SUPER SERIE""
+- supersetWith: nombre exacto del ejercicio pareja (null si no hay). Indicadores:
+  • ""Ejercicio A + Ejercicio B"" en la misma línea
+  • Una línea que EMPIEZA con ""+ super serie ..."" o ""+ X"" significa que ese ejercicio es la pareja del ejercicio inmediatamente anterior. Crea AMBOS ejercicios con supersetWith cruzado.
 - Nombres de ejercicios en Title Case
 - Extrae notas/instrucciones del entrenador
 - **MUY IMPORTANTE**: las líneas que empiezan con el marcador ""[EX] "" son nombres de ejercicios reales
@@ -980,6 +982,34 @@ public static class LocalPdfParser
             // Extract the "[EX] " marker if present — those lines are guaranteed exercises (extracted from green text in the PDF).
             bool isMarkedExercise = rawLine.StartsWith(PdfImportService.ExerciseMarker, StringComparison.Ordinal);
             var line = isMarkedExercise ? rawLine[PdfImportService.ExerciseMarker.Length..].Trim() : rawLine;
+
+            // Superset continuation: a line that starts with "+" (optionally followed by "super serie")
+            // means the NEXT exercise we create is a superset partner of the previous one.
+            // The trainer's PDF uses this pattern: "Femoral tumbado" (exercise) on one line,
+            // then "+ Super serie femoral unilateral tumbado" on the next line.
+            if (Regex.IsMatch(line, @"^\+\s*(super\s+serie\s+|superserie\s+)?", RegexOptions.IgnoreCase))
+            {
+                var partnerLine = Regex.Replace(line, @"^\+\s*(super\s+serie\s+|superserie\s+)?", "", RegexOptions.IgnoreCase).Trim();
+                if (partnerLine.Length >= 3 && current != null)
+                {
+                    FinalizeNotes(current, notesBuilder);
+                    inTable = false;
+                    pendingFaseType = null;
+
+                    var partner = new PdfExercise
+                    {
+                        Name = ToTitleCase(CleanExerciseName(partnerLine)),
+                        MuscleGroup = current.MuscleGroup,
+                        SupersetWith = current.Name,
+                        OrderHint = exercises.Count,
+                    };
+                    current.SupersetWith = partner.Name;
+                    exercises.Add(partner);
+                    ExtractGripFromName(partner);
+                    current = partner;
+                    continue;
+                }
+            }
 
             // "Seg. Ejecución" lines — may contain numbers for a pending Fase row
             if (Regex.IsMatch(line, @"Seg\.?\s*(?:de\s+)?(?:Ejecuci[oó]n|ejecuci[oó]n)", RegexOptions.IgnoreCase))

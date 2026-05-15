@@ -333,17 +333,11 @@ function renderExercise() {
             <div style="font-size:20px;font-weight:bold;color:#ccc;">x</div>
             <div>
               <div style="font-size:10px;color:gray;">kg</div>
-              <div style="display:flex;gap:4px;align-items:center;">
-                <select id="workout-weight"
-                  style="width:72px;font-size:18px;font-weight:bold;text-align:center;border:1px solid #ddd;border-radius:8px;padding:5px;background:#fff;">
-                  ${buildWorkoutWeightOptions(currentSetData.weight)}
-                </select>
-                <input type="number" id="workout-weight-manual" step="0.25" min="0" max="500"
-                  value="${currentSetData.weight}"
-                  placeholder="kg"
-                  title="${t('ManualWeight')}"
-                  style="width:64px;font-size:16px;font-weight:bold;text-align:center;border:1px solid #ddd;border-radius:8px;padding:5px;">
-              </div>
+              <input type="number" id="workout-weight" list="workout-weight-options"
+                step="0.25" min="0" max="500" value="${currentSetData.weight}"
+                inputmode="decimal"
+                style="width:88px;font-size:18px;font-weight:bold;text-align:center;border:1px solid #ddd;border-radius:8px;padding:5px;background:#fff;">
+              <datalist id="workout-weight-options">${buildWorkoutWeightOptions(currentSetData.weight)}</datalist>
             </div>
           </div>
           ${(() => {
@@ -545,28 +539,10 @@ function renderExercise() {
 
   document.getElementById('workout-finish')?.addEventListener('click', () => { saveCurrentSetValues(); finishWorkout(); });
 
-  // Auto-save on weight/reps input change. Keep the manual input and the dropdown in sync.
-  document.getElementById('workout-weight')?.addEventListener('change', (e) => {
-    const manual = document.getElementById('workout-weight-manual');
-    if (manual) manual.value = e.target.value;
-    saveCurrentSetValues(); saveProgress();
-  });
-  document.getElementById('workout-weight-manual')?.addEventListener('change', (e) => {
-    const val = parseFloat(e.target.value);
-    if (!isNaN(val) && val >= 0) {
-      const select = document.getElementById('workout-weight');
-      if (select) {
-        // Add option dynamically if not present so the select shows the manual value
-        if (![...select.options].some(o => parseFloat(o.value) === val)) {
-          const opt = document.createElement('option');
-          opt.value = val; opt.textContent = val;
-          select.appendChild(opt);
-        }
-        select.value = val;
-      }
-    }
-    saveCurrentSetValues(); saveProgress();
-  });
+  // Auto-save on weight/reps input change. The weight input uses a datalist so users can
+  // either tap from suggestions (0.25 kg steps up to 150 kg) or just type a custom value.
+  document.getElementById('workout-weight')?.addEventListener('change', () => { saveCurrentSetValues(); saveProgress(); });
+  document.getElementById('workout-weight')?.addEventListener('input', () => { saveCurrentSetValues(); saveProgress(); });
   document.getElementById('workout-reps')?.addEventListener('change', () => { saveCurrentSetValues(); saveProgress(); });
 
   document.getElementById('workout-notes-toggle')?.addEventListener('click', () => {
@@ -589,10 +565,11 @@ function renderExercise() {
 }
 
 function buildWorkoutWeightOptions(selected) {
+  // Suggestions for the weight datalist: 0, 0.25, 0.5 ... 150 plus the current value if outside this range.
   const vals = [0];
   for (let i = 0.25; i <= 150; i += 0.25) vals.push(i);
   if (selected > 0 && !vals.includes(selected)) { vals.push(selected); vals.sort((a, b) => a - b); }
-  return vals.map(v => `<option value="${v}" ${v === selected ? 'selected' : ''}>${v}</option>`).join('');
+  return vals.map(v => `<option value="${v}">`).join('');
 }
 
 function buildWorkoutRepsOptions(selected) {
@@ -660,15 +637,8 @@ function saveCurrentSetValues() {
   if (!ex) return;
   const repsEl = document.getElementById('workout-reps');
   const weightEl = document.getElementById('workout-weight');
-  const weightManualEl = document.getElementById('workout-weight-manual');
   if (repsEl) ex.setDetails[currentSet].reps = parseInt(repsEl.value) || 12;
-  // Prefer the manual input if non-empty AND different from the dropdown — that means the user typed a custom value
-  let weightVal = weightEl ? (parseFloat(weightEl.value) || 0) : 0;
-  if (weightManualEl && weightManualEl.value !== '') {
-    const manualVal = parseFloat(weightManualEl.value);
-    if (!isNaN(manualVal) && manualVal !== weightVal) weightVal = manualVal;
-  }
-  ex.setDetails[currentSet].weight = weightVal;
+  ex.setDetails[currentSet].weight = weightEl ? (parseFloat(weightEl.value) || 0) : 0;
 }
 
 /**

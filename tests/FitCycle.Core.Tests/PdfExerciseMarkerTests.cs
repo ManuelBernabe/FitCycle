@@ -80,6 +80,34 @@ public class PdfExerciseMarkerTests
     }
 
     [Fact]
+    public void PlusPrefix_Line_Creates_Superset_Partner_With_Previous_Exercise()
+    {
+        // From the user's PDF, page 21:
+        //   "Femoral tumbado"  (exercise, green)
+        //   [table]
+        //   "+ Super serie femoral unilateral tumbado"  (superset partner — separate line, starts with "+")
+        var text = """
+            FEMORAL+ GLUTEO (JUEVES)
+            [EX] Femoral tumbado
+            Serie 1 2 3
+            Reps 12 12 10
+            + Super serie femoral unilateral tumbado
+            Serie 1 2 3
+            Reps 8 8 8
+            """;
+        var result = LocalPdfParser.Parse(text);
+        var day = result.Routines.FirstOrDefault(r => r.DayOfWeek == 4);
+        Assert.NotNull(day);
+
+        var femoralTumbado = day.Exercises.FirstOrDefault(e => (e.Name ?? "").Contains("Tumbado", StringComparison.OrdinalIgnoreCase) && !(e.Name ?? "").Contains("Unilateral", StringComparison.OrdinalIgnoreCase));
+        var femoralUnilateral = day.Exercises.FirstOrDefault(e => (e.Name ?? "").Contains("Unilateral", StringComparison.OrdinalIgnoreCase));
+        Assert.NotNull(femoralTumbado);
+        Assert.NotNull(femoralUnilateral);
+        Assert.Equal(femoralUnilateral.Name, femoralTumbado.SupersetWith);
+        Assert.Equal(femoralTumbado.Name, femoralUnilateral.SupersetWith);
+    }
+
+    [Fact]
     public void Non_Marked_Lines_Still_Pass_Through_Heuristic()
     {
         // Regression: ensure the existing heuristic-based detection keeps working
