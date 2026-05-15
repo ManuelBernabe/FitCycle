@@ -244,11 +244,8 @@ function renderExercise() {
     return `<div class="set-dot ${cls}" title="S${i + 1}: ${s.reps}r / ${s.weight}kg"></div>`;
   }).join('');
 
-  // Auto-set rest time based on the exercise type when the timer isn't running.
-  if (!timerRunning) {
-    const suggested = suggestRestSeconds(ex);
-    if (suggested && Math.abs(timerSeconds - suggested) > 5) timerSeconds = suggested;
-  }
+  // Default rest stays at the user's setting (1 min by default).
+  // suggestRestSeconds() is still available as a helper but we don't auto-apply it.
 
   // Progression suggestion (only on the FIRST set so it doesn't distract mid-exercise)
   const progression = currentSet === 0 ? suggestProgression(ex) : null;

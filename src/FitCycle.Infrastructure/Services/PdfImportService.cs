@@ -213,7 +213,9 @@ public class PdfImportService : IPdfImportService
             var supersetMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             int supersetCounter = 1;
 
-            foreach (var pdfEx in dayRoutine.Exercises ?? new())
+            // Force PDF order on save: sort by OrderHint (set by LocalPdfParser, re-numbered by MergeExtractions).
+            var orderedExercises = (dayRoutine.Exercises ?? new()).OrderBy(e => e.OrderHint).ToList();
+            foreach (var pdfEx in orderedExercises)
             {
                 var exMg = allMuscleGroups.FirstOrDefault(m =>
                     string.Equals(m.Name, pdfEx.MuscleGroup, StringComparison.OrdinalIgnoreCase));
@@ -421,8 +423,12 @@ public class PdfImportService : IPdfImportService
                 lastSeenLocalName = key;
             }
 
-            logger.LogInformation("Day {Day} merged: local={LocalCount}, ai={AiCount}, combined={Total} (PDF order preserved)",
-                day, localDay.Exercises.Count, aiDay.Exercises.Count, combined.Exercises.Count);
+            // Re-number OrderHint in the merged list so the save path can rely on it.
+            for (int i = 0; i < combined.Exercises.Count; i++) combined.Exercises[i].OrderHint = i;
+
+            logger.LogInformation("Day {Day} merged: local={LocalCount}, ai={AiCount}, combined={Total} → {Names}",
+                day, localDay.Exercises.Count, aiDay.Exercises.Count, combined.Exercises.Count,
+                string.Join(" | ", combined.Exercises.Select(e => e.Name)));
             merged.Routines.Add(combined);
         }
 
@@ -992,6 +998,7 @@ public static class LocalPdfParser
                     };
                     for (int i = 0; i < Math.Min(seriesCount, 10); i++)
                         current.Sets.Add(new PdfSet { Reps = reps });
+                    current.OrderHint = exercises.Count;
                     exercises.Add(current);
                     // Extract grip from exercise name
                     ExtractGripFromName(current);
@@ -1029,7 +1036,9 @@ public static class LocalPdfParser
                             MuscleGroup = dayMuscleGroups.FirstOrDefault() ?? "Pecho",
                             SupersetWith = nameA,
                         };
+                        exA.OrderHint = exercises.Count;
                         exercises.Add(exA);
+                        exB.OrderHint = exercises.Count;
                         exercises.Add(exB);
                         current = exB;
                         ExtractGripFromName(exA);
@@ -1042,6 +1051,7 @@ public static class LocalPdfParser
                 {
                     Name = ToTitleCase(CleanExerciseName(line)),
                     MuscleGroup = dayMuscleGroups.FirstOrDefault() ?? "Pecho",
+                    OrderHint = exercises.Count,
                 };
                 exercises.Add(current);
                 ExtractGripFromName(current);
@@ -1549,6 +1559,11 @@ public class PdfExercise
     public List<PdfSet> Sets { get; set; } = new();
     public string? Notes { get; set; }
     public string? SupersetWith { get; set; }
+    /// <summary>
+    /// 0-based hint of the exercise's position in the source PDF, used to preserve
+    /// PDF reading order across the local-parser → AI merge step.
+    /// </summary>
+    public int OrderHint { get; set; }
 }
 
 public class PdfSet
