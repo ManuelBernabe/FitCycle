@@ -1859,6 +1859,41 @@ Reglas:
 .WithOpenApi()
 .RequireAuthorization();
 
+// -- Form notes for an exercise (AI-generated, cached in DB) --
+app.MapGet("/ai/exercise-form/{id:int}", async (int id, FitCycleDbContext db, IAiService ai) =>
+{
+    var ex = db.Exercises.Include(e => e.MuscleGroup).FirstOrDefault(e => e.Id == id);
+    if (ex == null) return Results.NotFound();
+
+    // Return cached if we have it
+    if (!string.IsNullOrWhiteSpace(ex.FormNotes))
+        return Results.Ok(new { cached = true, notes = ex.FormNotes });
+
+    if (!ai.IsConfigured)
+        return Results.BadRequest(new { error = "No AI provider configured" });
+
+    var prompt = $@"Eres un entrenador personal experto. Genera consejos de técnica para el ejercicio: {ex.Name} (grupo: {ex.MuscleGroup?.Name ?? "?"}).
+
+Responde SOLO con JSON, sin markdown ni texto adicional. Formato:
+{{
+  ""technique"": [""Consejo de técnica 1"", ""Consejo 2"", ""Consejo 3""],
+  ""commonError"": ""Error más común que cometen los principiantes"",
+  ""breathing"": ""Patrón de respiración recomendado""
+}}
+
+Sé conciso (cada consejo máximo 15 palabras). En español.";
+
+    var (text, error) = await ai.GenerateContentAsync(prompt, maxOutputTokens: 1024);
+    if (error != null || string.IsNullOrWhiteSpace(text)) return Results.BadRequest(new { error });
+
+    ex.FormNotes = text.Trim();
+    db.SaveChanges();
+    return Results.Ok(new { cached = false, notes = ex.FormNotes });
+})
+.WithName("AIExerciseForm")
+.WithOpenApi()
+.RequireAuthorization();
+
 app.MapFallbackToFile("index.html");
 
 app.Run();

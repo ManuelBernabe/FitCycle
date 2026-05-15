@@ -1,4 +1,4 @@
-const CACHE = 'fitcycle-v80';
+const CACHE = 'fitcycle-v81';
 const API_CACHE = 'fitcycle-api-v1';
 const IMG_CACHE = 'fitcycle-img-v1';
 const IMG_CACHE_MAX = 100; // LRU cap for exercise images
@@ -8,7 +8,7 @@ const SHELL = ['/', '/css/app.css', '/js/app.js', '/js/api.js', '/js/auth.js', '
   '/js/pages/login.js', '/js/pages/home.js', '/js/pages/routines.js', '/js/pages/editday.js', '/js/pages/workout.js',
   '/js/pages/summary.js', '/js/pages/stats.js', '/js/pages/account.js', '/js/pages/measurements.js',
   '/js/pages/templates.js', '/js/pages/admin.js', '/js/pages/tutorial.js', '/js/pages/ai.js',
-  '/js/pages/calendar.js'];
+  '/js/pages/calendar.js', '/js/pages/onboarding.js'];
 
 // GET API paths to cache for offline reading
 const CACHEABLE_API = ['/routines', '/musclegroups', '/exercises', '/workouts', '/measurements', '/achievements'];

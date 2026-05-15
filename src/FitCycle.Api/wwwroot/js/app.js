@@ -20,6 +20,8 @@ import * as homePage from './pages/home.js';
 import * as tutorialPage from './pages/tutorial.js';
 import * as aiPage from './pages/ai.js';
 import * as calendarPage from './pages/calendar.js';
+import * as onboardingPage from './pages/onboarding.js';
+import { isOnboardingDone } from './pages/onboarding.js';
 
 // ─── Init ───────────────────────────────────────────────────────────
 l10nInit();
@@ -45,6 +47,7 @@ const routes = {
   tutorial:     { mod: tutorialPage,   header: true,  tabs: false },
   ai:           { mod: aiPage,        header: true,  tabs: true },
   calendar:     { mod: calendarPage,  header: true,  tabs: true },
+  onboarding:   { mod: onboardingPage, header: false, tabs: false },
 };
 
 // ─── Router ─────────────────────────────────────────────────────────
@@ -66,7 +69,8 @@ function navigate() {
     return;
   }
   if (authenticated && name === 'login') {
-    location.hash = '#home';
+    // First-time login: send to onboarding wizard
+    location.hash = isOnboardingDone() ? '#home' : '#onboarding';
     return;
   }
 

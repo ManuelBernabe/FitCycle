@@ -98,6 +98,15 @@ function renderContent(container, measurements) {
           </div>
           <div id="meas-trend-chart"></div>
         </div>
+        ${(() => {
+          const haveBoth = measurements.some(m => (m.weight || m.Weight) > 0 && (m.bodyFat || m.BodyFat) > 0);
+          return haveBoth ? `
+            <div class="card mb-8">
+              <div class="card-title mb-8">${t('BodyComposition')}</div>
+              <div id="meas-composition-chart"></div>
+            </div>
+          ` : '';
+        })()}
       `;
     }
   }
@@ -252,6 +261,63 @@ function renderContent(container, measurements) {
     };
     trendSelect.addEventListener('change', renderTrend);
     renderTrend();
+  }
+
+  // Body composition chart: stacked area lean vs fat
+  const compositionEl = document.getElementById('meas-composition-chart');
+  if (compositionEl) {
+    const points = measurements
+      .filter(m => (m.weight || m.Weight) > 0 && (m.bodyFat || m.BodyFat) > 0)
+      .reverse()
+      .map(m => {
+        const w = parseFloat(m.weight || m.Weight);
+        const bf = parseFloat(m.bodyFat || m.BodyFat);
+        return {
+          date: new Date(m.measuredAt || m.MeasuredAt),
+          weight: w,
+          lean: w * (1 - bf / 100),
+          fat: w * (bf / 100),
+        };
+      });
+
+    if (points.length >= 2) {
+      const W = 360, H = 160, pad = 30;
+      const iW = W - pad * 2, iH = H - pad * 2;
+      const maxVal = Math.max(...points.map(p => p.weight));
+      const minVal = 0;
+      const range = maxVal - minVal || 1;
+      const xOf = (i) => pad + (i / (points.length - 1)) * iW;
+      const yOf = (v) => pad + iH - (v / range) * iH;
+
+      // Build the two areas (lean from 0 to lean, fat from lean to weight)
+      const leanPath = `M ${xOf(0)},${yOf(0)} ` +
+        points.map((p, i) => `L ${xOf(i)},${yOf(p.lean)}`).join(' ') +
+        ` L ${xOf(points.length - 1)},${yOf(0)} Z`;
+      const fatPath = `M ${xOf(0)},${yOf(points[0].lean)} ` +
+        points.map((p, i) => `L ${xOf(i)},${yOf(p.weight)}`).join(' ') +
+        ` ` + points.slice().reverse().map((p, idx) => {
+          const i = points.length - 1 - idx;
+          return `L ${xOf(i)},${yOf(p.lean)}`;
+        }).join(' ') + ' Z';
+
+      const dateLbls = [0, points.length - 1].map(i => {
+        const p = points[i];
+        return `<text x="${xOf(i).toFixed(1)}" y="${(H - 4).toFixed(1)}" text-anchor="middle" font-size="9" fill="gray">${p.date.getDate()}/${p.date.getMonth() + 1}</text>`;
+      }).join('');
+
+      const last = points[points.length - 1];
+      compositionEl.innerHTML = `
+        <svg width="100%" viewBox="0 0 ${W} ${H}" style="max-width:${W}px;">
+          <path d="${leanPath}" fill="#28a745" fill-opacity="0.7" />
+          <path d="${fatPath}" fill="#e67e22" fill-opacity="0.7" />
+          ${dateLbls}
+        </svg>
+        <div style="display:flex;justify-content:center;gap:16px;font-size:12px;margin-top:4px;">
+          <span><span style="display:inline-block;width:10px;height:10px;background:#28a745;border-radius:2px;"></span> ${t('LeanMass')}: ${last.lean.toFixed(1)} kg</span>
+          <span><span style="display:inline-block;width:10px;height:10px;background:#e67e22;border-radius:2px;"></span> ${t('FatMass')}: ${last.fat.toFixed(1)} kg</span>
+        </div>
+      `;
+    }
   }
 
   // Delete handlers

@@ -299,7 +299,7 @@ function buildExerciseRows(group, gi) {
     const checkedAttr = ex.isSelected ? 'checked' : '';
     // Image thumbnail acts as an upload button. Click → file picker → POST /exercises/{id}/image.
     const imgInner = ex.imageUrl
-      ? `<img src="${ex.imageUrl}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:4px;" onerror="this.onerror=null;this.style.display='none';this.parentElement.querySelector('.ex-img-placeholder').style.display='flex';">`
+      ? `<img src="${ex.imageUrl}" alt="" loading="lazy" decoding="async" style="width:100%;height:100%;object-fit:cover;border-radius:4px;" onerror="this.onerror=null;this.style.display='none';this.parentElement.querySelector('.ex-img-placeholder').style.display='flex';">`
       : '';
     const imgHtml = `
       <div class="ex-img-thumb btn-upload-image" data-gi="${gi}" data-ei="${ei}" title="${t('ChangeImage')}"
@@ -441,7 +441,7 @@ function showSupersetModal(sourceGi, sourceEi) {
     ? candidates.map((c, i) => `
         <div class="exercise-row" style="cursor:pointer;padding:10px;border-bottom:1px solid #f0f0f0;" data-idx="${i}">
           <div style="display:flex;align-items:center;gap:8px;">
-            ${c.imageUrl ? `<img src="${c.imageUrl}" alt="" style="width:36px;height:36px;object-fit:cover;border-radius:4px;" onerror="this.onerror=null;this.parentElement.innerHTML='&#127947;&#65039;'">` : '<span style="font-size:18px;">&#127947;</span>'}
+            ${c.imageUrl ? `<img src="${c.imageUrl}" alt="" loading="lazy" decoding="async" style="width:36px;height:36px;object-fit:cover;border-radius:4px;" onerror="this.onerror=null;this.parentElement.innerHTML='&#127947;&#65039;'">` : '<span style="font-size:18px;">&#127947;</span>'}
             <div style="flex:1;">
               <div style="font-size:14px;font-weight:600;">${escapeHtml(exTranslate(c.name))}</div>
               <div style="font-size:11px;color:#888;">${c.mgName}</div>
@@ -830,7 +830,7 @@ function showSuggestionModal(group, displayName, suggestions) {
   const suggestionItems = suggestions.map((s, i) => `
     <div class="exercise-row" style="cursor:pointer;padding:8px;" data-idx="${i}">
       <div class="exercise-img">
-        ${s.imageUrl ? `<img src="${s.imageUrl}" alt="" style="width:40px;height:40px;object-fit:cover;border-radius:4px;" onerror="this.onerror=null;this.parentElement.innerHTML='&#127947;&#65039;'">` : '&#127947;'}
+        ${s.imageUrl ? `<img src="${s.imageUrl}" alt="" loading="lazy" decoding="async" style="width:40px;height:40px;object-fit:cover;border-radius:4px;" onerror="this.onerror=null;this.parentElement.innerHTML='&#127947;&#65039;'">` : '&#127947;'}
       </div>
       <div class="exercise-info">
         <div class="exercise-name">${escapeHtml(exTranslate(s.name))}</div>

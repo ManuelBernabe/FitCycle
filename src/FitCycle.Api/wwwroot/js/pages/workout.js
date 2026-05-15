@@ -304,6 +304,7 @@ function renderExercise() {
             <div style="display:flex;align-items:center;gap:6px;">
               <div style="font-size:12px;color:#512BD4;font-weight:600;">${t('ExerciseProgress', currentIndex + 1, exercises.length)}</div>
               <button id="workout-video-btn" class="video-btn ${ex.videoUrl || ex.VideoUrl ? '' : 'empty'}" title="${t('Demo') || 'Demo'}">▶ ${t('Demo') || 'Demo'}</button>
+              <button id="workout-tips-btn" class="video-btn" style="background:#ffc107;color:#000;" title="${t('FormTips')}">💡 ${t('FormTips')}</button>
             </div>
             <div class="workout-exercise-name">${escapeHtml(exName)}</div>
             <div style="font-size:13px;color:gray;">${mgTranslate(exMuscle)}</div>
@@ -490,6 +491,21 @@ function renderExercise() {
   document.getElementById('prefill-dismiss')?.addEventListener('click', () => {
     prefillSource = null;
     document.getElementById('prefill-banner')?.remove();
+  });
+
+  document.getElementById('workout-tips-btn')?.addEventListener('click', async () => {
+    const ex = exercises[currentIndex];
+    if (!ex) return;
+    const exId = ex.exerciseId || ex.ExerciseId || ex.id || ex.Id;
+    showFormTipsModal(exTranslate(ex.exerciseName || ex.name || ''), null, true); // loading
+    try {
+      const res = await api.get(`/ai/exercise-form/${exId}`);
+      let parsed = null;
+      try { parsed = res?.notes ? JSON.parse(res.notes) : null; } catch { /* not JSON */ }
+      showFormTipsModal(exTranslate(ex.exerciseName || ex.name || ''), parsed || res?.notes || '', false);
+    } catch (err) {
+      showFormTipsModal(exTranslate(ex.exerciseName || ex.name || ''), { error: err.message || 'Error' }, false);
+    }
   });
 
   document.getElementById('workout-video-btn')?.addEventListener('click', () => {
@@ -939,4 +955,57 @@ function pickAndUploadExerciseImage() {
   });
 
   input.click();
+}
+
+/** Shows an AI-generated form tips modal with technique bullets, common error, breathing. */
+function showFormTipsModal(exerciseName, content, loading = false) {
+  document.getElementById('form-tips-modal')?.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'form-tips-modal';
+  overlay.className = 'modal-overlay modal-centered';
+  overlay.style.zIndex = '200';
+
+  let body = '';
+  if (loading) {
+    body = `<div style="text-align:center;padding:24px;color:var(--text-light);">${t('AIThinking') || 'La IA está pensando...'}</div>`;
+  } else if (typeof content === 'string') {
+    body = `<div style="white-space:pre-wrap;font-size:13px;line-height:1.6;">${escapeHtml(content)}</div>`;
+  } else if (content && typeof content === 'object') {
+    if (content.error) {
+      body = `<div style="color:#dc3545;padding:12px;">${escapeHtml(content.error)}</div>`;
+    } else {
+      body = `
+        ${Array.isArray(content.technique) ? `
+          <div style="margin-bottom:12px;">
+            <div style="font-weight:700;font-size:13px;color:var(--primary);margin-bottom:4px;">${t('Technique') || 'Técnica'}</div>
+            <ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.6;">
+              ${content.technique.map(t => `<li>${escapeHtml(t)}</li>`).join('')}
+            </ul>
+          </div>` : ''}
+        ${content.commonError ? `
+          <div style="background:#fff3e0;border-left:3px solid #e67e22;padding:8px 12px;margin-bottom:12px;border-radius:6px;">
+            <div style="font-weight:700;font-size:12px;color:#e67e22;margin-bottom:2px;">⚠ ${t('CommonError') || 'Error común'}</div>
+            <div style="font-size:13px;">${escapeHtml(content.commonError)}</div>
+          </div>` : ''}
+        ${content.breathing ? `
+          <div style="background:#e3f2fd;border-left:3px solid #1976d2;padding:8px 12px;border-radius:6px;">
+            <div style="font-weight:700;font-size:12px;color:#1976d2;margin-bottom:2px;">🫁 ${t('Breathing') || 'Respiración'}</div>
+            <div style="font-size:13px;">${escapeHtml(content.breathing)}</div>
+          </div>` : ''}
+      `;
+    }
+  }
+
+  overlay.innerHTML = `
+    <div class="modal-content" style="max-width:420px;width:92%;">
+      <div style="font-weight:700;font-size:15px;margin-bottom:10px;text-align:center;">💡 ${escapeHtml(exerciseName)}</div>
+      ${body}
+      <button class="btn btn-primary btn-block" id="form-tips-close" style="margin-top:12px;">${t('Close') || 'Cerrar'}</button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  overlay.querySelector('#form-tips-close')?.addEventListener('click', close);
 }
