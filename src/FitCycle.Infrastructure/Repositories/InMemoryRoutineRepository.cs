@@ -117,6 +117,14 @@ public class InMemoryRoutineRepository : IRoutineRepository
         return exercise;
     }
 
+    public Exercise? SetExerciseVideoUrl(int exerciseId, string videoUrl)
+    {
+        var exercise = _exercises.FirstOrDefault(e => e.Id == exerciseId);
+        if (exercise == null) return null;
+        exercise.VideoUrl = string.IsNullOrWhiteSpace(videoUrl) ? null : videoUrl.Trim();
+        return exercise;
+    }
+
     public WeekRoutine GetWeekRoutine(int userId)
     {
         var days = _muscleGroupRoutines

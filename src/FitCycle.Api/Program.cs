@@ -692,6 +692,25 @@ app.MapPost("/exercises/{id:int}/image", async (int id, HttpRequest request, IRo
 .RequireAuthorization()
 .DisableAntiforgery();
 
+// -- Set YouTube demo video URL for an exercise --
+app.MapPut("/exercises/{id:int}/video", (int id, SetVideoRequest request, IRoutineRepository repo) =>
+{
+    var url = (request.VideoUrl ?? string.Empty).Trim();
+    if (!string.IsNullOrEmpty(url))
+    {
+        if (!url.StartsWith("https://", StringComparison.OrdinalIgnoreCase) &&
+            !url.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+            return Results.BadRequest(new { error = "La URL debe empezar por http(s)://" });
+        if (url.Length > 500)
+            return Results.BadRequest(new { error = "URL demasiado larga." });
+    }
+    var updated = repo.SetExerciseVideoUrl(id, url);
+    return updated != null ? Results.Ok(updated) : Results.NotFound();
+})
+.WithName("SetExerciseVideo")
+.WithOpenApi()
+.RequireAuthorization();
+
 // -- Rutina semanal --
 app.MapGet("/routines", (IRoutineRepository repo, ClaimsPrincipal user) =>
 {
@@ -1180,6 +1199,141 @@ app.MapGet("/workouts/stats", (FitCycleDbContext db, ClaimsPrincipal user) =>
     });
 })
 .WithName("GetWorkoutStats")
+.WithOpenApi()
+.RequireAuthorization();
+
+// -- Calendar: workouts per day in a date range --
+app.MapGet("/workouts/calendar", (DateTime? from, DateTime? to, FitCycleDbContext db, ClaimsPrincipal user) =>
+{
+    var userId = int.Parse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+    var rangeFrom = from ?? DateTime.UtcNow.AddMonths(-3);
+    var rangeTo = to ?? DateTime.UtcNow.AddDays(1);
+
+    var sessions = db.WorkoutSessions
+        .Where(w => w.UserId == userId && w.CompletedAt >= rangeFrom && w.CompletedAt <= rangeTo)
+        .Include(s => s.ExerciseLogs)
+        .OrderBy(s => s.CompletedAt)
+        .Select(s => new
+        {
+            id = s.Id,
+            date = s.CompletedAt,
+            day = (int)s.Day,
+            exerciseCount = s.ExerciseLogs.Count,
+            muscleGroups = s.ExerciseLogs
+                .Select(l => l.MuscleGroupName)
+                .Where(m => !string.IsNullOrEmpty(m))
+                .Distinct()
+                .ToList()
+        })
+        .ToList();
+
+    return Results.Ok(new { from = rangeFrom, to = rangeTo, sessions });
+})
+.WithName("GetWorkoutCalendar")
+.WithOpenApi()
+.RequireAuthorization();
+
+// -- Achievements: computed on-the-fly (no DB table) --
+app.MapGet("/achievements", (FitCycleDbContext db, ClaimsPrincipal user) =>
+{
+    var userId = int.Parse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+    var sessions = db.WorkoutSessions
+        .Where(w => w.UserId == userId)
+        .Include(s => s.ExerciseLogs)
+        .OrderBy(s => s.CompletedAt)
+        .ToList();
+
+    var totalWorkouts = sessions.Count;
+    var totalVolume = sessions
+        .SelectMany(s => s.ExerciseLogs)
+        .Sum(l => (decimal)(l.Sets * l.Reps) * l.Weight);
+    var maxWeightAnyExercise = sessions.SelectMany(s => s.ExerciseLogs).Where(l => l.Weight > 0).Select(l => (decimal?)l.Weight).Max() ?? 0;
+    var firstDate = sessions.FirstOrDefault()?.CompletedAt;
+    var lastDate = sessions.LastOrDefault()?.CompletedAt;
+    var weeksActive = firstDate.HasValue && lastDate.HasValue
+        ? (int)Math.Ceiling((lastDate.Value - firstDate.Value).TotalDays / 7)
+        : 0;
+
+    // Define achievements as (code, threshold, label, icon)
+    var defs = new[]
+    {
+        new { code = "first_workout", threshold = (decimal)1, current = (decimal)totalWorkouts, icon = "🥇", labelEs = "Primer entreno", labelEn = "First workout" },
+        new { code = "10_workouts", threshold = (decimal)10, current = (decimal)totalWorkouts, icon = "🎯", labelEs = "10 entrenos", labelEn = "10 workouts" },
+        new { code = "25_workouts", threshold = (decimal)25, current = (decimal)totalWorkouts, icon = "🏃", labelEs = "25 entrenos", labelEn = "25 workouts" },
+        new { code = "50_workouts", threshold = (decimal)50, current = (decimal)totalWorkouts, icon = "💪", labelEs = "50 entrenos", labelEn = "50 workouts" },
+        new { code = "100_workouts", threshold = (decimal)100, current = (decimal)totalWorkouts, icon = "🏆", labelEs = "100 entrenos", labelEn = "100 workouts" },
+        new { code = "volume_10k", threshold = 10000m, current = totalVolume, icon = "🏋️", labelEs = "10.000 kg volumen total", labelEn = "10,000 kg total volume" },
+        new { code = "volume_50k", threshold = 50000m, current = totalVolume, icon = "🦾", labelEs = "50.000 kg volumen total", labelEn = "50,000 kg total volume" },
+        new { code = "volume_100k", threshold = 100000m, current = totalVolume, icon = "⚡", labelEs = "100.000 kg volumen total", labelEn = "100,000 kg total volume" },
+        new { code = "weight_100kg", threshold = 100m, current = maxWeightAnyExercise, icon = "💯", labelEs = "100 kg en cualquier ejercicio", labelEn = "100 kg on any exercise" },
+        new { code = "weight_150kg", threshold = 150m, current = maxWeightAnyExercise, icon = "🔥", labelEs = "150 kg en cualquier ejercicio", labelEn = "150 kg on any exercise" },
+        new { code = "weeks_4", threshold = 4m, current = (decimal)weeksActive, icon = "📅", labelEs = "1 mes entrenando", labelEn = "1 month training" },
+        new { code = "weeks_12", threshold = 12m, current = (decimal)weeksActive, icon = "📆", labelEs = "3 meses entrenando", labelEn = "3 months training" },
+        new { code = "weeks_26", threshold = 26m, current = (decimal)weeksActive, icon = "🗓️", labelEs = "6 meses entrenando", labelEn = "6 months training" },
+    };
+
+    var result = defs.Select(d => new
+    {
+        code = d.code,
+        unlocked = d.current >= d.threshold,
+        icon = d.icon,
+        labelEs = d.labelEs,
+        labelEn = d.labelEn,
+        progress = d.threshold > 0 ? Math.Min(100, Math.Round((double)(d.current / d.threshold) * 100)) : 0,
+        current = d.current,
+        threshold = d.threshold
+    }).ToList();
+
+    return Results.Ok(new
+    {
+        totalWorkouts,
+        totalVolume,
+        maxWeight = maxWeightAnyExercise,
+        weeksActive,
+        achievements = result
+    });
+})
+.WithName("GetAchievements")
+.WithOpenApi()
+.RequireAuthorization();
+
+// -- Export workouts to CSV --
+app.MapGet("/export/workouts.csv", (FitCycleDbContext db, ClaimsPrincipal user) =>
+{
+    var userId = int.Parse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+    var sessions = db.WorkoutSessions
+        .Where(w => w.UserId == userId)
+        .Include(s => s.ExerciseLogs)
+        .OrderByDescending(s => s.CompletedAt)
+        .ToList();
+
+    var sb = new System.Text.StringBuilder();
+    sb.AppendLine("Date,Day,Duration_min,Exercise,Sets,Reps,Weight_kg,MuscleGroup,SetDetails");
+    static string Esc(string s) => "\"" + (s ?? "").Replace("\"", "\"\"") + "\"";
+
+    foreach (var s in sessions)
+    {
+        var date = s.CompletedAt.ToString("yyyy-MM-dd HH:mm");
+        var day = s.Day.ToString();
+        var durMin = (int)Math.Round((s.CompletedAt - s.StartedAt).TotalMinutes);
+        foreach (var l in s.ExerciseLogs)
+        {
+            sb.Append(Esc(date)).Append(',')
+              .Append(Esc(day)).Append(',')
+              .Append(durMin).Append(',')
+              .Append(Esc(l.ExerciseName)).Append(',')
+              .Append(l.Sets).Append(',')
+              .Append(l.Reps).Append(',')
+              .Append(l.Weight).Append(',')
+              .Append(Esc(l.MuscleGroupName)).Append(',')
+              .Append(Esc(l.SetDetails))
+              .AppendLine();
+        }
+    }
+
+    return Results.File(System.Text.Encoding.UTF8.GetBytes(sb.ToString()), "text/csv", $"fitcycle-workouts-{DateTime.UtcNow:yyyyMMdd}.csv");
+})
+.WithName("ExportWorkoutsCsv")
 .WithOpenApi()
 .RequireAuthorization();
 
@@ -1711,6 +1865,7 @@ app.Run();
 
 record GenerateRoutineRequest(string Goal, string Level, int Days, string? Equipment = null, string? Notes = null);
 record ExerciseSuggestionRequest(string Query);
+record SetVideoRequest(string? VideoUrl);
 record UpdateProfileRequest(string? Username = null, string? Email = null);
 record ChangeMyPasswordRequest(string CurrentPassword, string NewPassword);
 record SqlQueryRequest(string Query);

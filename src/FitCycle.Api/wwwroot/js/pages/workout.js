@@ -3,7 +3,7 @@
 import { t, dayName, muscleGroup as mgTranslate, exerciseName as exTranslate } from '../l10n.js';
 import { api } from '../api.js';
 import { offline } from '../offline.js';
-import { escapeHtml, haptic, estimate1RM, celebrate, confetti } from '../utils.js';
+import { escapeHtml, haptic, estimate1RM, celebrate, confetti, showVideoModal } from '../utils.js';
 
 let dayNum = 0;
 let exercises = [];
@@ -244,6 +244,15 @@ function renderExercise() {
     return `<div class="set-dot ${cls}" title="S${i + 1}: ${s.reps}r / ${s.weight}kg"></div>`;
   }).join('');
 
+  // Auto-set rest time based on the exercise type when the timer isn't running.
+  if (!timerRunning) {
+    const suggested = suggestRestSeconds(ex);
+    if (suggested && Math.abs(timerSeconds - suggested) > 5) timerSeconds = suggested;
+  }
+
+  // Progression suggestion (only on the FIRST set so it doesn't distract mid-exercise)
+  const progression = currentSet === 0 ? suggestProgression(ex) : null;
+
   // Default timer: 1 minute (1:00). Pickers reflect the current `timerSeconds` state.
   const currentMin = Math.floor(timerSeconds / 60);
   const currentSec = timerSeconds % 60;
@@ -291,8 +300,11 @@ function renderExercise() {
             }
             <div class="workout-img-placeholder" style="display:${exImage ? 'none' : 'flex'};align-items:center;justify-content:center;width:100%;height:100%;font-size:40px;opacity:0.3;">&#128247;</div>
           </div>
-          <div style="min-width:0;">
-            <div style="font-size:12px;color:#512BD4;font-weight:600;">${t('ExerciseProgress', currentIndex + 1, exercises.length)}</div>
+          <div style="min-width:0;flex:1;">
+            <div style="display:flex;align-items:center;gap:6px;">
+              <div style="font-size:12px;color:#512BD4;font-weight:600;">${t('ExerciseProgress', currentIndex + 1, exercises.length)}</div>
+              <button id="workout-video-btn" class="video-btn ${ex.videoUrl || ex.VideoUrl ? '' : 'empty'}" title="${t('Demo') || 'Demo'}">▶ ${t('Demo') || 'Demo'}</button>
+            </div>
             <div class="workout-exercise-name">${escapeHtml(exName)}</div>
             <div style="font-size:13px;color:gray;">${mgTranslate(exMuscle)}</div>
             ${ssPartnerName ? `
@@ -342,6 +354,13 @@ function renderExercise() {
               ? `<div style="text-align:center;margin-top:6px;"><span class="one-rm-badge" title="${t('OneRMTooltip')}">${t('OneRM')}: ${oneRM} kg</span></div>`
               : '';
           })()}
+          ${progression ? `
+            <button id="apply-progression" class="progression-chip"
+              title="${t('ProgressionTooltip')}"
+              style="display:block;margin:8px auto 0;background:linear-gradient(135deg,#28a745,#20c997);color:#fff;border:none;padding:6px 14px;border-radius:20px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 2px 6px rgba(40,167,69,0.3);">
+              ${t('ProgressionSuggest', '+' + progression.delta, progression.newWeight)}
+            </button>
+          ` : ''}
           ${(currentSetData.tempoPos > 0 || currentSetData.tempoNeg > 0 || currentSetData.grip) ? `
             <div style="margin-top:8px;display:flex;justify-content:center;gap:8px;flex-wrap:wrap;">
               ${currentSetData.tempoPos > 0 || currentSetData.tempoNeg > 0 ? `
@@ -473,6 +492,44 @@ function renderExercise() {
     document.getElementById('prefill-banner')?.remove();
   });
 
+  document.getElementById('workout-video-btn')?.addEventListener('click', () => {
+    const ex = exercises[currentIndex];
+    if (!ex) return;
+    const exId = ex.exerciseId || ex.ExerciseId || ex.id || ex.Id;
+    const currentUrl = ex.videoUrl || ex.VideoUrl || '';
+    showVideoModal({
+      url: currentUrl,
+      title: exTranslate(ex.exerciseName || ex.name || ''),
+      editable: true,
+      onSave: async (newUrl) => {
+        try {
+          const res = await api.put(`/exercises/${exId}/video`, { videoUrl: newUrl });
+          const updated = res.videoUrl || res.VideoUrl || '';
+          // Update all references in memory (could appear twice for supersets)
+          for (const e of exercises) {
+            if ((e.exerciseId || e.ExerciseId || e.id || e.Id) === exId) {
+              e.videoUrl = updated;
+              e.VideoUrl = updated;
+            }
+          }
+          renderExercise();
+        } catch (err) { console.warn('Failed to save video URL', err); }
+      }
+    });
+  });
+
+  document.getElementById('apply-progression')?.addEventListener('click', () => {
+    const ex = exercises[currentIndex];
+    if (!ex) return;
+    const progression = suggestProgression(ex);
+    if (!progression) return;
+    // Apply new weight to all sets of this exercise
+    for (const sd of ex.setDetails) sd.weight = progression.newWeight;
+    haptic('success');
+    saveProgress();
+    renderExercise();
+  });
+
   document.getElementById('workout-finish')?.addEventListener('click', () => { saveCurrentSetValues(); finishWorkout(); });
 
   // Auto-save on weight/reps input change. Keep the manual input and the dropdown in sync.
@@ -530,6 +587,59 @@ function buildWorkoutRepsOptions(selected) {
   for (let i = 1; i <= 50; i++) vals.push(i);
   if (selected > 0 && !vals.includes(selected)) { vals.push(selected); vals.sort((a, b) => a - b); }
   return vals.map(v => `<option value="${v}" ${v === selected ? 'selected' : ''}>${v}</option>`).join('');
+}
+
+/**
+ * Suggests a weight increment based on the user's recent performance on this exercise.
+ * Heuristic:
+ * - if last workout completed every set at the target reps (or above) → suggest +2.5kg compound / +1.25kg isolation.
+ * - if reps high in every set (>= target+2) → suggest +5kg compound / +2.5kg isolation.
+ * - otherwise → no suggestion.
+ * Returns { delta: number, newWeight: number } or null.
+ */
+function suggestProgression(exercise) {
+  if (!exercise || !exercise.setDetails || exercise.setDetails.length === 0) return null;
+  const sets = exercise.setDetails;
+  const allWeightsEqual = sets.every(s => s.weight === sets[0].weight && s.weight > 0);
+  if (!allWeightsEqual) return null;
+
+  // Get the lowest reps across all sets — if even the hardest set was easy, suggest progression
+  const minReps = Math.min(...sets.map(s => s.reps || 0));
+  if (minReps === 0) return null;
+
+  const name = (exercise.exerciseName || exercise.name || '').toLowerCase();
+  const isCompound = ['press banca', 'sentadilla', 'peso muerto', 'press militar', 'dominada', 'remo', 'hip thrust', 'prensa'].some(k => name.includes(k));
+  const isIsolation = ['curl', 'extension', 'extensión', 'elevación', 'patada', 'aductor', 'abductor', 'gemelo'].some(k => name.includes(k));
+
+  // Target reps assumed from set's reps field (the routine value)
+  const targetReps = sets[0].reps;
+  if (minReps < targetReps) return null; // Didn't complete all reps
+
+  let delta;
+  if (minReps >= targetReps + 2) {
+    delta = isCompound ? 5 : (isIsolation ? 2.5 : 2.5);
+  } else if (minReps >= targetReps) {
+    delta = isCompound ? 2.5 : (isIsolation ? 1.25 : 1.25);
+  } else {
+    return null;
+  }
+
+  return { delta, newWeight: sets[0].weight + delta };
+}
+
+/**
+ * Suggests a rest time in seconds based on the exercise name.
+ * Compound heavy (squat, bench, deadlift): 180s
+ * Compound medium (press militar, remo, dominada): 120s
+ * Isolation / arms / cardio: 60s
+ * Defaults to 60s if nothing matches.
+ */
+function suggestRestSeconds(exercise) {
+  const name = (exercise?.exerciseName || exercise?.name || '').toLowerCase();
+  if (['sentadilla', 'peso muerto', 'press banca', 'prensa', 'hack'].some(k => name.includes(k))) return 180;
+  if (['press militar', 'remo', 'dominada', 'jalón', 'jalon', 'hip thrust', 'sentadilla búlgara', 'sentadilla bulgara', 'zancada'].some(k => name.includes(k))) return 120;
+  if (['superserie', 'super serie'].some(k => name.includes(k))) return 90;
+  return 60;
 }
 
 function saveCurrentSetValues() {

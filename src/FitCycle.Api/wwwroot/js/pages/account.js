@@ -103,6 +103,13 @@ export function render() {
 
         <div class="divider"></div>
 
+        <!-- Export -->
+        <div class="account-section">
+          <button id="account-export-csv" class="btn btn-outline btn-block" style="color:#0d6efd;border-color:#0d6efd;">📥 ${t('ExportCsv')}</button>
+        </div>
+
+        <div class="divider"></div>
+
         <!-- Logout -->
         <div class="account-section">
           <button id="account-logout" class="btn btn-danger btn-block">${t('Logout')}</button>
@@ -144,6 +151,25 @@ export async function mount() {
   // Back button
   document.getElementById('account-back')?.addEventListener('click', () => {
     location.hash = '#home';
+  });
+
+  // Export CSV — direct file download via authenticated fetch
+  document.getElementById('account-export-csv')?.addEventListener('click', async () => {
+    try {
+      const token = auth.getAccessToken?.() || localStorage.getItem('auth_access_token');
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await fetch('/export/workouts.csv', { headers });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `fitcycle-workouts-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) {
+      showAlert(t('ErrorFmt', err.message || err));
+    }
   });
 
   // Logout

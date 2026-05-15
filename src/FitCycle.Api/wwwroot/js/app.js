@@ -19,6 +19,7 @@ import * as adminPage from './pages/admin.js';
 import * as homePage from './pages/home.js';
 import * as tutorialPage from './pages/tutorial.js';
 import * as aiPage from './pages/ai.js';
+import * as calendarPage from './pages/calendar.js';
 
 // ─── Init ───────────────────────────────────────────────────────────
 l10nInit();
@@ -43,6 +44,7 @@ const routes = {
   admin:        { mod: adminPage,       header: true,  tabs: false },
   tutorial:     { mod: tutorialPage,   header: true,  tabs: false },
   ai:           { mod: aiPage,        header: true,  tabs: true },
+  calendar:     { mod: calendarPage,  header: true,  tabs: true },
 };
 
 // ─── Router ─────────────────────────────────────────────────────────

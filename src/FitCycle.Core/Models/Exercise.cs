@@ -8,6 +8,8 @@ public class Exercise
     public string Name { get; set; } = string.Empty;
     public int MuscleGroupId { get; set; }
     public string ImageUrl { get; set; } = string.Empty;
+    /// <summary>Optional URL to a YouTube demo video for the movement.</summary>
+    public string? VideoUrl { get; set; }
     [JsonIgnore]
     public MuscleGroup? MuscleGroup { get; set; }
 }

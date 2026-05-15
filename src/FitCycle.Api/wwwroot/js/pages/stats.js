@@ -22,9 +22,10 @@ export async function mount() {
   if (!container) return;
 
   try {
-    const [stats, workouts] = await Promise.all([
+    const [stats, workouts, achievementsData] = await Promise.all([
       api.get('/workouts/stats'),
       api.get('/workouts'),
+      api.get('/achievements').catch(() => null),
     ]);
 
     if (!stats || stats.totalWorkouts === 0) {
@@ -148,6 +149,29 @@ export async function mount() {
               </div>
             `;
           }).join('')}
+        </div>
+      `;
+    }
+
+    // Achievements card (after stats, before history)
+    if (achievementsData && achievementsData.achievements) {
+      const unlocked = achievementsData.achievements.filter(a => a.unlocked).length;
+      const total = achievementsData.achievements.length;
+      html += `
+        <div class="card mb-8">
+          <div class="card-title mb-8">
+            ${t('AchievementsTitle')}
+            <span style="font-size:13px;font-weight:400;color:var(--text-light);float:right;">${unlocked}/${total}</span>
+          </div>
+          <div class="achievements-grid">
+            ${achievementsData.achievements.map(a => `
+              <div class="achievement-card ${a.unlocked ? 'unlocked' : 'locked'}" title="${a.labelEs} (${a.progress}%)">
+                <div class="achievement-icon">${a.icon}</div>
+                <div class="achievement-label">${a.labelEs}</div>
+                <div class="achievement-progress"><div class="achievement-progress-bar" style="width:${a.progress}%"></div></div>
+              </div>
+            `).join('')}
+          </div>
         </div>
       `;
     }

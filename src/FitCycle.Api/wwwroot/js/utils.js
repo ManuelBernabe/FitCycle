@@ -375,6 +375,69 @@ export function checkStreakMilestone(streak) {
   showStreakModal(streak, reached);
 }
 
+// ── YouTube demo video modal ──
+
+/**
+ * Extracts the YouTube video ID from a watch / share / shorts URL.
+ * Returns null if the URL doesn't look like YouTube.
+ */
+export function extractYoutubeId(url) {
+  if (!url) return null;
+  const m = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})/);
+  return m ? m[1] : null;
+}
+
+/**
+ * Opens a modal with a YouTube embed.
+ * If `editable` is true, shows an input for the URL and a Save callback.
+ */
+export function showVideoModal({ url, title, editable = false, onSave = null }) {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay modal-centered';
+  overlay.style.zIndex = '200';
+
+  const videoId = extractYoutubeId(url);
+  const iframeHtml = videoId
+    ? `<div class="video-wrap">
+        <iframe src="https://www.youtube.com/embed/${videoId}" frameborder="0"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowfullscreen></iframe>
+      </div>`
+    : `<div class="video-placeholder">${t('NoVideoForExercise') || 'No hay vídeo configurado'}</div>`;
+
+  const editBlock = editable
+    ? `<div style="margin-top:12px;">
+        <label style="font-size:12px;color:var(--text-light);display:block;margin-bottom:4px;">${t('YouTubeUrlLabel') || 'URL de YouTube'}</label>
+        <input id="video-url-input" type="url" class="form-input" placeholder="https://youtu.be/..."
+          value="${(url || '').replace(/"/g, '&quot;')}" style="width:100%;">
+        <div style="display:flex;gap:8px;margin-top:10px;">
+          <button class="btn btn-outline btn-block" id="video-cancel">${t('Cancel') || 'Cancelar'}</button>
+          <button class="btn btn-primary btn-block" id="video-save">${t('Save') || 'Guardar'}</button>
+        </div>
+      </div>`
+    : `<button class="btn btn-primary btn-block" id="video-close" style="margin-top:12px;">${t('Close') || 'Cerrar'}</button>`;
+
+  overlay.innerHTML = `
+    <div class="modal-content" style="max-width:500px;width:90%;">
+      ${title ? `<div style="font-weight:700;font-size:16px;margin-bottom:10px;text-align:center;">${escapeHtml(title)}</div>` : ''}
+      ${iframeHtml}
+      ${editBlock}
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+  overlay.querySelector('#video-close')?.addEventListener('click', close);
+  overlay.querySelector('#video-cancel')?.addEventListener('click', close);
+  overlay.querySelector('#video-save')?.addEventListener('click', () => {
+    const input = overlay.querySelector('#video-url-input');
+    const newUrl = input?.value.trim() || '';
+    close();
+    if (onSave) onSave(newUrl);
+  });
+}
+
 function showStreakModal(streak, milestone) {
   const overlay = createModalOverlay();
   overlay.innerHTML = `

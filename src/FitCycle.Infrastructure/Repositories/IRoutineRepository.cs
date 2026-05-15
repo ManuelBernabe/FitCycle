@@ -8,6 +8,7 @@ public interface IRoutineRepository
     IReadOnlyList<Exercise> GetExercises(int? muscleGroupId = null);
     Exercise AddExercise(string name, int muscleGroupId);
     Exercise? SetExerciseImageUrl(int exerciseId, string imageUrl);
+    Exercise? SetExerciseVideoUrl(int exerciseId, string videoUrl);
     WeekRoutine GetWeekRoutine(int userId);
     DayRoutine GetDayRoutine(DayOfWeek day, int userId);
     DayRoutine SetDayRoutine(DayOfWeek day, List<int> muscleGroupIds, List<RoutineExerciseInput> exercises, int userId,

@@ -416,6 +416,15 @@ public class SqliteRoutineRepository : IRoutineRepository
         return exercise;
     }
 
+    public Exercise? SetExerciseVideoUrl(int exerciseId, string videoUrl)
+    {
+        var exercise = _db.Exercises.FirstOrDefault(e => e.Id == exerciseId);
+        if (exercise == null) return null;
+        exercise.VideoUrl = string.IsNullOrWhiteSpace(videoUrl) ? null : videoUrl.Trim();
+        _db.SaveChanges();
+        return exercise;
+    }
+
     public WeekRoutine GetWeekRoutine(int userId)
     {
         var validDays = new[]
