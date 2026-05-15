@@ -108,6 +108,46 @@ public class PdfExerciseMarkerTests
     }
 
     [Fact]
+    public void PlusPrefix_Followed_By_PesoAlto_Is_Not_Treated_As_Partner()
+    {
+        // Real-world case: a PDF table cell contains "PESO ALTO" as an intensity annotation,
+        // sometimes extracted on its own line as "+ PESO ALTO". This must NOT become a partner.
+        var text = """
+            FEMORAL+ GLUTEO (JUEVES)
+            [EX] Femoral tumbado
+            Serie 1 2 3
+            Reps 12 12 10
+            + PESO ALTO
+            """;
+        var result = LocalPdfParser.Parse(text);
+        var day = result.Routines.FirstOrDefault(r => r.DayOfWeek == 4);
+        Assert.NotNull(day);
+        Assert.DoesNotContain(day.Exercises, e => (e.Name ?? "").Contains("Peso Alto", StringComparison.OrdinalIgnoreCase));
+        var femoral = day.Exercises.FirstOrDefault();
+        Assert.NotNull(femoral);
+        Assert.Null(femoral.SupersetWith);
+    }
+
+    [Fact]
+    public void Exercise_Name_With_Inline_Description_After_Colon_Is_Truncated()
+    {
+        // The trainer's PDF emits green "Abductor:" followed by black "PONIENDONOS DE PIE...".
+        // When extraction merges them, the exercise name must be truncated to just "Abductor".
+        var text = """
+            GLUTEO (LUNES)
+            [EX] Abductor: PONIENDONOS DE PIE Y APRETANDO EL GLUTEO
+            Serie 1 2 3
+            Reps 20 12 10
+            """;
+        var result = LocalPdfParser.Parse(text);
+        var day = result.Routines.FirstOrDefault(r => r.DayOfWeek == 1);
+        Assert.NotNull(day);
+        var ex = day.Exercises.FirstOrDefault();
+        Assert.NotNull(ex);
+        Assert.Equal("Abductor", ex.Name);
+    }
+
+    [Fact]
     public void Non_Marked_Lines_Still_Pass_Through_Heuristic()
     {
         // Regression: ensure the existing heuristic-based detection keeps working

@@ -534,6 +534,23 @@ public class PdfImportService : IPdfImportService
         "RECUERDA", "IMPORTANTE", "CUIDADO", "EVITA",
         "INICIO", "FIN", "FINAL", "PAUSA", "PAUSAS",
         "PROCURA", "MANTÉN", "MANTEN", "INTENTA", "ASEGÚRATE", "ASEGURATE",
+        // Sentence connectors / participles — when these lead a green segment it's a wrapping
+        // description, not an exercise (e.g. "Que quede en el aire, generando tensión...").
+        "QUE", "Y", "PERO", "O", "U", "NI", "AUNQUE", "PORQUE", "PUES",
+        "MIENTRAS", "CUANDO", "DONDE", "COMO", "HASTA", "DESDE",
+        "QUEDE", "QUEDAR", "QUEDATE", "QUÉDATE",
+        "DEJANDO", "GENERANDO", "MANTENIENDO", "HACIENDO", "SIENDO", "DANDO",
+        "BAJANDO", "SUBIENDO", "EMPUJANDO", "TIRANDO", "APRETANDO",
+        "PONIENDO", "PONIENDONOS", "PONIÉNDONOS", "PONIENDOTE", "PONIÉNDOTE",
+    };
+
+    // Whole-line annotations that look like exercises but are really table-cell intensity tags
+    // (e.g. "PESO ALTO", "PESO LIGERO" written next to a reps number). Reject when the whole green
+    // segment matches one of these. "Peso muerto" remains a valid exercise.
+    internal static readonly HashSet<string> WeightAnnotations = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "PESO ALTO", "PESO LIGERO", "PESO MEDIO", "PESO MAXIMO", "PESO MÁXIMO",
+        "PESO MINIMO", "PESO MÍNIMO", "PESO BAJO", "ALTO PESO", "BAJO PESO",
     };
 
     // Pure muscle-group section labels — only reject if the ENTIRE line (minus punctuation)
@@ -564,6 +581,13 @@ public class PdfImportService : IPdfImportService
         var joined = string.Join(" ", words.Select(w => w.text)).Trim();
         var stripped = joined.TrimEnd(':', '.', ',').Trim();
         if (PureSectionHeaders.Contains(stripped.ToUpperInvariant())) return true;
+
+        // Weight-intensity table annotations: "PESO ALTO", "PESO LIGERO" — never an exercise.
+        if (WeightAnnotations.Contains(stripped)) return true;
+
+        // Pure-digit / digit-only-with-units rows (table cells like "12", "12 reps").
+        if (Regex.IsMatch(stripped, @"^\d+(\s*(reps?|series?|x|×|\*)\s*\d*)?$", RegexOptions.IgnoreCase))
+            return true;
 
         return false;
     }
@@ -990,6 +1014,15 @@ public static class LocalPdfParser
             if (Regex.IsMatch(line, @"^\+\s*(super\s+serie\s+|superserie\s+)?", RegexOptions.IgnoreCase))
             {
                 var partnerLine = Regex.Replace(line, @"^\+\s*(super\s+serie\s+|superserie\s+)?", "", RegexOptions.IgnoreCase).Trim();
+                var partnerUpper = partnerLine.TrimEnd(':', '.', ',').ToUpperInvariant();
+                bool isBogusPartner =
+                    PdfImportService.WeightAnnotations.Contains(partnerUpper) ||
+                    Regex.IsMatch(partnerUpper, @"^\d+(\s+(REPS?|SERIES?|PESO\s+(ALTO|LIGERO|MEDIO|BAJO|MAX[IÍ]MO|M[IÍ]NIMO)))?$");
+                if (isBogusPartner)
+                {
+                    // Drop the whole line — it's a table-cell annotation, not an exercise.
+                    continue;
+                }
                 if (partnerLine.Length >= 3 && current != null)
                 {
                     FinalizeNotes(current, notesBuilder);
@@ -1555,6 +1588,17 @@ public static class LocalPdfParser
     {
         // Remove leading numbering like "1." or "1-"
         name = Regex.Replace(name, @"^\d+[\.\-\)]\s*", "").Trim();
+
+        // Truncate at "Name: <description>" — keep only the part before the colon when there
+        // is substantive content after it. Handles cases like "Abductor: PONIENDONOS DE PIE...".
+        var colonIdx = name.IndexOf(':');
+        if (colonIdx > 2 && colonIdx < name.Length - 1)
+        {
+            var after = name[(colonIdx + 1)..].Trim();
+            if (after.Length >= 3)
+                name = name[..colonIdx].Trim();
+        }
+
         // Remove trailing colons, periods, dashes
         name = name.TrimEnd(':', '.', ',', '-', ' ');
 
