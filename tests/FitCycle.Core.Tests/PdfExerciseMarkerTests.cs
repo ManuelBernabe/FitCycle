@@ -1,4 +1,5 @@
 using FitCycle.Infrastructure.Services;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FitCycle.Core.Tests;
 
@@ -199,6 +200,40 @@ public class PdfExerciseMarkerTests
         var ex = day.Exercises.FirstOrDefault();
         Assert.NotNull(ex);
         Assert.Equal("Elevación De Lumbar", ex.Name);
+    }
+
+    [Fact]
+    public void Sanitize_Ai_Extraction_Drops_Bogus_Peso_Lines()
+    {
+        // AI returns these on top of legit exercises; SanitizeAiExtraction must strip them.
+        var ai = new PdfExtraction
+        {
+            Routines =
+            {
+                new PdfDayRoutine
+                {
+                    DayOfWeek = 4,
+                    Exercises =
+                    {
+                        new PdfExercise { Name = "Femoral Tumbado" },
+                        new PdfExercise { Name = "Peso Alto Peso Alto Peso Alto" },
+                        new PdfExercise { Name = "Peso ligero y que se pueda controlar" },
+                        new PdfExercise { Name = "Peso muerto rumano" },
+                        new PdfExercise { Name = "Elevación de lumbar, pero teniendo la espalda recta" },
+                    }
+                }
+            }
+        };
+
+        PdfImportService.SanitizeAiExtraction(ai, NullLogger.Instance);
+
+        var day = ai.Routines[0];
+        var names = day.Exercises.Select(e => e.Name).ToList();
+        Assert.Contains("Femoral Tumbado", names);
+        Assert.Contains("Peso muerto rumano", names);
+        Assert.Contains("Elevación de lumbar", names); // truncated at comma+pero
+        Assert.DoesNotContain(names, n => n != null && n.StartsWith("Peso Alto", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(names, n => n != null && n.StartsWith("Peso ligero", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

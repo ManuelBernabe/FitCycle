@@ -85,6 +85,12 @@ public class PdfImportService : IPdfImportService
                     var aiExerciseCount = aiExtraction?.Routines?.Sum(r => r.Exercises.Count) ?? 0;
                     _logger.LogInformation("AI found {Days} days, {Ex} exercises", aiUsefulDays, aiExerciseCount);
 
+                    // The AI sometimes echoes back table-cell annotations ("Peso Alto") or
+                    // coaching descriptions ("Peso ligero y que se pueda controlar...") as if
+                    // they were exercises. Strip them out before merging so they don't get
+                    // re-introduced after the local parser already rejected them.
+                    if (aiExtraction != null) SanitizeAiExtraction(aiExtraction, _logger);
+
                     extraction = MergeExtractions(extraction, aiExtraction, _logger);
                 }
                 catch (JsonException ex)
@@ -366,6 +372,34 @@ public class PdfImportService : IPdfImportService
     /// Merges local-parser and AI extractions: for each day-of-week, keeps the
     /// version with more exercises. Days only present in one source are kept as-is.
     /// </summary>
+    /// <summary>
+    /// Strips bogus "exercises" the AI may have hallucinated from green-styled table cells or
+    /// coaching descriptions before the merge step runs. Keeps real exercises untouched.
+    /// </summary>
+    internal static void SanitizeAiExtraction(PdfExtraction ai, ILogger logger)
+    {
+        foreach (var day in ai.Routines)
+        {
+            // First, normalize names: truncate at colon+description and comma+conjunction so
+            // AI-generated names match the local-parser canonical form for the merge dedup.
+            foreach (var ex in day.Exercises)
+            {
+                if (!string.IsNullOrWhiteSpace(ex.Name))
+                    ex.Name = LocalPdfParser.CleanExerciseName(ex.Name).Trim();
+            }
+
+            int before = day.Exercises.Count;
+            day.Exercises = day.Exercises
+                .Where(e => !string.IsNullOrWhiteSpace(e.Name)
+                            && e.Name!.Length >= 3
+                            && !LocalPdfParser.IsBogusGreenExerciseLine(e.Name!))
+                .ToList();
+            int removed = before - day.Exercises.Count;
+            if (removed > 0)
+                logger.LogInformation("AI sanitize day {Day}: removed {N} bogus exercise(s)", day.DayOfWeek, removed);
+        }
+    }
+
     private static PdfExtraction MergeExtractions(PdfExtraction? local, PdfExtraction? ai, ILogger logger)
     {
         if (ai == null || ai.Routines.Count == 0) return local ?? new PdfExtraction();
@@ -1693,7 +1727,7 @@ public static class LocalPdfParser
     /// <summary>
     /// Cleans exercise name: remove numbering, trailing punctuation, truncate long names
     /// </summary>
-    private static string CleanExerciseName(string name)
+    internal static string CleanExerciseName(string name)
     {
         // Remove leading numbering like "1." or "1-"
         name = Regex.Replace(name, @"^\d+[\.\-\)]\s*", "").Trim();
