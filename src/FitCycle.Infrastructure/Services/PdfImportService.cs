@@ -1183,11 +1183,12 @@ public static class LocalPdfParser
                 }
             }
 
-            // Even when a line is [EX]-marked (i.e. it came in green from the PDF), reject it if
-            // it's actually a table-cell annotation that just happens to be green-styled. Without
-            // this guard, "Peso Alto Peso Alto Peso Alto" (3 green table cells concatenated) or
-            // "Peso ligero y que se pueda controlar..." would become exercises.
-            if (isMarkedExercise && IsBogusGreenExerciseLine(line))
+            // Table-cell annotations like "PESO ALTO PESO ALTO PESO ALTO" (typed in black inside
+            // the reps cell) or "PESO LIGERO Y QUE SE PUEDA CONTROLAR..." (an instruction above
+            // the next table) look exercise-like to the uppercase/title-case heuristic. Reject
+            // them regardless of whether they were marked green by the extractor — otherwise
+            // they become `current` and the next "+ Super serie ..." line attaches to them.
+            if (IsBogusGreenExerciseLine(line))
             {
                 continue;
             }

@@ -237,6 +237,61 @@ public class PdfExerciseMarkerTests
     }
 
     [Fact]
+    public void Black_PESO_ALTO_Inside_Table_Does_Not_Steal_Superset_Partner()
+    {
+        // Reproduces the trainer's PDF: "Femoral tumbado" green, then a table whose Reps cell
+        // contains "PESO ALTO" (in BLACK — no [EX] marker), then the partner line.
+        // Bug we are fixing: "PESO ALTO PESO ALTO PESO ALTO" was being detected by the uppercase
+        // heuristic, becoming the current exercise, and the "+ Super serie ..." partner was
+        // attaching to it instead of "Femoral tumbado".
+        var text = """
+            FEMORAL (JUEVES)
+            [EX] Femoral tumbado
+            Serie 1 2 3
+            Reps 12 12 10
+            PESO ALTO PESO ALTO PESO ALTO
+            Fase positiva 2 2 2
+            Tiempo de descanso 1m 1m 1m
+            + Super serie femoral unilateral tumbado
+            Serie 1 2 3
+            Reps 8 8 8
+            """;
+        var result = LocalPdfParser.Parse(text);
+        var day = result.Routines.FirstOrDefault(r => r.DayOfWeek == 4);
+        Assert.NotNull(day);
+
+        // "Peso Alto" must not have been imported as an exercise.
+        Assert.DoesNotContain(day.Exercises, e => (e.Name ?? "").Contains("Peso Alto", StringComparison.OrdinalIgnoreCase));
+
+        // The superset must pair Femoral Tumbado <-> Femoral Unilateral Tumbado.
+        var femoralTumbado = day.Exercises.FirstOrDefault(e => (e.Name ?? "").Contains("Tumbado", StringComparison.OrdinalIgnoreCase) && !(e.Name ?? "").Contains("Unilateral", StringComparison.OrdinalIgnoreCase));
+        var femoralUnilateral = day.Exercises.FirstOrDefault(e => (e.Name ?? "").Contains("Unilateral", StringComparison.OrdinalIgnoreCase));
+        Assert.NotNull(femoralTumbado);
+        Assert.NotNull(femoralUnilateral);
+        Assert.Equal(femoralUnilateral.Name, femoralTumbado.SupersetWith);
+        Assert.Equal(femoralTumbado.Name, femoralUnilateral.SupersetWith);
+    }
+
+    [Fact]
+    public void Black_All_Caps_PESO_LIGERO_Instruction_Is_Not_Exercise()
+    {
+        // "PESO LIGERO Y QUE SE PUEDA CONTROLAR PARA LLEVAR LOS TIEMPOS PAUTADOS" appears in the
+        // trainer's PDF as a black, all-caps instruction above the next table. The uppercase
+        // heuristic was importing it as an exercise; it must be discarded.
+        var text = """
+            FEMORAL (JUEVES)
+            [EX] Femoral unilateral tumbado
+            PESO LIGERO Y QUE SE PUEDA CONTROLAR PARA LLEVAR LOS TIEMPOS PAUTADOS
+            Serie 1 2 3
+            Reps 8 8 8
+            """;
+        var result = LocalPdfParser.Parse(text);
+        var day = result.Routines.FirstOrDefault(r => r.DayOfWeek == 4);
+        Assert.NotNull(day);
+        Assert.DoesNotContain(day.Exercises, e => (e.Name ?? "").StartsWith("Peso Ligero", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public void Non_Marked_Lines_Still_Pass_Through_Heuristic()
     {
         // Regression: ensure the existing heuristic-based detection keeps working
