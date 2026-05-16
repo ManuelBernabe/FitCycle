@@ -292,6 +292,26 @@ public class PdfExerciseMarkerTests
     }
 
     [Fact]
+    public void Reps_Row_With_Per_Leg_Text_Captures_All_Three_Sets()
+    {
+        // The trainer's PDF prints "Reps 8 rep por pierna 8 rep por pierna 8 rep por pierna".
+        // The old regex stopped at the first non-digit and produced 1 set; we must get 3.
+        var text = """
+            FEMORAL (JUEVES)
+            [EX] Femoral unilateral tumbado
+            Serie 1 2 3
+            Reps 8 rep por pierna 8 rep por pierna 8 rep por pierna
+            """;
+        var result = LocalPdfParser.Parse(text);
+        var day = result.Routines.FirstOrDefault(r => r.DayOfWeek == 4);
+        Assert.NotNull(day);
+        var ex = day.Exercises.FirstOrDefault();
+        Assert.NotNull(ex);
+        Assert.Equal(3, ex.Sets.Count);
+        Assert.All(ex.Sets, s => Assert.Equal(8, s.Reps));
+    }
+
+    [Fact]
     public void Non_Marked_Lines_Still_Pass_Through_Heuristic()
     {
         // Regression: ensure the existing heuristic-based detection keeps working

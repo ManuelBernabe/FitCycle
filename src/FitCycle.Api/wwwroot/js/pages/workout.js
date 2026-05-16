@@ -658,20 +658,39 @@ function advanceToNext() {
     if (partnerIdx >= 0) {
       const isFirstInPair = currentIndex < partnerIdx;
       if (isFirstInPair) {
+        // After the FIRST partner's set, hop to the SECOND partner at the same set index.
+        // If the second partner has fewer sets, clamp to its last set. Don't increment yet.
         currentIndex = partnerIdx;
         if (currentSet >= exercises[partnerIdx].setDetails.length) currentSet = exercises[partnerIdx].setDetails.length - 1;
       } else {
+        // After the SECOND partner's set, go back to the FIRST partner at the NEXT set.
+        // If both partners have finished all their sets, exit the pair and move past it.
         const origIdx = currentIndex;
-        currentIndex = partnerIdx;
-        currentSet++;
-        if (currentSet >= exercises[partnerIdx].setDetails.length) {
-          const maxIdx = Math.max(origIdx, partnerIdx);
-          currentIndex = maxIdx + 1;
-          currentSet = 0;
-          if (currentIndex >= exercises.length) {
-            currentIndex = exercises.length - 1;
-            currentSet = exercises[currentIndex].setDetails.length - 1;
+        const firstIdx = partnerIdx;
+        const nextSet = currentSet + 1;
+        const firstDone = nextSet >= exercises[firstIdx].setDetails.length;
+        const secondDone = nextSet >= exercises[origIdx].setDetails.length;
+        // The pair completes when neither partner has another set to do.
+        if (firstDone && secondDone) {
+          const pairLastIdx = Math.max(origIdx, firstIdx);
+          if (pairLastIdx + 1 < exercises.length) {
+            currentIndex = pairLastIdx + 1;
+            currentSet = 0;
+          } else {
+            // No exercises after the pair — stay on the last partner's last set.
+            // The user finalizes by pressing the "Finalizar" button; pressing Next again
+            // must NOT loop back into the pair.
+            currentIndex = origIdx;
+            currentSet = exercises[origIdx].setDetails.length - 1;
           }
+        } else if (firstDone) {
+          // First partner has no sets left — keep doing sets of the second partner.
+          currentIndex = origIdx;
+          currentSet = nextSet;
+        } else {
+          // Normal alternation: jump back to the first partner at the incremented set.
+          currentIndex = firstIdx;
+          currentSet = nextSet;
         }
       }
       saveProgress();

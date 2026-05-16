@@ -1381,17 +1381,25 @@ public static class LocalPdfParser
                 continue;
             }
 
-            // REPS line: "REPS 15 12 10 8"
-            var repsMatch = Regex.Match(line, @"(?:REPS?|REPETICION(?:ES)?)\s*[:\s]+(\d[\d\s,*]+)",
+            // REPS line: "REPS 15 12 10 8" or "Reps 8 rep por pierna 8 rep por pierna 8 rep por pierna".
+            // Strip the REPS prefix and grab every number in the rest of the line — text like
+            // "rep por pierna" between counts must not stop the capture at the first digit.
+            var repsHeaderMatch = Regex.Match(line, @"^(?:REPS?|REPETICION(?:ES)?)\b\s*[:\s]?",
                 RegexOptions.IgnoreCase);
-            if (repsMatch.Success)
+            if (repsHeaderMatch.Success)
             {
-                var repsNums = Regex.Matches(repsMatch.Groups[1].Value, @"\d+")
-                    .Select(m => int.Parse(m.Value)).ToList();
-                current.Sets.Clear();
-                foreach (var r in repsNums)
-                    current.Sets.Add(new PdfSet { Reps = r });
-                continue;
+                var rest = line[repsHeaderMatch.Length..];
+                var repsNums = Regex.Matches(rest, @"\d+")
+                    .Select(m => int.Parse(m.Value))
+                    .Where(n => n > 0 && n < 1000)
+                    .ToList();
+                if (repsNums.Count > 0)
+                {
+                    current.Sets.Clear();
+                    foreach (var r in repsNums)
+                        current.Sets.Add(new PdfSet { Reps = r });
+                    continue;
+                }
             }
 
             // SERIES: N
