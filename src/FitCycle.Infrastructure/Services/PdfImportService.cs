@@ -553,6 +553,23 @@ public class PdfImportService : IPdfImportService
         "PESO MINIMO", "PESO MÍNIMO", "PESO BAJO", "ALTO PESO", "BAJO PESO",
     };
 
+    // Intensity modifiers that, when paired with the word PESO, signal a table-cell annotation
+    // rather than an exercise. "Muerto" is NOT here — "Peso muerto" stays a valid exercise.
+    private static readonly HashSet<string> PesoIntensityModifiers = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "ALTO", "LIGERO", "MEDIO", "BAJO", "MAXIMO", "MÁXIMO", "MINIMO", "MÍNIMO",
+    };
+
+    // Words that, when they FOLLOW a comma inside an exercise name, indicate the rest of the
+    // line is a coaching instruction. We cut the name at the comma.
+    internal static readonly HashSet<string> PostCommaContinuations = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "PERO", "AUNQUE", "MIENTRAS", "CUANDO", "DONDE", "PORQUE", "PUES",
+        "TENIENDO", "DEJANDO", "MANTENIENDO", "GENERANDO", "HACIENDO",
+        "PROCURANDO", "INTENTANDO", "EVITANDO", "CUIDANDO",
+        "Y", "O", "U",
+    };
+
     // Pure muscle-group section labels — only reject if the ENTIRE line (minus punctuation)
     // is exactly one of these. "Femoral sentado:" must still be accepted as an exercise.
     private static readonly HashSet<string> PureSectionHeaders = new(StringComparer.OrdinalIgnoreCase)
@@ -588,6 +605,34 @@ public class PdfImportService : IPdfImportService
         // Pure-digit / digit-only-with-units rows (table cells like "12", "12 reps").
         if (Regex.IsMatch(stripped, @"^\d+(\s*(reps?|series?|x|×|\*)\s*\d*)?$", RegexOptions.IgnoreCase))
             return true;
+
+        // "Peso ALTO …" / "Peso LIGERO …" — first word PESO followed by an intensity modifier.
+        // "Peso muerto" is preserved because MUERTO is not in PesoIntensityModifiers.
+        var tokens = stripped.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+        if (tokens.Length >= 2
+            && tokens[0].Equals("PESO", StringComparison.OrdinalIgnoreCase)
+            && PesoIntensityModifiers.Contains(tokens[1].TrimEnd(',', '.', ':')))
+        {
+            return true;
+        }
+
+        // Line consists ONLY of repeated "PESO <modifier>" pairs (e.g. "Peso Alto Peso Alto Peso Alto").
+        if (tokens.Length >= 2 && tokens.Length % 2 == 0)
+        {
+            bool allWeightPairs = true;
+            for (int i = 0; i < tokens.Length; i += 2)
+            {
+                var a = tokens[i].TrimEnd(',', '.', ':');
+                var b = tokens[i + 1].TrimEnd(',', '.', ':');
+                if (!a.Equals("PESO", StringComparison.OrdinalIgnoreCase)
+                    || !PesoIntensityModifiers.Contains(b))
+                {
+                    allWeightPairs = false;
+                    break;
+                }
+            }
+            if (allWeightPairs) return true;
+        }
 
         return false;
     }
@@ -1104,6 +1149,15 @@ public static class LocalPdfParser
                 }
             }
 
+            // Even when a line is [EX]-marked (i.e. it came in green from the PDF), reject it if
+            // it's actually a table-cell annotation that just happens to be green-styled. Without
+            // this guard, "Peso Alto Peso Alto Peso Alto" (3 green table cells concatenated) or
+            // "Peso ligero y que se pueda controlar..." would become exercises.
+            if (isMarkedExercise && IsBogusGreenExerciseLine(line))
+            {
+                continue;
+            }
+
             // Check for exercise name FIRST (before table parsing).
             // [EX]-marked lines bypass the heuristic — they come from green-coloured text in the PDF.
             if (isMarkedExercise || IsExerciseName(line, lines, idx))
@@ -1461,6 +1515,61 @@ public static class LocalPdfParser
     }
 
     /// <summary>
+    /// <summary>
+    /// True when a green-marked line is clearly NOT an exercise (table-cell weight annotation,
+    /// "Peso ligero/alto" prefixed coaching text, or a wrapping description that opens with a
+    /// continuation/instruction word). "Peso muerto" and other legitimate exercises still pass.
+    /// </summary>
+    internal static bool IsBogusGreenExerciseLine(string line)
+    {
+        var stripped = line.Trim().TrimEnd(':', '.', ',').Trim();
+        if (stripped.Length == 0) return true;
+
+        var upper = stripped.ToUpperInvariant();
+        if (PdfImportService.WeightAnnotations.Contains(upper)) return true;
+
+        var tokens = stripped.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+        if (tokens.Length == 0) return true;
+
+        // Pure digit row.
+        if (Regex.IsMatch(stripped, @"^\d+(\s*(reps?|series?|x|×|\*)\s*\d*)?$", RegexOptions.IgnoreCase))
+            return true;
+
+        // "Peso ALTO …" / "Peso LIGERO …" — keep "Peso muerto".
+        if (tokens.Length >= 2
+            && tokens[0].Equals("PESO", StringComparison.OrdinalIgnoreCase)
+            && PesoIntensityModifiersInternal.Contains(tokens[1].TrimEnd(',', '.', ':')))
+        {
+            return true;
+        }
+
+        // Line consists ONLY of repeated "PESO <modifier>" pairs.
+        if (tokens.Length >= 2 && tokens.Length % 2 == 0)
+        {
+            bool allWeightPairs = true;
+            for (int i = 0; i < tokens.Length; i += 2)
+            {
+                var a = tokens[i].TrimEnd(',', '.', ':');
+                var b = tokens[i + 1].TrimEnd(',', '.', ':');
+                if (!a.Equals("PESO", StringComparison.OrdinalIgnoreCase)
+                    || !PesoIntensityModifiersInternal.Contains(b))
+                {
+                    allWeightPairs = false;
+                    break;
+                }
+            }
+            if (allWeightPairs) return true;
+        }
+
+        return false;
+    }
+
+    private static readonly HashSet<string> PesoIntensityModifiersInternal = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "ALTO", "LIGERO", "MEDIO", "BAJO", "MAXIMO", "MÁXIMO", "MINIMO", "MÍNIMO",
+    };
+
+    /// <summary>
     /// Multi-tier exercise name detection:
     /// Tier 1: Mostly UPPERCASE (Days 1-2 format: "PRESS BANCA INCLINADO")
     /// Tier 2: Mixed case ending with ":" (Days 3-5: "Extensión de cuadriceps:")
@@ -1597,6 +1706,25 @@ public static class LocalPdfParser
             var after = name[(colonIdx + 1)..].Trim();
             if (after.Length >= 3)
                 name = name[..colonIdx].Trim();
+        }
+
+        // Truncate at "Name, <continuation>" — when text after a comma starts with a conjunction
+        // or gerund (pero, y, teniendo, dejando, ...). Handles "Elevación de lumbar, pero teniendo...".
+        var commaIdx = name.IndexOf(',');
+        while (commaIdx > 2 && commaIdx < name.Length - 1)
+        {
+            var afterComma = name[(commaIdx + 1)..].TrimStart();
+            var firstAfter = afterComma.Split(new[] { ' ', '\t' }, 2, StringSplitOptions.RemoveEmptyEntries)
+                .FirstOrDefault() ?? "";
+            if (firstAfter.Length > 0 && PdfImportService.PostCommaContinuations.Contains(firstAfter.TrimEnd(',', '.', ':')))
+            {
+                name = name[..commaIdx].Trim();
+                break;
+            }
+            // No match here — look for the next comma further along.
+            var next = name.IndexOf(',', commaIdx + 1);
+            if (next < 0) break;
+            commaIdx = next;
         }
 
         // Remove trailing colons, periods, dashes

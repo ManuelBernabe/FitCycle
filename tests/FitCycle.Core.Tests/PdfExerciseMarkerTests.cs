@@ -148,6 +148,60 @@ public class PdfExerciseMarkerTests
     }
 
     [Fact]
+    public void Repeated_Peso_Alto_Cells_Concatenated_Are_Not_Exercise()
+    {
+        // PDF renders three "Peso Alto" cells in green across a row; extractor concatenates
+        // them into a single [EX] line. Must be discarded.
+        var text = """
+            FEMORAL (JUEVES)
+            [EX] Femoral tumbado
+            Serie 1 2 3
+            Reps 12 12 10
+            [EX] Peso Alto Peso Alto Peso Alto
+            """;
+        var result = LocalPdfParser.Parse(text);
+        var day = result.Routines.FirstOrDefault(r => r.DayOfWeek == 4);
+        Assert.NotNull(day);
+        Assert.DoesNotContain(day.Exercises, e => (e.Name ?? "").Contains("Peso Alto", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Peso_Ligero_Description_Is_Not_Exercise()
+    {
+        // Green descriptive text starting with "Peso ligero ..." must be a note, not an exercise.
+        // "Peso muerto" must still pass.
+        var text = """
+            CUADRICEPS (LUNES)
+            [EX] Peso ligero y que se pueda controlar para llegar al fallo
+            [EX] Peso muerto rumano
+            Serie 1 2 3
+            Reps 10 10 8
+            """;
+        var result = LocalPdfParser.Parse(text);
+        var day = result.Routines.FirstOrDefault(r => r.DayOfWeek == 1);
+        Assert.NotNull(day);
+        Assert.DoesNotContain(day.Exercises, e => (e.Name ?? "").StartsWith("Peso Ligero", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(day.Exercises, e => (e.Name ?? "").Contains("Peso Muerto", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Name_Is_Truncated_At_Comma_When_Followed_By_Conjunction()
+    {
+        var text = """
+            LUMBAR (MARTES)
+            [EX] Elevación de lumbar, pero teniendo la espalda recta y sin arquear
+            Serie 1 2 3
+            Reps 20 15 12
+            """;
+        var result = LocalPdfParser.Parse(text);
+        var day = result.Routines.FirstOrDefault(r => r.DayOfWeek == 2);
+        Assert.NotNull(day);
+        var ex = day.Exercises.FirstOrDefault();
+        Assert.NotNull(ex);
+        Assert.Equal("Elevación De Lumbar", ex.Name);
+    }
+
+    [Fact]
     public void Non_Marked_Lines_Still_Pass_Through_Heuristic()
     {
         // Regression: ensure the existing heuristic-based detection keeps working
