@@ -1400,8 +1400,12 @@ public static class LocalPdfParser
 
             // Individual pattern matchers (for non-table formats)
 
-            // "N series de N" or "N series de N,N,N"
-            var seriesDeMatch = Regex.Match(line, @"(\d+)\s+series?\s+(?:de\s+)?(\d[\d\s,]*)",
+            // "N series de N" / "N series x N reps" / "N series* N reps" / "N series N reps"
+            // The optional [*x×] between "series" and the reps number covers the trainer's
+            // free-text patterns: "4 series* 15 reps" (Patada de glúteo) and "4 series x 20 reps"
+            // (Gemelo de pie). Also matches the legacy "4 series de 12" form.
+            var seriesDeMatch = Regex.Match(line,
+                @"(\d+)\s+series?\s*[*x×]?\s*(?:de\s+)?(\d[\d\s,]*)",
                 RegexOptions.IgnoreCase);
             if (seriesDeMatch.Success && current != null)
             {
@@ -1590,8 +1594,11 @@ public static class LocalPdfParser
     private static bool IsTableHeader(string line)
     {
         var lower = line.ToLowerInvariant();
-        // Reject inline rep schemes: "3 series x 20 reps", "4 series de 15"
-        if (Regex.IsMatch(lower, @"\d+\s+series?\s+(?:x|de)\s+\d+")) return false;
+        // Reject inline rep schemes: "3 series x 20 reps", "4 series de 15",
+        // "4 series* 15 reps", "4 series 15 reps". These are data lines that happen to
+        // contain the words "series" and "reps" — they belong to seriesDeMatch downstream,
+        // not to the table-row parser.
+        if (Regex.IsMatch(lower, @"\d+\s+series?\s*[*x×]?\s*(?:de\s+)?\d+")) return false;
         // Reject lines that are too long to be table headers (likely exercise+instruction)
         if (lower.Length > 80) return false;
         // A real table header MUST contain "serie" or "reps" — prevents false positives
@@ -1687,7 +1694,58 @@ public static class LocalPdfParser
             if (allWeightPairs) return true;
         }
 
+        // Table-cell labels that the trainer types into the SERIE row to flag a warm-up or
+        // a max-effort set (e.g. "Calentamiento", "Calentamiento Max peso", "Max peso"). The
+        // word "PESO" is in ExerciseKeywords, so without this guard IsExerciseName accepts
+        // "Calentamiento Max peso" as an exercise — stealing the reps row from the real
+        // exercise above it (e.g. Femoral sentado loses its 4-set table).
+        var firstToken = tokens[0].TrimEnd(',', '.', ':').ToUpperInvariant();
+        if (TableCellLabelStarters.Contains(firstToken))
+        {
+            // Reject only when the WHOLE line reads like a cell label: short, no exercise verb.
+            if (tokens.Length <= 4 && !ContainsExerciseMovement(tokens))
+                return true;
+        }
+
+        // Standalone "Max peso" / "Máximo peso" / "Mínimo peso" labels (no other words).
+        if (tokens.Length == 2)
+        {
+            var a = tokens[0].TrimEnd(',', '.', ':').ToUpperInvariant();
+            var b = tokens[1].TrimEnd(',', '.', ':').ToUpperInvariant();
+            if ((a is "MAX" or "MAXIMO" or "MÁXIMO" or "MIN" or "MINIMO" or "MÍNIMO") && b == "PESO")
+                return true;
+            if (a == "PESO" && (b is "MAX" or "MAXIMO" or "MÁXIMO" or "MIN" or "MINIMO" or "MÍNIMO"))
+                return true;
+        }
+
         return false;
+    }
+
+    // Words that, when they LEAD a short cell-like line, mean the whole thing is a table
+    // annotation rather than an exercise. Deliberately EXCLUDES "Fase", "Seg", "Descanso",
+    // "Tiempo" — those are handled by their own dedicated parsers later in the pipeline
+    // and rejecting them here would lose their tempo/rest data.
+    private static readonly HashSet<string> TableCellLabelStarters = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "CALENTAMIENTO", "ENFRIAMIENTO", "ESTIRAMIENTO", "ESTIRAMIENTOS",
+        "MAX", "MAXIMO", "MÁXIMO", "MIN", "MINIMO", "MÍNIMO",
+    };
+
+    // Returns true if any token looks like a movement noun (press, curl, sentadilla...) —
+    // used to keep "Calentamiento 3 series Press banca" from being mis-rejected.
+    private static bool ContainsExerciseMovement(string[] tokens)
+    {
+        // Hard-coded small set of unambiguous movement verbs/nouns. We deliberately do NOT
+        // include body parts here (FEMORAL, ABDUCTOR, GEMELO) because those appear as
+        // standalone exercise names that should NOT save a bogus "Calentamiento femoral" line.
+        var movements = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "PRESS", "CURL", "EXTENSION", "EXTENSIÓN", "PRENSA", "REMO", "APERTURA", "APERTURAS",
+            "ELEVACION", "ELEVACIÓN", "ELEVACIONES", "JALON", "JALÓN", "DOMINADA", "DOMINADAS",
+            "SENTADILLA", "SENTADILLAS", "ZANCADA", "ZANCADAS", "PATADA", "PATADAS",
+            "CRUCE", "CRUCES", "FONDOS", "PULL", "MUERTO",
+        };
+        return tokens.Any(t => movements.Contains(t.TrimEnd(',', '.', ':')));
     }
 
     private static readonly HashSet<string> PesoIntensityModifiersInternal = new(StringComparer.OrdinalIgnoreCase)
