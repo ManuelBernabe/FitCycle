@@ -235,6 +235,17 @@ public class PdfImportService : IPdfImportService
                     string.Equals(e.Name, pdfExName, StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(NormalizeExerciseName(e.Name), normalizedPdfName, StringComparison.OrdinalIgnoreCase));
 
+                // Fuzzy fallback: reuse the existing exercise even if the new name dropped/added
+                // parenthetical descriptors or articles. Critical for preserving images uploaded
+                // by the user across re-imports — Exercise.ImageUrl is keyed on Exercise.Id, so
+                // creating a new Exercise would orphan the photo.
+                if (exercise == null)
+                {
+                    exercise = FindBestFuzzyExerciseMatch(pdfExName, allExercises);
+                    if (exercise != null)
+                        _logger.LogInformation("Fuzzy-matched '{Pdf}' to existing exercise '{Existing}' (preserves image)", pdfExName, exercise.Name);
+                }
+
                 if (exercise == null)
                 {
                     exercise = _repo.AddExercise(pdfExName, muscleGroupId);
@@ -366,6 +377,59 @@ public class PdfImportService : IPdfImportService
         }
         // Collapse multiple spaces
         return Regex.Replace(sb.ToString(), @"\s+", " ").Trim();
+    }
+
+    // Spanish stop-words / connectors that we strip before comparing exercise names.
+    private static readonly HashSet<string> ExerciseStopWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "de", "del", "la", "el", "los", "las", "en", "con", "y", "o", "u", "a",
+        "por", "para", "al", "un", "una", "uno", "unas", "unos",
+    };
+
+    /// <summary>
+    /// Tokenises a normalised exercise name into significant words (stop-words and very short
+    /// fragments removed). Used by the fuzzy matcher so "Press banca plano (unilateral)" and
+    /// "Press Banca Plano Unilateral" reduce to the same token set.
+    /// </summary>
+    private static HashSet<string> SignificantTokens(string name)
+    {
+        var normalized = NormalizeExerciseName(name);
+        // Strip parenthetical descriptors before tokenising — they're rarely identity-changing.
+        normalized = Regex.Replace(normalized, @"\([^)]*\)", " ").Trim();
+        return normalized
+            .Split(new[] { ' ', '-', '/', ',', '.' }, StringSplitOptions.RemoveEmptyEntries)
+            .Where(t => t.Length > 1 && !ExerciseStopWords.Contains(t))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Picks the existing exercise whose name overlaps the PDF name on at least 60% of the
+    /// significant tokens (Jaccard similarity). Returns null if no candidate is good enough.
+    /// Reusing the existing Exercise.Id is what keeps user-uploaded photos attached after a
+    /// re-import.
+    /// </summary>
+    private static Exercise? FindBestFuzzyExerciseMatch(string pdfName, IReadOnlyList<Exercise> existing)
+    {
+        var pdfTokens = SignificantTokens(pdfName);
+        if (pdfTokens.Count == 0) return null;
+
+        Exercise? best = null;
+        double bestScore = 0;
+        foreach (var ex in existing)
+        {
+            var exTokens = SignificantTokens(ex.Name);
+            if (exTokens.Count == 0) continue;
+            var common = pdfTokens.Intersect(exTokens, StringComparer.OrdinalIgnoreCase).Count();
+            if (common == 0) continue;
+            var union = pdfTokens.Union(exTokens, StringComparer.OrdinalIgnoreCase).Count();
+            double score = (double)common / union;
+            // Treat subset relationships as strong matches even when one side has extra words:
+            // "Press banca plano" ⊂ "Press banca plano unilateral" should still pair.
+            if (pdfTokens.IsSubsetOf(exTokens) || exTokens.IsSubsetOf(pdfTokens))
+                score = Math.Max(score, 0.85);
+            if (score > bestScore) { bestScore = score; best = ex; }
+        }
+        return bestScore >= 0.6 ? best : null;
     }
 
     /// <summary>
@@ -1128,7 +1192,7 @@ public static class LocalPdfParser
             {
                 if (current != null && pendingFaseType != null)
                 {
-                    var nums = Regex.Matches(line, @"\d+").Select(m => int.Parse(m.Value)).ToList();
+                    var nums = ParseTempoNumbers(line);
                     if (nums.Count > 0)
                     {
                         ApplyTempoValues(current, pendingFaseType, nums);
@@ -1256,8 +1320,7 @@ public static class LocalPdfParser
                 RegexOptions.IgnoreCase);
             if (tpMatch.Success)
             {
-                var nums = Regex.Matches(tpMatch.Groups[1].Value, @"\d+")
-                    .Select(m => int.Parse(m.Value)).ToList();
+                var nums = ParseTempoNumbers(tpMatch.Groups[1].Value);
                 if (nums.Count > 0)
                 {
                     ApplyTempoValues(current, "positiva", nums);
@@ -1275,8 +1338,7 @@ public static class LocalPdfParser
                 RegexOptions.IgnoreCase);
             if (!tpMatch.Success && tnMatch.Success)
             {
-                var nums = Regex.Matches(tnMatch.Groups[1].Value, @"\d+")
-                    .Select(m => int.Parse(m.Value)).ToList();
+                var nums = ParseTempoNumbers(tnMatch.Groups[1].Value);
                 if (nums.Count > 0)
                 {
                     ApplyTempoValues(current, "negativa", nums);
@@ -1413,10 +1475,10 @@ public static class LocalPdfParser
                 continue;
             }
 
-            // Standalone numbers line after pending Fase: "2 2 3 4"
-            if (pendingFaseType != null && current != null && Regex.IsMatch(line, @"^\d[\d\s]+$"))
+            // Standalone numbers line after pending Fase: "2 2 3 4" — also accepts "2 4 4 3-4"
+            if (pendingFaseType != null && current != null && Regex.IsMatch(line, @"^\d[\d\s\-]+$"))
             {
-                var nums = Regex.Matches(line, @"\d+").Select(m => int.Parse(m.Value)).ToList();
+                var nums = ParseTempoNumbers(line);
                 if (nums.Count > 0)
                 {
                     ApplyTempoValues(current, pendingFaseType, nums);
@@ -1458,6 +1520,27 @@ public static class LocalPdfParser
         if (ex != null)
             ex.Notes = sb.ToString().Trim();
         sb.Clear();
+    }
+
+    /// <summary>
+    /// Parses a row like "2 4 4 3-4 3-4" into one number per cell. Ranges "N-M" collapse to
+    /// the higher value so a 4-cell row never explodes into 5 numbers (the bug that smeared
+    /// tempos across the wrong sets).
+    /// </summary>
+    internal static List<int> ParseTempoNumbers(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return new List<int>();
+        // "3-4" → "4", "2-3" → "3". Pick the upper bound: it's the conservative tempo target.
+        var collapsed = Regex.Replace(text, @"(\d+)\s*-\s*(\d+)", m =>
+        {
+            var a = int.Parse(m.Groups[1].Value);
+            var b = int.Parse(m.Groups[2].Value);
+            return Math.Max(a, b).ToString();
+        });
+        return Regex.Matches(collapsed, @"\d+")
+            .Select(m => int.Parse(m.Value))
+            .Where(n => n >= 0 && n < 100) // tempos are seconds — sanity filter
+            .ToList();
     }
 
     /// <summary>
