@@ -250,7 +250,10 @@ function renderExercise() {
   // Progression suggestion (only on the FIRST set so it doesn't distract mid-exercise)
   const progression = currentSet === 0 ? suggestProgression(ex) : null;
 
-  // Default timer: 1 minute (1:00). Pickers reflect the current `timerSeconds` state.
+  // After the timer auto-advanced (or was reset), `timerSeconds` can be 0 — which would
+  // render the pickers as 00:00 and the next Start press would no-op. Restore the user's
+  // default rest (1:00) before building the picker HTML so the new set starts fresh.
+  if (!timerRunning && (timerSeconds <= 0 || isNaN(timerSeconds))) timerSeconds = 60;
   const currentMin = Math.floor(timerSeconds / 60);
   const currentSec = timerSeconds % 60;
   const minOptions = Array.from({ length: 11 }, (_, i) =>
@@ -555,12 +558,18 @@ function renderExercise() {
     }
   });
 
+  // Timer controls are recreated on every renderExercise() call. We attach listeners by
+  // ID lookup which is fine on a fresh DOM, but if anything kept a reference to the OLD
+  // element (e.g. listeners that were never garbage-collected), pressing Start would fire
+  // multiple intervals. To be defensive, ensure any running timer is cleared FIRST so a
+  // stale callback can't fire and increment a second interval.
+  stopTimer();
+
   document.getElementById('timer-start')?.addEventListener('click', onTimerStartClicked);
   document.getElementById('timer-reset')?.addEventListener('click', onTimerResetClicked);
   document.getElementById('timer-min')?.addEventListener('change', onTimePickerChanged);
   document.getElementById('timer-sec')?.addEventListener('change', onTimePickerChanged);
 
-  stopTimer();
   resetTimerDisplay();
 }
 
@@ -752,17 +761,21 @@ function onTimerStartClicked() {
   if (pickerRow) pickerRow.style.display = 'none';
 
   timerInterval = setInterval(() => {
+    if (!timerRunning) return; // Defensive: stopTimer was called from outside, drop this tick.
     timerSeconds--;
     updateTimerDisplay();
     if (timerSeconds <= 0) {
+      // Stop FIRST so the auto-advance can't re-enter and overlap with a new interval
+      // started by the next renderExercise() call.
       stopTimer();
-      if (startBtn) { startBtn.textContent = t('Start'); startBtn.style.background = '#512BD4'; }
-      if (pickerRow) pickerRow.style.display = '';
+      const startBtnNow = document.getElementById('timer-start');
+      const pickerRowNow = document.getElementById('timer-picker-row');
+      if (startBtnNow) { startBtnNow.textContent = t('Start'); startBtnNow.style.background = '#512BD4'; }
+      if (pickerRowNow) pickerRowNow.style.display = '';
       const display = document.getElementById('timer-display');
       if (display) display.style.color = '#28a745';
       playRestEndSound();
       showRestEndAlert();
-      // Auto-advance to the next set/exercise so the user doesn't have to tap
       advanceToNext();
     }
   }, 1000);
@@ -933,6 +946,10 @@ function pickAndUploadExerciseImage() {
           e.ImageUrl = newUrl;
         }
       }
+      // Drop SW-cached responses that still reference the old imageUrl so
+      // editday and other devices see the new image on next load.
+      await api.invalidateCache('/routines');
+      await api.invalidateCache('/exercises');
       saveProgress();
       renderExercise();
     } catch (err) {

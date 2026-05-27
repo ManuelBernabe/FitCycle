@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using FitCycle.Core.Models;
 using FitCycle.Infrastructure.Data;
@@ -462,26 +463,32 @@ public class SqliteRoutineRepository : IRoutineRepository
             _db.DayMuscleGroups.Add(new DayMuscleGroupEntity { Day = day, MuscleGroupId = mgId, UserId = userId });
         }
 
-        // Add exercises — preserve incoming order via Position
+        // Add exercises — preserve incoming order via Position.
+        // SetDetails (JSON array) is the source of truth. If it's valid and non-empty, derive
+        // Sets/Reps/Weight from it so the two fields can never drift apart. If it's empty or
+        // malformed, fall back to the legacy Sets/Reps/Weight scalars and synthesize an array
+        // so future reads from the frontend always have a usable setDetails payload.
         for (int i = 0; i < exercises.Count; i++)
         {
             var input = exercises[i];
-            if (_db.Exercises.Any(e => e.Id == input.ExerciseId))
+            if (!_db.Exercises.Any(e => e.Id == input.ExerciseId)) continue;
+
+            var (normalizedJson, setsCount, mainReps, mainWeight) =
+                NormalizeSetDetails(input.SetDetails, input.Sets, input.Reps, input.Weight);
+
+            _db.DayExercises.Add(new DayExerciseEntity
             {
-                _db.DayExercises.Add(new DayExerciseEntity
-                {
-                    Day = day,
-                    ExerciseId = input.ExerciseId,
-                    Sets = input.Sets,
-                    Reps = input.Reps,
-                    Weight = input.Weight,
-                    SetDetails = input.SetDetails ?? string.Empty,
-                    SupersetGroup = input.SupersetGroup,
-                    Notes = input.Notes ?? string.Empty,
-                    Position = i,
-                    UserId = userId
-                });
-            }
+                Day = day,
+                ExerciseId = input.ExerciseId,
+                Sets = setsCount,
+                Reps = mainReps,
+                Weight = mainWeight,
+                SetDetails = normalizedJson,
+                SupersetGroup = input.SupersetGroup,
+                Notes = input.Notes ?? string.Empty,
+                Position = i,
+                UserId = userId
+            });
         }
 
         // Upsert day extras (cardio/abs)
@@ -570,5 +577,65 @@ public class SqliteRoutineRepository : IRoutineRepository
             AbsSets = extras?.AbsSets ?? 0,
             AbsReps = extras?.AbsReps ?? 0
         };
+    }
+
+    /// <summary>
+    /// Reconciles the JSON setDetails payload from the client with the legacy scalar fields.
+    /// The JSON array, when present and well-formed, is the source of truth — Sets/Reps/Weight
+    /// are derived from it. When the JSON is missing or invalid, we synthesize one from the
+    /// scalars so reads always have a usable setDetails payload.
+    /// Returns (normalizedJsonString, setsCount, mainReps, mainWeight).
+    /// </summary>
+    internal static (string json, int sets, int reps, decimal weight) NormalizeSetDetails(
+        string? setDetailsJson, int legacySets, int legacyReps, decimal legacyWeight)
+    {
+        List<SetEntry>? parsed = null;
+        if (!string.IsNullOrWhiteSpace(setDetailsJson))
+        {
+            try
+            {
+                parsed = JsonSerializer.Deserialize<List<SetEntry>>(
+                    setDetailsJson!,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            }
+            catch (JsonException) { parsed = null; }
+        }
+
+        if (parsed == null || parsed.Count == 0)
+        {
+            // Synthesize from scalars. Clamp sets to a sane range so callers can't blow up
+            // the array length.
+            var count = Math.Clamp(legacySets <= 0 ? 3 : legacySets, 1, 30);
+            var reps = legacyReps <= 0 ? 12 : legacyReps;
+            var defaults = new List<SetEntry>();
+            for (int i = 0; i < count; i++)
+                defaults.Add(new SetEntry { reps = reps, weight = legacyWeight, tempoPos = 0, tempoNeg = 0, grip = "" });
+            return (JsonSerializer.Serialize(defaults), count, reps, legacyWeight);
+        }
+
+        // Clean each entry — guard against negatives / NaN-ish junk from old payloads.
+        foreach (var s in parsed)
+        {
+            if (s.reps <= 0) s.reps = 12;
+            if (s.weight < 0) s.weight = 0;
+            if (s.tempoPos < 0) s.tempoPos = 0;
+            if (s.tempoNeg < 0) s.tempoNeg = 0;
+            s.grip ??= "";
+        }
+
+        var mainReps = parsed[0].reps;
+        var mainWeight = parsed.Max(s => s.weight);
+        var normalized = JsonSerializer.Serialize(parsed);
+        return (normalized, parsed.Count, mainReps, mainWeight);
+    }
+
+    // Small DTO mirroring the JSON shape used by the frontend setDetails array.
+    internal class SetEntry
+    {
+        public int reps { get; set; }
+        public decimal weight { get; set; }
+        public int tempoPos { get; set; }
+        public int tempoNeg { get; set; }
+        public string? grip { get; set; }
     }
 }

@@ -957,6 +957,10 @@ function pickAndUploadImage(gi, ei) {
       groups.forEach(g => g.exercises.forEach(e => {
         if (e.exerciseId === ex.exerciseId) e.imageUrl = newUrl;
       }));
+      // Drop any SW-cached GET response that embeds the old imageUrl so the next
+      // visit (or another device) fetches the updated record from the API.
+      await api.invalidateCache('/routines');
+      await api.invalidateCache('/exercises');
       clearCache();
       if (statusEl) statusEl.textContent = '';
       buildUI();

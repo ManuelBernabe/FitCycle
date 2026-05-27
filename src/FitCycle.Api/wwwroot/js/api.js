@@ -151,6 +151,30 @@ async function downloadBlob(path, filename) {
   URL.revokeObjectURL(url);
 }
 
+/**
+ * Drops cached GET responses that match a substring. The service worker uses
+ * stale-while-revalidate on `/routines/*` and `/exercises/*` — after the user
+ * uploads a new image or saves a workout, the cached response is out of date
+ * and would otherwise be served on the next navigation until the bg refresh
+ * lands. Call this with e.g. `/routines` to force a fresh fetch next time.
+ */
+async function invalidateCache(pathSubstring) {
+  if (!('caches' in window)) return;
+  try {
+    const cacheNames = await caches.keys();
+    await Promise.all(cacheNames.map(async (name) => {
+      if (!name.startsWith('fitcycle-api')) return;
+      const cache = await caches.open(name);
+      const keys = await cache.keys();
+      await Promise.all(
+        keys
+          .filter(req => req.url.includes(pathSubstring))
+          .map(req => cache.delete(req))
+      );
+    }));
+  } catch { /* ignore — cache invalidation is best-effort */ }
+}
+
 const api = {
   get(path)         { return request('GET',    path); },
   post(path, body)  { return request('POST',   path, body); },
@@ -158,6 +182,7 @@ const api = {
   del(path)         { return request('DELETE', path); },
   postForm(path, formData) { return requestForm(path, formData); },
   downloadBlob(path, filename) { return downloadBlob(path, filename); },
+  invalidateCache(pathSubstring) { return invalidateCache(pathSubstring); },
 };
 
 export { api };
