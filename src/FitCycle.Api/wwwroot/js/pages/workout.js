@@ -13,6 +13,11 @@ let startedAt = null;
 let timerSeconds = 60;
 let timerRunning = false;
 let timerInterval = null;
+// Absolute wall-clock end time of the current rest. We compute `timerSeconds` from
+// (timerEndsAt - Date.now()) every tick so the countdown stays accurate even when
+// the browser throttles or suspends our setInterval — e.g. when the user switches
+// to another app on iOS and comes back.
+let timerEndsAt = 0;
 let showExerciseList = false;
 let prefillSource = null; // { date, count } when pre-fill applied weights from a previous workout
 
@@ -174,6 +179,14 @@ export async function mount(params) {
     }
 
     renderExercise();
+
+    // When the user comes back from another app, immediately reconcile the timer.
+    // Mobile browsers throttle our setInterval to ~1/min while backgrounded; without
+    // this hook the countdown would appear frozen for several seconds after resume.
+    if (typeof document.__fitcycleVisHandler !== 'function') {
+      document.__fitcycleVisHandler = onVisibilityChange;
+      document.addEventListener('visibilitychange', document.__fitcycleVisHandler);
+    }
   } catch (err) {
     document.getElementById('workout-content').innerHTML = `
       <div class="page-content">
@@ -185,6 +198,10 @@ export async function mount(params) {
 
 export function destroy() {
   stopTimer();
+  if (typeof document.__fitcycleVisHandler === 'function') {
+    document.removeEventListener('visibilitychange', document.__fitcycleVisHandler);
+    document.__fitcycleVisHandler = null;
+  }
 }
 
 // ── Exercise List ──
@@ -754,15 +771,20 @@ function onTimerStartClicked() {
     return;
   }
 
-  timerSeconds = getPickerTotalSeconds();
-  if (timerSeconds <= 0) return;
+  const total = getPickerTotalSeconds();
+  if (total <= 0) return;
+  timerSeconds = total;
+  timerEndsAt = Date.now() + total * 1000;
   timerRunning = true;
   if (startBtn) { startBtn.textContent = t('Pause'); startBtn.style.background = '#e67e22'; }
   if (pickerRow) pickerRow.style.display = 'none';
 
   timerInterval = setInterval(() => {
     if (!timerRunning) return; // Defensive: stopTimer was called from outside, drop this tick.
-    timerSeconds--;
+    // Recompute from wall clock — backgrounded tabs throttle setInterval to once per
+    // minute (or pause it entirely on iOS), so we can't trust how often this fired.
+    const remaining = Math.ceil((timerEndsAt - Date.now()) / 1000);
+    timerSeconds = remaining > 0 ? remaining : 0;
     updateTimerDisplay();
     if (timerSeconds <= 0) {
       // Stop FIRST so the auto-advance can't re-enter and overlap with a new interval
@@ -778,14 +800,44 @@ function onTimerStartClicked() {
       showRestEndAlert();
       advanceToNext();
     }
-  }, 1000);
+  }, 250); // Tick 4x/sec so the UI catches up quickly after foreground resume.
 }
 
 function onTimerResetClicked() { stopTimer(); resetTimerDisplay(); }
 
 function stopTimer() {
   timerRunning = false;
+  timerEndsAt = 0;
   if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+}
+
+/**
+ * Called when the document becomes visible again after the user backgrounded the app.
+ * Reconciles `timerSeconds` against the wall clock so the display catches up instantly
+ * (the setInterval tick might have been throttled to once per minute on mobile).
+ * If the timer already expired in the background, we fire the rest-end logic now.
+ */
+function onVisibilityChange() {
+  if (document.hidden) return;
+  if (!timerRunning || timerEndsAt <= 0) return;
+  const remaining = Math.ceil((timerEndsAt - Date.now()) / 1000);
+  if (remaining <= 0) {
+    timerSeconds = 0;
+    updateTimerDisplay();
+    stopTimer();
+    const startBtn = document.getElementById('timer-start');
+    const pickerRow = document.getElementById('timer-picker-row');
+    if (startBtn) { startBtn.textContent = t('Start'); startBtn.style.background = '#512BD4'; }
+    if (pickerRow) pickerRow.style.display = '';
+    const display = document.getElementById('timer-display');
+    if (display) display.style.color = '#28a745';
+    playRestEndSound();
+    showRestEndAlert();
+    advanceToNext();
+  } else {
+    timerSeconds = remaining;
+    updateTimerDisplay();
+  }
 }
 
 function resetTimerDisplay() {
