@@ -149,6 +149,34 @@ public class PdfImportEdgeCasesTests
     }
 
     [Fact]
+    public void Ai_SupersetWith_Is_Discarded_During_Sanitize()
+    {
+        // The AI sometimes invents partners that contradict the trainer's PDF (e.g. pairing
+        // Femoral tumbado with Femoral unilateral DE PIE instead of the real
+        // Femoral unilateral TUMBADO). Letting that through corrupts the workout pairings.
+        var ai = new PdfExtraction
+        {
+            Routines =
+            {
+                new PdfDayRoutine
+                {
+                    DayOfWeek = 4,
+                    Exercises =
+                    {
+                        new PdfExercise { Name = "Femoral Tumbado", SupersetWith = "Femoral Unilateral De Pie" },
+                        new PdfExercise { Name = "Femoral Unilateral De Pie", SupersetWith = "Femoral Tumbado" },
+                    }
+                }
+            }
+        };
+
+        PdfImportService.SanitizeAiExtraction(ai, Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance);
+
+        var day = ai.Routines[0];
+        Assert.All(day.Exercises, e => Assert.Null(e.SupersetWith));
+    }
+
+    [Fact]
     public void Calentamiento_Max_Peso_Is_Never_Imported_As_Exercise()
     {
         // Direct check: even in isolation, this cell-label line must be rejected.

@@ -269,13 +269,35 @@ public class PdfImportService : IPdfImportService
                 int supersetGroup = 0;
                 if (!string.IsNullOrWhiteSpace(pdfEx.SupersetWith))
                 {
-                    var key = string.Compare(pdfEx.Name, pdfEx.SupersetWith, StringComparison.OrdinalIgnoreCase) < 0
-                        ? $"{pdfEx.Name}|{pdfEx.SupersetWith}"
-                        : $"{pdfEx.SupersetWith}|{pdfEx.Name}";
-                    if (!supersetMap.TryGetValue(key, out supersetGroup))
+                    // Require BIDIRECTIONAL agreement: A says its partner is B AND B says its
+                    // partner is A. Prevents AI-injected one-sided "partners" (e.g. "Femoral
+                    // unilateral de pie" claiming a pairing with Femoral tumbado when the real
+                    // partner from the PDF is "Femoral unilateral tumbado").
+                    var partner = orderedExercises.FirstOrDefault(other =>
+                        !ReferenceEquals(other, pdfEx)
+                        && string.Equals(NormalizeExerciseName(other.Name ?? ""),
+                                         NormalizeExerciseName(pdfEx.SupersetWith ?? ""),
+                                         StringComparison.OrdinalIgnoreCase)
+                        && !string.IsNullOrWhiteSpace(other.SupersetWith)
+                        && string.Equals(NormalizeExerciseName(other.SupersetWith ?? ""),
+                                         NormalizeExerciseName(pdfEx.Name ?? ""),
+                                         StringComparison.OrdinalIgnoreCase));
+
+                    if (partner != null)
                     {
-                        supersetGroup = supersetCounter++;
-                        supersetMap[key] = supersetGroup;
+                        var key = string.Compare(pdfEx.Name, partner.Name, StringComparison.OrdinalIgnoreCase) < 0
+                            ? $"{pdfEx.Name}|{partner.Name}"
+                            : $"{partner.Name}|{pdfEx.Name}";
+                        if (!supersetMap.TryGetValue(key, out supersetGroup))
+                        {
+                            supersetGroup = supersetCounter++;
+                            supersetMap[key] = supersetGroup;
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Skipping orphan superset link: '{A}' → '{B}' (no bidirectional match found)",
+                            pdfEx.Name, pdfEx.SupersetWith);
                     }
                 }
 
@@ -450,6 +472,14 @@ public class PdfImportService : IPdfImportService
             {
                 if (!string.IsNullOrWhiteSpace(ex.Name))
                     ex.Name = LocalPdfParser.CleanExerciseName(ex.Name).Trim();
+
+                // CRITICAL: drop SupersetWith from AI suggestions. The "+ Super serie ..." line
+                // in the PDF is the trainer's only authoritative source for pairings; the AI
+                // tends to hallucinate alternative partners (e.g. pairing "Femoral tumbado"
+                // with "Femoral unilateral de pie" instead of the actual "Femoral unilateral
+                // tumbado"). Letting an AI-only pairing reach the routine produces wrong
+                // SupersetGroup ids and visually-wrong partners in the workout UI.
+                ex.SupersetWith = null;
             }
 
             int before = day.Exercises.Count;
