@@ -129,8 +129,10 @@ export async function mount(params) {
           if (Array.isArray(lastSetDetails) && lastSetDetails.length > 0) {
             for (let i = 0; i < match.setDetails.length; i++) {
               const src = i < lastSetDetails.length ? lastSetDetails[i] : lastSetDetails[lastSetDetails.length - 1];
+              // Only WEIGHT is prefilled from history — reps belong to the plan and stay
+              // as defined in the routine. Otherwise reducing reps in one session (e.g. 12
+              // instead of the planned 20) would silently rewrite the plan for next time.
               if (src.weight > 0) { match.setDetails[i].weight = src.weight; filled++; }
-              if (src.reps > 0) match.setDetails[i].reps = src.reps;
             }
           } else if (lastEx.weight > 0) {
             for (const sd of match.setDetails) { sd.weight = lastEx.weight; filled++; }
@@ -149,7 +151,11 @@ export async function mount(params) {
       }
     } catch (err) { console.warn('[prefill] failed:', err); }
 
-    // Restore saved progress if same day AND recent (within 4 hours)
+    // Restore saved progress if same day AND recent (within 4 hours).
+    // Reps come from the PLAN (the routine's setDetails) and must NEVER be overwritten
+    // by stale session storage — that's what made re-imported routines show old values
+    // at workout time. Only the user's weights (their actual lift) get restored, since
+    // those are progress data the user typed during the workout.
     const saved = loadProgress();
     const savedAge = saved?.startedAt ? (Date.now() - new Date(saved.startedAt).getTime()) : Infinity;
     const isFreshProgress = saved && saved.dayNum === dayNum && saved.exercises && savedAge < 4 * 60 * 60 * 1000;
@@ -157,16 +163,19 @@ export async function mount(params) {
       startedAt = saved.startedAt ? new Date(saved.startedAt) : new Date();
       currentIndex = Math.min(saved.currentIndex || 0, exercises.length - 1);
       currentSet = saved.currentSet || 0;
-      // Restore saved weights/reps — but only overwrite if saved value is > 0
-      // (don't replace pre-filled weights with zeros from incomplete progress)
       for (const savedEx of saved.exercises) {
         const match = exercises.find(ex =>
           (ex.exerciseId || ex.ExerciseId || ex.id || ex.Id) === savedEx.exerciseId
         );
-        if (match && savedEx.setDetails) {
-          for (let i = 0; i < match.setDetails.length && i < savedEx.setDetails.length; i++) {
-            if (savedEx.setDetails[i].weight > 0) match.setDetails[i].weight = savedEx.setDetails[i].weight;
-            if (savedEx.setDetails[i].reps > 0) match.setDetails[i].reps = savedEx.setDetails[i].reps;
+        if (!match || !savedEx.setDetails) continue;
+        // Only restore weights (and only when set count and reps still match — otherwise
+        // we'd be applying weights from a different plan version).
+        const sameShape = match.setDetails.length === savedEx.setDetails.length;
+        for (let i = 0; i < match.setDetails.length && i < savedEx.setDetails.length; i++) {
+          const savedReps = savedEx.setDetails[i].reps || 0;
+          const planReps = match.setDetails[i].reps || 0;
+          if (sameShape && savedEx.setDetails[i].weight > 0 && savedReps === planReps) {
+            match.setDetails[i].weight = savedEx.setDetails[i].weight;
           }
         }
       }

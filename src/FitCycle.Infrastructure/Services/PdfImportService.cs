@@ -946,8 +946,11 @@ public static class LocalPdfParser
         ["DOMINGO"] = 7,
     };
 
+    // Anchor to the start of the line so a stray "descanso" inside a longer instruction
+    // ("Calentamiento 3 series ... 1 minuto de descanso por serie") doesn't get classified
+    // as a rest row — which would swallow the line before its embedded rep count is parsed.
     private static readonly Regex RestLine = new(
-        @"(?:TIEMPO\s+DE\s+)?DESCANSO", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        @"^\s*(?:TIEMPO\s+DE\s+)?DESCANSO\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     // Keywords that are NOT exercise names
     private static readonly HashSet<string> NonExerciseWords = new(StringComparer.OrdinalIgnoreCase)
@@ -1456,6 +1459,42 @@ public static class LocalPdfParser
                 continue;
             }
 
+            // Free-text fallback: "N series [arbitrary words] M reps". Catches the trainer's
+            // long-form prescriptions like "Calentamiento 3 series con peso ligero y controlado
+            // (15 reps por serie)" where seriesDeMatch fails because non-numeric words sit
+            // between "series" and the reps count. We anchor on both keywords and extract every
+            // numeric value that appears between them — so "4 series x 20, 15, 12, 10 reps"
+            // still resolves to four per-set values.
+            var seriesAnchor = Regex.Match(line, @"(\d+)\s+series?\b", RegexOptions.IgnoreCase);
+            var repsAnchor = Regex.Match(line, @"\breps?\b", RegexOptions.IgnoreCase);
+            if (seriesAnchor.Success && repsAnchor.Success && current != null
+                && repsAnchor.Index > seriesAnchor.Index + seriesAnchor.Length)
+            {
+                var count = int.Parse(seriesAnchor.Groups[1].Value);
+                var between = line.Substring(
+                    seriesAnchor.Index + seriesAnchor.Length,
+                    repsAnchor.Index - (seriesAnchor.Index + seriesAnchor.Length));
+                var repsNums = Regex.Matches(between, @"\d+")
+                    .Select(m => int.Parse(m.Value))
+                    .Where(n => n > 0 && n < 1000)
+                    .ToList();
+                if (repsNums.Count > 0 && count > 0 && count <= 30)
+                {
+                    current.Sets.Clear();
+                    if (repsNums.Count == 1)
+                    {
+                        for (int i = 0; i < Math.Min(count, 10); i++)
+                            current.Sets.Add(new PdfSet { Reps = repsNums[0] });
+                    }
+                    else
+                    {
+                        foreach (var r in repsNums)
+                            current.Sets.Add(new PdfSet { Reps = r });
+                    }
+                    continue;
+                }
+            }
+
             // Reps shorthand: "4*15*12*10*8" or "4x15"
             if (Regex.IsMatch(line, @"\d+\s*[*x×]\s*\d+", RegexOptions.IgnoreCase))
             {
@@ -1795,6 +1834,14 @@ public static class LocalPdfParser
 
         var letterCount = line.Count(char.IsLetter);
         if (letterCount == 0) return false;
+
+        // "N series ... M reps" is a SET PRESCRIPTION, not an exercise name. The trainer's
+        // PDF has long-form lines like "Calentamiento 3 series con peso ligero y controlado
+        // (15 reps por serie)" that contain the keyword PESO and would otherwise be promoted
+        // to a bogus exercise. The set-count parser downstream still picks them up.
+        bool hasSeries = Regex.IsMatch(line, @"\d+\s+series?\b", RegexOptions.IgnoreCase);
+        bool hasReps = Regex.IsMatch(line, @"\breps?\b", RegexOptions.IgnoreCase);
+        if (hasSeries && hasReps) return false;
 
         // Skip lines that are mostly numbers
         if (line.Count(char.IsDigit) > letterCount) return false;
