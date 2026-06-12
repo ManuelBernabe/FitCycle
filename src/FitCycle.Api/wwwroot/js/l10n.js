@@ -188,6 +188,7 @@ const Strings = {
   UploadingImage:         { es: 'Subiendo imagen...',                                 en: 'Uploading image...',                    fr: "Envoi de l'image..." },
   ImageTooLarge:          { es: 'La imagen excede 5 MB',                              en: 'Image exceeds 5 MB',                    fr: "L'image dépasse 5 Mo" },
   ManualWeight:           { es: 'Peso manual',                                        en: 'Manual weight',                         fr: 'Poids manuel' },
+  EnterWeightHint:        { es: 'Escribe el peso usado en esta serie',                en: 'Enter the weight used in this set',     fr: 'Entrez le poids utilisé dans cette série' },
   SwitchPartner:          { es: 'Cambiar a pareja',                                   en: 'Switch partner',                        fr: 'Changer de paire' },
   RestEnded:              { es: '¡Descanso terminado!',                                en: 'Rest ended!',                           fr: 'Repos terminé !' },
   PrefilledFrom:          { es: 'Pesos del {0} ({1} ejercicios, {2} series)',          en: 'Weights from {0} ({1} exercises, {2} sets)', fr: 'Poids du {0} ({1} exercices, {2} séries)' },

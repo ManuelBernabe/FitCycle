@@ -20,6 +20,9 @@ let timerInterval = null;
 let timerEndsAt = 0;
 let showExerciseList = false;
 let prefillSource = null; // { date, count } when pre-fill applied weights from a previous workout
+// Periodic autosave so a forgotten or crashed session can still recover the user's last
+// typed values from sessionStorage. Cleared on destroy() / finish.
+let autosaveInterval = null;
 
 const STORAGE_KEY = 'workout_progress';
 
@@ -196,6 +199,15 @@ export async function mount(params) {
       document.__fitcycleVisHandler = onVisibilityChange;
       document.addEventListener('visibilitychange', document.__fitcycleVisHandler);
     }
+
+    // Defensive autosave every 15s: even if the user navigates away, force-quits the app,
+    // or the browser crashes, the last typed values stay in sessionStorage and the next
+    // visit (within the 4-hour window in loadProgress) restores the weights.
+    if (autosaveInterval) clearInterval(autosaveInterval);
+    autosaveInterval = setInterval(() => {
+      saveCurrentSetValues();
+      saveProgress();
+    }, 15000);
   } catch (err) {
     document.getElementById('workout-content').innerHTML = `
       <div class="page-content">
@@ -207,10 +219,14 @@ export async function mount(params) {
 
 export function destroy() {
   stopTimer();
+  if (autosaveInterval) { clearInterval(autosaveInterval); autosaveInterval = null; }
   if (typeof document.__fitcycleVisHandler === 'function') {
     document.removeEventListener('visibilitychange', document.__fitcycleVisHandler);
     document.__fitcycleVisHandler = null;
   }
+  // Final flush — in case the user navigates away mid-set, persist what's currently in
+  // the inputs so the next workout visit (within the 4h freshness window) can recover it.
+  try { saveCurrentSetValues(); saveProgress(); } catch { /* exercises may already be cleared */ }
 }
 
 // ── Exercise List ──
@@ -365,7 +381,8 @@ function renderExercise() {
               <input type="number" id="workout-weight" list="workout-weight-options"
                 step="0.25" min="0" max="500" value="${currentSetData.weight}"
                 inputmode="decimal"
-                style="width:88px;font-size:18px;font-weight:bold;text-align:center;border:1px solid #ddd;border-radius:8px;padding:5px;background:#fff;">
+                style="width:88px;font-size:18px;font-weight:bold;text-align:center;border-radius:8px;padding:5px;background:#fff;border:${currentSetData.weight > 0 ? '1px solid #ddd' : '2px solid #e67e22'};"
+                title="${currentSetData.weight > 0 ? '' : t('EnterWeightHint')}">
               <datalist id="workout-weight-options">${buildWorkoutWeightOptions(currentSetData.weight)}</datalist>
             </div>
           </div>
@@ -572,6 +589,10 @@ function renderExercise() {
   // either tap from suggestions (0.25 kg steps up to 150 kg) or just type a custom value.
   document.getElementById('workout-weight')?.addEventListener('change', () => { saveCurrentSetValues(); saveProgress(); });
   document.getElementById('workout-weight')?.addEventListener('input', () => { saveCurrentSetValues(); saveProgress(); });
+  // Extra safety net: when the user moves focus away from the weight input (tap on another
+  // control, soft keyboard dismiss), force a final save. The change/input events already
+  // cover most paths but mobile browsers sometimes skip `change` when the user just blurs.
+  document.getElementById('workout-weight')?.addEventListener('blur', () => { saveCurrentSetValues(); saveProgress(); });
   document.getElementById('workout-reps')?.addEventListener('change', () => { saveCurrentSetValues(); saveProgress(); });
 
   document.getElementById('workout-notes-toggle')?.addEventListener('click', () => {
@@ -945,6 +966,12 @@ function updateTimerDisplay() {
 
 async function finishWorkout() {
   stopTimer();
+  if (autosaveInterval) { clearInterval(autosaveInterval); autosaveInterval = null; }
+  // Defensive: re-capture the current set's values right before serializing. The button
+  // click handler already calls saveCurrentSetValues, but a second pass guarantees the
+  // very last value the user typed lands in the payload — especially when the user was
+  // still inside the input when they pressed Finish.
+  saveCurrentSetValues();
   const completedAt = new Date();
 
   const exerciseLogs = exercises.map(ex => ({
@@ -956,6 +983,11 @@ async function finishWorkout() {
     muscleGroupName: ex.muscleGroupName || ex.MuscleGroupName || '',
     setDetails: JSON.stringify(ex.setDetails),
   }));
+
+  // Diagnostic: log the payload weights so the user can verify in DevTools if anything
+  // went wrong. Only the user's own data is logged.
+  console.log('[finishWorkout] saving', exerciseLogs.length, 'exercises:',
+    exerciseLogs.map(e => `${e.exerciseName}: max=${e.weight}kg, sets=${e.sets}`).join(' | '));
 
   const workoutPayload = {
     day: dayNum,
