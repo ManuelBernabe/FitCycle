@@ -236,16 +236,23 @@ function buildExerciseList() {
     const name = exTranslate(ex.exerciseName || ex.ExerciseName || ex.name || ex.Name || '');
     const muscle = ex.muscleGroupName || ex.MuscleGroupName || '';
     const totalSets = ex.setDetails.length;
+    const setsWithWeight = ex.setDetails.filter(s => s.weight > 0).length;
     const maxWeight = Math.max(...ex.setDetails.map(s => s.weight), 0);
     const isCurrent = idx === currentIndex;
     const isDone = idx < currentIndex;
+
+    // One dot per set: green if a weight is recorded, grey if not. Lets the user scan
+    // the list at a glance and see exactly which sets are missing a weight value.
+    const weightDots = ex.setDetails.map(s =>
+      `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${s.weight > 0 ? '#28a745' : '#ddd'};margin-right:3px;" title="${s.weight > 0 ? s.weight + 'kg' : 'sin peso'}"></span>`
+    ).join('');
 
     return `
       <div class="exercise-list-item ${isCurrent ? 'current' : ''} ${isDone ? 'done' : ''}" data-go-exercise="${idx}">
         <div class="exercise-list-num">${idx + 1}</div>
         <div class="exercise-list-info">
           <div class="exercise-list-name">${escapeHtml(name)}</div>
-          <div class="exercise-list-meta">${mgTranslate(muscle)} · ${totalSets}s${maxWeight > 0 ? ` · ${maxWeight}kg` : ''}</div>
+          <div class="exercise-list-meta">${mgTranslate(muscle)} · ${setsWithWeight}/${totalSets} ${weightDots}${maxWeight > 0 ? ` · max ${maxWeight}kg` : ''}</div>
         </div>
         ${isDone ? '<div class="done-check">&#10003;</div>' : ''}
         ${isCurrent ? '<div class="current-arrow">&#9654;</div>' : ''}
@@ -376,13 +383,14 @@ function renderExercise() {
               </select>
             </div>
             <div style="font-size:20px;font-weight:bold;color:#ccc;">x</div>
-            <div>
+            <div style="position:relative;">
               <div style="font-size:10px;color:gray;">kg</div>
               <input type="number" id="workout-weight" list="workout-weight-options"
                 step="0.25" min="0" max="500" value="${currentSetData.weight}"
                 inputmode="decimal"
                 style="width:88px;font-size:18px;font-weight:bold;text-align:center;border-radius:8px;padding:5px;background:#fff;border:${currentSetData.weight > 0 ? '1px solid #ddd' : '2px solid #e67e22'};"
                 title="${currentSetData.weight > 0 ? '' : t('EnterWeightHint')}">
+              <span id="weight-saved-badge" style="position:absolute;right:-6px;top:-2px;background:#28a745;color:#fff;font-size:10px;font-weight:bold;padding:2px 6px;border-radius:10px;opacity:0;transition:opacity .25s;pointer-events:none;">&#10003;</span>
               <datalist id="workout-weight-options">${buildWorkoutWeightOptions(currentSetData.weight)}</datalist>
             </div>
           </div>
@@ -712,9 +720,26 @@ function saveCurrentSetValues() {
     const raw = (weightEl.value ?? '').trim();
     if (raw !== '') {
       const weight = parseFloat(raw);
-      if (Number.isFinite(weight) && weight >= 0) sd.weight = weight;
+      if (Number.isFinite(weight) && weight >= 0) {
+        const changed = sd.weight !== weight;
+        sd.weight = weight;
+        // Visual confirmation: when the saved weight actually changed, flash a green
+        // tick next to the input so the user has immediate proof their value made it
+        // into memory. Without this, multiple users reported "no se guardan los pesos"
+        // when the problem was actually a stale Service Worker.
+        if (changed && weight > 0) flashWeightSaved();
+      }
     }
   }
+}
+
+let _weightSavedTimer = null;
+function flashWeightSaved() {
+  const badge = document.getElementById('weight-saved-badge');
+  if (!badge) return;
+  badge.style.opacity = '1';
+  if (_weightSavedTimer) clearTimeout(_weightSavedTimer);
+  _weightSavedTimer = setTimeout(() => { badge.style.opacity = '0'; }, 1200);
 }
 
 /**

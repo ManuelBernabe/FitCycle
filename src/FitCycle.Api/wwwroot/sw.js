@@ -1,4 +1,4 @@
-const CACHE = 'fitcycle-v94';
+const CACHE = 'fitcycle-v95';
 const API_CACHE = 'fitcycle-api-v1';
 const IMG_CACHE = 'fitcycle-img-v1';
 const IMG_CACHE_MAX = 100; // LRU cap for exercise images
@@ -43,11 +43,21 @@ self.addEventListener('install', e => {
 });
 
 self.addEventListener('activate', e => {
-  e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE && k !== API_CACHE && k !== IMG_CACHE).map(k => caches.delete(k)))
-    ).then(() => self.clients.claim())
-  );
+  e.waitUntil((async () => {
+    // Purge every cache that doesn't match the current versions — this is what removes
+    // the old fitcycle-v90 / v91 / v92 / v93 entries when v94+ activates.
+    const keys = await caches.keys();
+    await Promise.all(keys.filter(k => k !== CACHE && k !== API_CACHE && k !== IMG_CACHE).map(k => caches.delete(k)));
+    await self.clients.claim();
+    // Tell every open client we've activated a new version so they can hot-reload the
+    // page and pick up the new app shell (workout.js etc.) without the user having to
+    // close and reopen the PWA. Installed iOS PWAs are otherwise notorious for sticking
+    // on a stale SW for days.
+    const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const client of clients) {
+      client.postMessage({ type: 'sw-activated', cache: CACHE });
+    }
+  })());
 });
 
 /**

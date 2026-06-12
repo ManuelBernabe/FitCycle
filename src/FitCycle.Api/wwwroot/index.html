@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://www.youtube.com" crossorigin>
   <link rel="dns-prefetch" href="https://www.youtube.com">
   <title>FitCycle</title>
-  <link rel="stylesheet" href="/css/app.css?v=94">
+  <link rel="stylesheet" href="/css/app.css?v=95">
   <script>
     // Apply theme before first paint to prevent flash
     (function(){var t=localStorage.getItem('fitcycle_theme')||'auto';if(t==='dark'||(t==='auto'&&matchMedia('(prefers-color-scheme:dark)').matches))document.documentElement.classList.add('dark');})();
@@ -28,9 +28,25 @@
     </div>
   </div>
   <script>
-    if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' });
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' });
+      // When the SW activates a new version, hot-reload the page so the user gets the
+      // new app shell (including bug fixes to workout.js etc.) without having to close
+      // and reopen the PWA. Guarded by sessionStorage so we only reload ONCE per session.
+      navigator.serviceWorker.addEventListener('message', (e) => {
+        if (e.data && e.data.type === 'sw-activated' && !sessionStorage.getItem('fc_sw_reloaded')) {
+          sessionStorage.setItem('fc_sw_reloaded', '1');
+          location.reload();
+        }
+      });
+      // Poll for SW updates every 60s so a long-running PWA picks up new versions sooner.
+      // Without this, iOS PWAs can stay on a stale SW for days.
+      setInterval(() => {
+        navigator.serviceWorker.getRegistration().then(reg => reg && reg.update().catch(() => {}));
+      }, 60 * 1000);
+    }
   </script>
   <script src="/js/qrcode.min.js"></script>
-  <script type="module" src="/js/app.js?v=94"></script>
+  <script type="module" src="/js/app.js?v=95"></script>
 </body>
 </html>
