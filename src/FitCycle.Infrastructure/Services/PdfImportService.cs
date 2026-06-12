@@ -1737,12 +1737,20 @@ public static class LocalPdfParser
         if (Regex.IsMatch(stripped, @"^\d+(\s*(reps?|series?|x|×|\*)\s*\d*)?$", RegexOptions.IgnoreCase))
             return true;
 
-        // "Peso ALTO …" / "Peso LIGERO …" — keep "Peso muerto".
+        // "Peso ALTO …" / "Peso LIGERO …" — keep "Peso muerto". Match even when the modifier
+        // has a glued suffix like "LIGERO-LO" (from "PESO LIGERO-LO USAMOS PARA CALENTAR ..."):
+        // we accept any token that STARTS WITH one of the intensity modifier words.
         if (tokens.Length >= 2
-            && tokens[0].Equals("PESO", StringComparison.OrdinalIgnoreCase)
-            && PesoIntensityModifiersInternal.Contains(tokens[1].TrimEnd(',', '.', ':')))
+            && tokens[0].Equals("PESO", StringComparison.OrdinalIgnoreCase))
         {
-            return true;
+            var second = tokens[1].TrimEnd(',', '.', ':').ToUpperInvariant();
+            if (PesoIntensityModifiersInternal.Contains(second))
+                return true;
+            foreach (var modifier in PesoIntensityModifiersInternal)
+            {
+                if (second.StartsWith(modifier, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
         }
 
         // Line consists ONLY of repeated "PESO <modifier>" pairs.

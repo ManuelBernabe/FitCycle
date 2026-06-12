@@ -670,10 +670,30 @@ function suggestRestSeconds(exercise) {
 function saveCurrentSetValues() {
   const ex = exercises[currentIndex];
   if (!ex) return;
+  const sd = ex.setDetails[currentSet];
+  if (!sd) return;
+
+  // Reps: only overwrite when the user picked a valid positive number. An empty/garbage
+  // value MUST NOT overwrite the planned reps with a default (used to be 12 — that's why
+  // re-imported routines showed wrong reps after a quick set advance).
   const repsEl = document.getElementById('workout-reps');
+  if (repsEl) {
+    const reps = parseInt(repsEl.value, 10);
+    if (Number.isFinite(reps) && reps > 0) sd.reps = reps;
+  }
+
+  // Weight: same rule — an empty input (user cleared it then advanced, or the browser
+  // returned "" momentarily) must not stamp 0 over a pre-filled weight from history.
+  // The user can still explicitly type "0" to reset; that path keeps working because
+  // parseFloat("0") === 0 passes the `Number.isFinite(val) && val >= 0` check.
   const weightEl = document.getElementById('workout-weight');
-  if (repsEl) ex.setDetails[currentSet].reps = parseInt(repsEl.value) || 12;
-  ex.setDetails[currentSet].weight = weightEl ? (parseFloat(weightEl.value) || 0) : 0;
+  if (weightEl) {
+    const raw = (weightEl.value ?? '').trim();
+    if (raw !== '') {
+      const weight = parseFloat(raw);
+      if (Number.isFinite(weight) && weight >= 0) sd.weight = weight;
+    }
+  }
 }
 
 /**
