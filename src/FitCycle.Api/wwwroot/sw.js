@@ -1,4 +1,4 @@
-const CACHE = 'fitcycle-v98';
+const CACHE = 'fitcycle-v99';
 const API_CACHE = 'fitcycle-api-v1';
 const IMG_CACHE = 'fitcycle-img-v1';
 const IMG_CACHE_MAX = 100; // LRU cap for exercise images
@@ -49,13 +49,20 @@ self.addEventListener('activate', e => {
     const keys = await caches.keys();
     await Promise.all(keys.filter(k => k !== CACHE && k !== API_CACHE && k !== IMG_CACHE).map(k => caches.delete(k)));
     await self.clients.claim();
-    // Tell every open client we've activated a new version so they can hot-reload the
-    // page and pick up the new app shell (workout.js etc.) without the user having to
-    // close and reopen the PWA. Installed iOS PWAs are otherwise notorious for sticking
-    // on a stale SW for days.
+    // Notify every open client a new version activated. Use BOTH mechanisms:
+    //   1. postMessage — picked up by the listener in index.html (v95+).
+    //   2. client.navigate(url) — works even when the client is running an OLD index.html
+    //      that doesn't have the message listener yet (the exact lock-in scenario where
+    //      installed PWAs sit on a stale SW indefinitely).
     const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     for (const client of clients) {
-      client.postMessage({ type: 'sw-activated', cache: CACHE });
+      try { client.postMessage({ type: 'sw-activated', cache: CACHE }); } catch { /* ignore */ }
+      // navigate() forcibly reloads the document, even with no client-side listener.
+      // Gate on focus state so we only reload visible windows (avoid kicking a workout in
+      // the background mid-session). The next focus event will refresh it instead.
+      try {
+        if (client.focused && client.navigate) await client.navigate(client.url);
+      } catch { /* ignore */ }
     }
   })());
 });

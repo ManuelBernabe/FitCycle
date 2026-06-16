@@ -100,7 +100,7 @@ function renderShell(route, routeName, params) {
     html += `
       <div class="header">
         <div class="header-logo" id="header-logo" style="cursor:pointer;" role="button" tabindex="0" aria-label="Inicio">FC</div>
-        <div class="header-title">FitCycle${envTag()} <span class="header-version" title="Versión de la app">v${APP_VERSION}</span></div>
+        <div class="header-title">FitCycle${envTag()} <span class="header-version" id="header-version" role="button" tabindex="0" title="Versión de la app — toca para buscar actualización">v${APP_VERSION}</span></div>
         <select class="lang-picker" id="header-lang">${langOptions}</select>
         <a href="https://eathealthycycle-production.up.railway.app/portal.html" target="_blank" style="background:rgba(255,255,255,0.2);color:white;border:none;border-radius:8px;padding:6px 12px;font-size:13px;font-weight:600;text-decoration:none;display:flex;align-items:center;">&#127968; Apps</a>
         <div class="avatar" id="header-avatar" role="button" tabindex="0" aria-label="Cuenta">${initial}</div>
@@ -165,6 +165,33 @@ function renderShell(route, routeName, params) {
     // Logo click -> home
     document.getElementById('header-logo')?.addEventListener('click', () => {
       location.hash = '#home';
+    });
+
+    // Version pill click -> force check for an updated service worker, then hard reload.
+    // Lets the user pull the latest version on demand when iOS keeps the PWA on a stale
+    // shell. Shows a tiny toast so they know something happened.
+    document.getElementById('header-version')?.addEventListener('click', async () => {
+      const pill = document.getElementById('header-version');
+      const original = pill?.textContent;
+      if (pill) pill.textContent = 'Buscando...';
+      try {
+        if ('serviceWorker' in navigator) {
+          const reg = await navigator.serviceWorker.getRegistration();
+          if (reg) await reg.update();
+        }
+      } catch { /* ignore */ }
+      // Best-effort: clear the SW caches so the next fetch goes to the network.
+      try {
+        if ('caches' in window) {
+          const keys = await caches.keys();
+          await Promise.all(keys.filter(k => k.startsWith('fitcycle-')).map(k => caches.delete(k)));
+        }
+      } catch { /* ignore */ }
+      // sessionStorage flag prevents the activate handler's auto-reload from looping
+      // with our manual one. Clear it so the next sw-activated message reloads cleanly.
+      sessionStorage.removeItem('fc_sw_reloaded');
+      if (pill) pill.textContent = original || ('v' + APP_VERSION);
+      setTimeout(() => location.reload(), 200);
     });
 
   }
