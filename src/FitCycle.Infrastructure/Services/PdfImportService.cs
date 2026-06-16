@@ -1252,6 +1252,50 @@ public static class LocalPdfParser
                 continue;
             }
 
+            // PRIORITY rep-prescription. Any UNMARKED line that mentions "N series ..."
+            // and "... M reps" with text between describes the immediately preceding
+            // exercise. This covers the trainer's narrative form:
+            //   [EX] Extensión de cuadriceps:                                  <-- creates current
+            //   Calentamiento 3 series con peso ligero y controlado (15 reps por serie)
+            // The Calentamiento line is NOT marked [EX] (the green segment was only
+            // "Extensión de cuadriceps:"), so we apply 3×15 to current and skip the
+            // exercise-name heuristics entirely. Only fires when:
+            //   - the line is not [EX]-marked (so we don't accidentally consume a marked
+            //     exercise that legitimately starts with a number),
+            //   - current exists and has no sets yet (don't clobber a proper table),
+            //   - both anchors point to plausible counts (1..30 sets, reps 1..999).
+            if (!isMarkedExercise && current != null && current.Sets.Count == 0)
+            {
+                var priSeries = Regex.Match(line, @"(\d+)\s+series?\b", RegexOptions.IgnoreCase);
+                var priReps = Regex.Match(line, @"\breps?\b", RegexOptions.IgnoreCase);
+                if (priSeries.Success && priReps.Success
+                    && priReps.Index > priSeries.Index + priSeries.Length)
+                {
+                    var count = int.Parse(priSeries.Groups[1].Value);
+                    var between = line.Substring(
+                        priSeries.Index + priSeries.Length,
+                        priReps.Index - (priSeries.Index + priSeries.Length));
+                    var repsNums = Regex.Matches(between, @"\d+")
+                        .Select(m => int.Parse(m.Value))
+                        .Where(n => n > 0 && n < 1000)
+                        .ToList();
+                    if (repsNums.Count > 0 && count > 0 && count <= 30)
+                    {
+                        if (repsNums.Count == 1)
+                        {
+                            for (int i = 0; i < Math.Min(count, 10); i++)
+                                current.Sets.Add(new PdfSet { Reps = repsNums[0] });
+                        }
+                        else
+                        {
+                            foreach (var r in repsNums)
+                                current.Sets.Add(new PdfSet { Reps = r });
+                        }
+                        continue;
+                    }
+                }
+            }
+
             // Handle "Exercise name: N series x N reps" inline pattern
             var inlineMatch = Regex.Match(line, @"^(.+?):\s*(\d+)\s+series?\s*[x×]\s*(\d+)\s*reps?",
                 RegexOptions.IgnoreCase);

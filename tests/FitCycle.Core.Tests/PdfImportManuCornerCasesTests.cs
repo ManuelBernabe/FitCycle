@@ -131,6 +131,56 @@ public class PdfImportManuCornerCasesTests
     }
 
     [Fact]
+    public void Extension_Cuadriceps_Calentamiento_Line_Split_Across_Two_PdfLines()
+    {
+        // What the PdfPig extractor might actually emit when the trainer's PDF line
+        // wraps: two physical lines. We must still attach 3×15 to the green exercise.
+        var text = """
+            PIERNAS (LUNES)
+            [EX] Extensión de cuadriceps:
+            Calentamiento 3 series con peso ligero y controlado (15 reps por
+            serie) ---------------1 minuto de descanso por serie
+            """;
+        var result = LocalPdfParser.Parse(text);
+        var ex = result.Routines.First(r => r.DayOfWeek == 1).Exercises.First();
+        Assert.Contains("Extensión", ex.Name ?? "");
+        Assert.Equal(3, ex.Sets.Count);
+        Assert.All(ex.Sets, s => Assert.Equal(15, s.Reps));
+    }
+
+    [Fact]
+    public void Extension_Cuadriceps_Whole_Calentamiento_Line_Joined()
+    {
+        // Same line but joined (depends on Y-coordinate clustering in PdfPig).
+        var text = """
+            PIERNAS (LUNES)
+            [EX] Extensión de cuadriceps:
+            Calentamiento 3 series con peso ligero y controlado (15 reps por serie) ---------------1 minuto de descanso por serie
+            """;
+        var result = LocalPdfParser.Parse(text);
+        var ex = result.Routines.First(r => r.DayOfWeek == 1).Exercises.First();
+        Assert.Equal(3, ex.Sets.Count);
+        Assert.All(ex.Sets, s => Assert.Equal(15, s.Reps));
+    }
+
+    [Fact]
+    public void Extension_Cuadriceps_With_Trailing_Dashes_Only()
+    {
+        // Defensive: even if the second physical line came alone (without "serie)" prefix),
+        // it must not retroactively touch the 3×15 we already applied.
+        var text = """
+            PIERNAS (LUNES)
+            [EX] Extensión de cuadriceps:
+            Calentamiento 3 series con peso ligero y controlado (15 reps por serie)
+            ---------------1 minuto de descanso por serie
+            """;
+        var result = LocalPdfParser.Parse(text);
+        var ex = result.Routines.First(r => r.DayOfWeek == 1).Exercises.First();
+        Assert.Equal(3, ex.Sets.Count);
+        Assert.All(ex.Sets, s => Assert.Equal(15, s.Reps));
+    }
+
+    [Fact]
     public void Generic_Tiempo_De_Descanso_Inline_Does_Not_Eat_Reps_Row()
     {
         // Defensive: a "Tiempo de descanso: 1 minuto por serie" line that follows a
