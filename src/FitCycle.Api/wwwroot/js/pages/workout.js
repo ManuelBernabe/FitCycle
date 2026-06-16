@@ -711,13 +711,19 @@ function saveCurrentSetValues() {
     if (Number.isFinite(reps) && reps > 0) sd.reps = reps;
   }
 
-  // Weight: same rule — an empty input (user cleared it then advanced, or the browser
-  // returned "" momentarily) must not stamp 0 over a pre-filled weight from history.
-  // The user can still explicitly type "0" to reset; that path keeps working because
-  // parseFloat("0") === 0 passes the `Number.isFinite(val) && val >= 0` check.
+  // Weight: same rule — an empty input must not stamp 0 over a pre-filled weight from
+  // history. The user can still explicitly type "0" to reset.
+  //
+  // CRITICAL: in some mobile browsers (notably iOS Safari with Spanish locale), the
+  // weight input's `value` comes back with a COMMA as decimal separator ("7,5"). The
+  // JS parseFloat then truncates at the comma and returns 7 — silently dropping the
+  // decimal. For values like "0,5" the truncation produces 0, which would then sail
+  // through `weight >= 0` and overwrite the prefilled value with zero. This was the
+  // user-reported bug "casi nada de pesos se había guardado". Normalize commas to
+  // dots before parsing so locale-formatted input never disappears.
   const weightEl = document.getElementById('workout-weight');
   if (weightEl) {
-    const raw = (weightEl.value ?? '').trim();
+    const raw = (weightEl.value ?? '').trim().replace(',', '.');
     if (raw !== '') {
       const weight = parseFloat(raw);
       if (Number.isFinite(weight) && weight >= 0) {

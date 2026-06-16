@@ -572,11 +572,13 @@ function attachEvents(container) {
     });
   });
 
-  // Per-set weight pickers
+  // Per-set weight pickers. Normalize comma decimal separators to dot before parsing
+  // so users in Spanish/EU locales don't have "12,5" silently truncated to 12.
   container.querySelectorAll('.set-weight-picker').forEach(sel => {
     sel.addEventListener('change', () => {
       const { gi, ei, si } = parseIndices(sel);
-      groups[gi].exercises[ei].setDetails[si].weight = parseFloat(sel.value) || 0;
+      const raw = (sel.value ?? '').toString().trim().replace(',', '.');
+      groups[gi].exercises[ei].setDetails[si].weight = parseFloat(raw) || 0;
       syncSummaryFromDetails(gi, ei);
     });
   });
