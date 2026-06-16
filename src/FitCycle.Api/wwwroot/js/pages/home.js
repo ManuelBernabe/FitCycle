@@ -4,6 +4,7 @@ import { t } from '../l10n.js';
 import { api } from '../api.js';
 import { auth } from '../auth.js';
 import { calculateStreak, envTag, checkStreakMilestone } from '../utils.js';
+import { APP_VERSION } from '../version.js';
 
 export function render() {
   const username = auth.getUsername() || '?';
@@ -12,7 +13,7 @@ export function render() {
     <div class="page no-tabs">
       <div class="home-hero">
         <div class="home-logo">FC</div>
-        <div class="home-app-name">FitCycle${envTag()}</div>
+        <div class="home-app-name">FitCycle${envTag()} <span class="home-version">v${APP_VERSION}</span></div>
         <div class="home-greeting">${t('Welcome', username)}</div>
       </div>
       <div class="page-content" style="margin-top:-20px;position:relative;z-index:1;">

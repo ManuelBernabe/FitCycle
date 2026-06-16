@@ -4,6 +4,7 @@ import { t, init as l10nInit, currentLanguage, setLanguage, availableLanguages, 
 import { auth } from './auth.js';
 import { applyTheme, applyFontSize, fontSizeUp, fontSizeDown, getFontSize, envTag } from './utils.js';
 import { offline } from './offline.js';
+import { APP_VERSION } from './version.js';
 
 // Page modules (lazy-ish imports — all bundled but only rendered on demand)
 import * as loginPage from './pages/login.js';
@@ -99,7 +100,7 @@ function renderShell(route, routeName, params) {
     html += `
       <div class="header">
         <div class="header-logo" id="header-logo" style="cursor:pointer;" role="button" tabindex="0" aria-label="Inicio">FC</div>
-        <div class="header-title">FitCycle${envTag()}</div>
+        <div class="header-title">FitCycle${envTag()} <span class="header-version" title="Versión de la app">v${APP_VERSION}</span></div>
         <select class="lang-picker" id="header-lang">${langOptions}</select>
         <a href="https://eathealthycycle-production.up.railway.app/portal.html" target="_blank" style="background:rgba(255,255,255,0.2);color:white;border:none;border-radius:8px;padding:6px 12px;font-size:13px;font-weight:600;text-decoration:none;display:flex;align-items:center;">&#127968; Apps</a>
         <div class="avatar" id="header-avatar" role="button" tabindex="0" aria-label="Cuenta">${initial}</div>

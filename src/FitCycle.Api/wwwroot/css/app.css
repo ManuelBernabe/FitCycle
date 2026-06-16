@@ -96,6 +96,30 @@ body {
   white-space: nowrap;
 }
 
+.header-version {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.75;
+  margin-left: 4px;
+  background: rgba(255, 255, 255, 0.18);
+  padding: 1px 6px;
+  border-radius: 8px;
+  vertical-align: middle;
+  letter-spacing: 0.3px;
+}
+
+.home-version {
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.75;
+  margin-left: 6px;
+  background: rgba(255, 255, 255, 0.2);
+  padding: 2px 8px;
+  border-radius: 10px;
+  vertical-align: middle;
+  letter-spacing: 0.3px;
+}
+
 /* === Floating Zoom FAB === */
 #zoom-fab {
   position: fixed;
