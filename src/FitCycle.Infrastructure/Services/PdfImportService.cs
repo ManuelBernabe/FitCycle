@@ -1495,22 +1495,33 @@ public static class LocalPdfParser
                 }
             }
 
-            // Reps shorthand: "4*15*12*10*8" or "4x15"
-            if (Regex.IsMatch(line, @"\d+\s*[*x×]\s*\d+", RegexOptions.IgnoreCase))
+            // Reps shorthand: "4*15*12*10*8" / "4x15" / "4*10".
+            // Capture ONLY the contiguous N*N*N... chain — stop at the first non-digit /
+            // non-operator character. Otherwise lines like "4*10 pasos ida*10 vuelta"
+            // (Zancada del Lunes) would have picked up the second "10" as a third rep
+            // value and produced 3 sets of [4, 10, 10] instead of 4 sets of 10.
+            var shorthand = Regex.Match(line, @"\b(\d+(?:\s*[*x×]\s*\d+)+)\b", RegexOptions.IgnoreCase);
+            if (shorthand.Success && current != null)
             {
-                var nums = Regex.Matches(line, @"\d+").Select(m => int.Parse(m.Value)).Where(n => n > 0).ToList();
+                var chain = shorthand.Groups[1].Value;
+                var nums = Regex.Matches(chain, @"\d+").Select(m => int.Parse(m.Value)).Where(n => n > 0).ToList();
                 if (nums.Count >= 2)
                 {
                     current.Sets.Clear();
-                    if (nums.Count == 2)
+                    // "N * R1 * R2 * R3 * ... * Rn" with n == N → per-set reps.
+                    // Anything else (including "N * R" / "N * R * trailing junk") collapses
+                    // to N sets of R using nums[0] as the set count and nums[1] as reps.
+                    if (nums.Count == nums[0] + 1)
                     {
-                        for (int i = 0; i < nums[0]; i++)
-                            current.Sets.Add(new PdfSet { Reps = nums[1] });
+                        for (int i = 1; i < nums.Count; i++)
+                            current.Sets.Add(new PdfSet { Reps = nums[i] });
                     }
                     else
                     {
-                        foreach (var r in nums)
-                            current.Sets.Add(new PdfSet { Reps = r });
+                        var count = Math.Min(nums[0], 20); // sanity clamp
+                        var reps = nums[1];
+                        for (int i = 0; i < count; i++)
+                            current.Sets.Add(new PdfSet { Reps = reps });
                     }
                 }
                 continue;
@@ -1733,8 +1744,10 @@ public static class LocalPdfParser
         var tokens = stripped.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
         if (tokens.Length == 0) return true;
 
-        // Pure digit row.
-        if (Regex.IsMatch(stripped, @"^\d+(\s*(reps?|series?|x|×|\*)\s*\d*)?$", RegexOptions.IgnoreCase))
+        // Pure digit row: "12" by itself, "12 reps", "12 series" — annotations the trainer
+        // sometimes stamps into a Serie cell. We deliberately do NOT include `*` / `x` / `×`
+        // here so that "4*15" / "4x10" (legitimate set shorthand) is allowed downstream.
+        if (Regex.IsMatch(stripped, @"^\d+(\s*(reps?|series?)\s*\d*)?$", RegexOptions.IgnoreCase))
             return true;
 
         // "Peso ALTO …" / "Peso LIGERO …" — keep "Peso muerto". Match even when the modifier

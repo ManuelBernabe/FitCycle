@@ -140,6 +140,18 @@ public class PdfImportManuLunesTests
     }
 
     [Fact]
+    public void Lunes_Zancada_Four_Sets_Of_Ten()
+    {
+        // The "4*10 pasos ida*10 vuelta" line — the second "*10" used to leak into the reps
+        // list and produce 3 sets of [4,10,10] instead of 4 sets of 10. User screenshot
+        // showed "Ejercicio 2 de 9 / Serie 3 de 3" for Zancada — exactly the bug.
+        var lunes = Parse().Routines.First(r => r.DayOfWeek == 1);
+        var ex = lunes.Exercises.First(e => (e.Name ?? "").Contains("Zancada", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(4, ex.Sets.Count);
+        Assert.All(ex.Sets, s => Assert.Equal(10, s.Reps));
+    }
+
+    [Fact]
     public void Lunes_Gemelo_Four_Sets_Of_Twenty()
     {
         var lunes = Parse().Routines.First(r => r.DayOfWeek == 1);
