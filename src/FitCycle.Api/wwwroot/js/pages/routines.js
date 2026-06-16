@@ -3,6 +3,7 @@
 import { t, dayName, muscleGroup, exerciseName as exTranslate, currentLanguage } from '../l10n.js';
 import { api } from '../api.js';
 import { auth } from '../auth.js';
+import { offline } from '../offline.js';
 import { escapeHtml, showAlert, showConfirm, skeleton } from '../utils.js';
 
 let weekData = null;
@@ -267,6 +268,23 @@ async function showImportModal() {
       const result = await api.postForm('/routines/import-pdf', formData);
 
       // PDF import result logged for debugging (removed in production)
+
+      // CRITICAL: a successful import rewrites /routines and /routines/{day} on the
+      // server, but the SW caches both with stale-while-revalidate. Without an
+      // explicit invalidation here, the user keeps seeing the OLD routine (e.g. the
+      // 3×12 default for Extensión de cuádriceps) on every reload and concludes
+      // "el parser sigue rompiendo".
+      if (result?.success) {
+        try {
+          // 1) Service Worker cache (fitcycle-api-*)
+          await api.invalidateCache('/routines');
+          await api.invalidateCache('/exercises');
+          // 2) localStorage offline read-cache. Without this, the next /routines GET
+          //    returns the stale list before the SW even gets consulted.
+          offline.invalidateCache('/routines');
+          offline.invalidateCache('/exercises');
+        } catch { /* best-effort */ }
+      }
 
       if (result?.success) {
         const daysSummary = (result.days || []).map(d =>

@@ -43,6 +43,25 @@ function isCacheable(path) {
   return CACHEABLE.some(p => path === p || path.startsWith(p + '/'));
 }
 
+/**
+ * Drops every localStorage entry whose key matches a substring of the cached path.
+ * Used after writes that invalidate a cached read — e.g. PDF import rewrites every
+ * day's routines, so call invalidateCache('/routines') so the next visit fetches
+ * fresh data instead of serving the old 3x12 default from localStorage.
+ */
+function invalidateCache(pathSubstring) {
+  try {
+    const keysToRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(CACHE_PREFIX) && key.includes(pathSubstring)) {
+        keysToRemove.push(key);
+      }
+    }
+    keysToRemove.forEach(k => localStorage.removeItem(k));
+  } catch { /* ignore */ }
+}
+
 // Also cache /routines/{dayNum} dynamically
 function isCacheableGet(path) {
   if (isCacheable(path)) return true;
@@ -247,6 +266,7 @@ export const offline = {
   getCached,
   setCache,
   isCacheableGet,
+  invalidateCache,
   enqueue,
   pendingCount,
   syncAll,
