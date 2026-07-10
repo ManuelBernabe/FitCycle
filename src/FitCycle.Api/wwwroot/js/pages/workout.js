@@ -386,7 +386,7 @@ function renderExercise() {
             <div style="position:relative;">
               <div style="font-size:10px;color:gray;">kg</div>
               <input type="number" id="workout-weight" list="workout-weight-options"
-                step="0.25" min="0" max="500" value="${currentSetData.weight}"
+                step="any" min="0" max="500" value="${currentSetData.weight}"
                 inputmode="decimal"
                 style="width:88px;font-size:18px;font-weight:bold;text-align:center;border-radius:8px;padding:5px;background:#fff;border:${currentSetData.weight > 0 ? '1px solid #ddd' : '2px solid #e67e22'};"
                 title="${currentSetData.weight > 0 ? '' : t('EnterWeightHint')}">
@@ -461,6 +461,9 @@ function renderExercise() {
   // ── Event Bindings ──
 
   document.getElementById('workout-back')?.addEventListener('click', () => {
+    if (document.activeElement && typeof document.activeElement.blur === 'function') {
+      document.activeElement.blur();
+    }
     saveCurrentSetValues();
     saveProgress();
     stopTimer();
@@ -478,6 +481,9 @@ function renderExercise() {
   // Click exercise in list to jump to it
   document.querySelectorAll('[data-go-exercise]').forEach(el => {
     el.addEventListener('click', () => {
+      if (document.activeElement && typeof document.activeElement.blur === 'function') {
+        document.activeElement.blur();
+      }
       saveCurrentSetValues();
       const idx = parseInt(el.dataset.goExercise);
       if (idx >= 0 && idx < exercises.length) {
@@ -491,6 +497,9 @@ function renderExercise() {
   });
 
   document.getElementById('workout-prev')?.addEventListener('click', () => {
+    if (document.activeElement && typeof document.activeElement.blur === 'function') {
+      document.activeElement.blur();
+    }
     saveCurrentSetValues();
     stopTimer();
     const ex2 = exercises[currentIndex];
@@ -702,39 +711,54 @@ function saveCurrentSetValues() {
   const sd = ex.setDetails[currentSet];
   if (!sd) return;
 
-  // Reps: only overwrite when the user picked a valid positive number. An empty/garbage
-  // value MUST NOT overwrite the planned reps with a default (used to be 12 — that's why
-  // re-imported routines showed wrong reps after a quick set advance).
   const repsEl = document.getElementById('workout-reps');
   if (repsEl) {
     const reps = parseInt(repsEl.value, 10);
     if (Number.isFinite(reps) && reps > 0) sd.reps = reps;
   }
 
-  // Weight: same rule — an empty input must not stamp 0 over a pre-filled weight from
-  // history. The user can still explicitly type "0" to reset.
-  //
-  // CRITICAL: in some mobile browsers (notably iOS Safari with Spanish locale), the
-  // weight input's `value` comes back with a COMMA as decimal separator ("7,5"). The
-  // JS parseFloat then truncates at the comma and returns 7 — silently dropping the
-  // decimal. For values like "0,5" the truncation produces 0, which would then sail
-  // through `weight >= 0` and overwrite the prefilled value with zero. This was the
-  // user-reported bug "casi nada de pesos se había guardado". Normalize commas to
-  // dots before parsing so locale-formatted input never disappears.
+  // Weight — read using THREE strategies, in order, and accept the first that yields a
+  // valid non-empty number. Mobile browsers (especially iOS Safari with es-ES locale)
+  // have three known failure modes:
+  //   1) input.value comes back with a comma decimal ("7,5") → parseFloat truncates.
+  //   2) A restrictive `step` attribute (was step="0.25") can leave `value=""` when the
+  //      typed number doesn't fit — the user sees the digits on screen but JS sees "".
+  //   3) `input` events sometimes lag behind rapid taps on iOS, so the last keystroke
+  //      hasn't been committed when the user presses "Sig. serie".
+  // valueAsNumber bypasses the string-parsing step entirely and gives back the parsed
+  // number the browser is holding internally — locale-agnostic and unaffected by (1).
   const weightEl = document.getElementById('workout-weight');
   if (weightEl) {
-    const raw = (weightEl.value ?? '').trim().replace(',', '.');
-    if (raw !== '') {
-      const weight = parseFloat(raw);
-      if (Number.isFinite(weight) && weight >= 0) {
-        const changed = sd.weight !== weight;
-        sd.weight = weight;
-        // Visual confirmation: when the saved weight actually changed, flash a green
-        // tick next to the input so the user has immediate proof their value made it
-        // into memory. Without this, multiple users reported "no se guardan los pesos"
-        // when the problem was actually a stale Service Worker.
-        if (changed && weight > 0) flashWeightSaved();
+    let weight = null;
+
+    // Strategy 1: valueAsNumber (locale-independent, browser-parsed).
+    const asNum = weightEl.valueAsNumber;
+    if (Number.isFinite(asNum) && asNum >= 0) weight = asNum;
+
+    // Strategy 2: the visible string with comma→dot normalisation.
+    if (weight === null) {
+      const raw = (weightEl.value ?? '').trim().replace(',', '.');
+      if (raw !== '') {
+        const parsed = parseFloat(raw);
+        if (Number.isFinite(parsed) && parsed >= 0) weight = parsed;
       }
+    }
+
+    // Strategy 3: last-resort — pull digits and a decimal separator from the raw string.
+    // Covers weird iOS states where valueAsNumber is NaN AND value has extra characters.
+    if (weight === null) {
+      const raw = (weightEl.value ?? '').replace(',', '.');
+      const match = raw.match(/-?\d+(?:\.\d+)?/);
+      if (match) {
+        const parsed = parseFloat(match[0]);
+        if (Number.isFinite(parsed) && parsed >= 0) weight = parsed;
+      }
+    }
+
+    if (weight !== null) {
+      const changed = sd.weight !== weight;
+      sd.weight = weight;
+      if (changed && weight > 0) flashWeightSaved();
     }
   }
 }
@@ -753,6 +777,12 @@ function flashWeightSaved() {
  * rest-timer auto-advance. Handles superset alternation transparently.
  */
 function advanceToNext() {
+  // Force the focused input to commit its value before we read it. Without this, iOS
+  // Safari can hold the last keystroke in an internal buffer and `weightEl.value` still
+  // shows the previous value when we call saveCurrentSetValues immediately.
+  if (document.activeElement && typeof document.activeElement.blur === 'function') {
+    document.activeElement.blur();
+  }
   saveCurrentSetValues();
   stopTimer();
   haptic('success');
@@ -820,6 +850,13 @@ function switchSupersetPartner() {
   if (ssGrp <= 0) return;
   const partnerIdx = exercises.findIndex((e, i) => i !== currentIndex && (e.supersetGroup || 0) === ssGrp);
   if (partnerIdx < 0) return;
+  // Blur before save so the input's last keystroke is committed. This was the missing
+  // piece for the "los pesos del segundo ejercicio de la super serie no se registran"
+  // bug — the user typed weight for the partner then tapped the swap button before iOS
+  // fired the `input` event, so we saved nothing.
+  if (document.activeElement && typeof document.activeElement.blur === 'function') {
+    document.activeElement.blur();
+  }
   saveCurrentSetValues();
   stopTimer();
   currentIndex = partnerIdx;
@@ -998,10 +1035,13 @@ function updateTimerDisplay() {
 async function finishWorkout() {
   stopTimer();
   if (autosaveInterval) { clearInterval(autosaveInterval); autosaveInterval = null; }
-  // Defensive: re-capture the current set's values right before serializing. The button
-  // click handler already calls saveCurrentSetValues, but a second pass guarantees the
-  // very last value the user typed lands in the payload — especially when the user was
-  // still inside the input when they pressed Finish.
+  // Force the focused input to commit its value BEFORE saveCurrentSetValues reads it.
+  // Without this, iOS Safari can hold the last keystroke uncommitted and we'd persist
+  // the previous value instead of the number the user just typed.
+  if (document.activeElement && typeof document.activeElement.blur === 'function') {
+    document.activeElement.blur();
+  }
+  // Defensive: re-capture the current set's values right before serializing.
   saveCurrentSetValues();
   const completedAt = new Date();
 
