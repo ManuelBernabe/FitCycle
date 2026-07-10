@@ -1,5 +1,7 @@
-const CACHE = 'fitcycle-v102';
-const API_CACHE = 'fitcycle-api-v1';
+const CACHE = 'fitcycle-v103';
+// v2: bumped so every client drops the stale-while-revalidate copies of
+// /workouts/last-weights/* that were hiding freshly saved weights (v1.4.5 fix).
+const API_CACHE = 'fitcycle-api-v2';
 const IMG_CACHE = 'fitcycle-img-v1';
 const IMG_CACHE_MAX = 100; // LRU cap for exercise images
 
@@ -26,6 +28,33 @@ function isCacheableApi(request) {
   if (request.method !== 'GET') return false;
   const url = new URL(request.url);
   return CACHEABLE_API.some(p => url.pathname === p || url.pathname.startsWith(p + '/'));
+}
+
+// Paths where serving a stale cached copy is WORSE than a slower load. The workout
+// prefill reads /workouts/last-weights/{day} right after finishing a session — with
+// stale-while-revalidate it got the PRE-workout response (weights = 0) and only the
+// background refresh saw the new data. These must always hit the network first.
+function isFreshnessCriticalApi(request) {
+  const url = new URL(request.url);
+  return url.pathname === '/workouts' || url.pathname.startsWith('/workouts/');
+}
+
+// After a successful write to an API resource, every cached GET under that resource
+// is out of date. Purge them so the next read (network-first or SWR) can't resurrect
+// pre-write data. Covers both the live finishWorkout POST and offline queue replays.
+async function purgeApiCache(pathPrefix) {
+  try {
+    const cache = await caches.open(API_CACHE);
+    const keys = await cache.keys();
+    await Promise.all(
+      keys
+        .filter(req => {
+          const p = new URL(req.url).pathname;
+          return p === pathPrefix || p.startsWith(pathPrefix + '/');
+        })
+        .map(req => cache.delete(req))
+    );
+  } catch { /* best-effort */ }
 }
 
 function isImageRequest(request) {
@@ -104,6 +133,24 @@ self.addEventListener('fetch', e => {
 
   if (isApiCall(e.request.url)) {
     if (isCacheableApi(e.request)) {
+      if (isFreshnessCriticalApi(e.request)) {
+        // Network-first: workout history feeds the prefill of the next session, so a
+        // stale copy actively loses data from the user's point of view. The cache is
+        // only a fallback for offline reads.
+        e.respondWith(
+          caches.open(API_CACHE).then(async cache => {
+            try {
+              const res = await fetch(e.request);
+              if (res.ok) cache.put(e.request, res.clone());
+              return res;
+            } catch {
+              const cached = await cache.match(e.request);
+              return cached || new Response('{"error":"offline"}', { status: 503, headers: { 'Content-Type': 'application/json' } });
+            }
+          })
+        );
+        return;
+      }
       // Stale-while-revalidate: return cache immediately, refresh in background.
       e.respondWith(
         caches.open(API_CACHE).then(async cache => {
@@ -122,9 +169,22 @@ self.addEventListener('fetch', e => {
         })
       );
     } else {
-      // Non-cacheable API (auth, POST, etc): network only
+      // Non-cacheable API (auth, POST, etc): network only. Successful writes also
+      // purge the cached reads of the resource they just changed.
+      const method = e.request.method;
+      const pathname = new URL(e.request.url).pathname;
       e.respondWith(
-        fetch(e.request).catch(() =>
+        fetch(e.request).then(res => {
+          if (res.ok && method !== 'GET') {
+            for (const prefix of CACHEABLE_API) {
+              if (pathname === prefix || pathname.startsWith(prefix + '/')) {
+                try { e.waitUntil(purgeApiCache(prefix)); } catch { purgeApiCache(prefix); }
+                break;
+              }
+            }
+          }
+          return res;
+        }).catch(() =>
           new Response('{"error":"offline"}', { status: 503, headers: { 'Content-Type': 'application/json' } })
         )
       );

@@ -1067,20 +1067,36 @@ async function finishWorkout() {
     exercises: exerciseLogs,
   };
 
-  let saved = false;
   let prs = [];
   try {
     const result = await api.post('/workouts', workoutPayload);
-    saved = true;
     if (result && Array.isArray(result.prs)) prs = result.prs;
+    // The service worker keeps cached copies of GET /workouts/* (including
+    // /workouts/last-weights/{day}). The copy taken BEFORE this save predates the
+    // weights we just persisted — if it survives, the next visit prefills zeros.
+    // Drop the SW cache and the localStorage offline cache for everything /workouts.
+    try { await api.invalidateCache('/workouts'); } catch { /* best-effort */ }
+    offline.invalidateCache('/workouts');
   } catch (e) {
-    // Queue for sync when back online
-    offline.enqueue('POST', '/workouts', workoutPayload);
-    saved = true; // Consider it saved locally
-    offline.showSyncToast(t('WorkoutSavedOffline'));
+    const isOfflineError = !navigator.onLine || e?.status === 503 || (e instanceof TypeError);
+    if (isOfflineError) {
+      // Queue for sync when back online
+      offline.enqueue('POST', '/workouts', workoutPayload);
+      offline.showSyncToast(t('WorkoutSavedOffline'));
+    } else {
+      // The server actively rejected the save (4xx/5xx). Do NOT pretend it worked:
+      // keep the session progress so the typed weights survive, restart the autosave,
+      // and stay on the page so the user can fix connectivity and hit Finish again.
+      saveProgress();
+      if (!autosaveInterval) {
+        autosaveInterval = setInterval(() => { saveCurrentSetValues(); saveProgress(); }, 15000);
+      }
+      alert(t('ErrorFmt', e?.message || 'HTTP'));
+      return;
+    }
   }
 
-  if (saved) clearProgress();
+  clearProgress();
 
   // Celebration: vibration + confetti, plus extra punch on PR
   haptic(prs.length > 0 ? 'pr' : 'finish');

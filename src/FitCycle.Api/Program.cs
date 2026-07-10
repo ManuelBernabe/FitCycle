@@ -1057,13 +1057,18 @@ app.MapPost("/workouts", (SaveWorkoutRequest request, FitCycleDbContext db, Clai
 
     // 1. Compute PRs BEFORE saving the new session so we compare against the previous best
     var prs = new List<object>();
+    // NOTE: the GroupBy/Max must run in memory (AsEnumerable). The EF SQLite provider
+    // cannot translate aggregates over decimal columns — with Max(l => l.Weight) inside
+    // the query this endpoint threw 500 on EVERY save, and the client treated it as an
+    // offline save: the workout looked saved but never persisted (weights "reset to 0").
     var historicalMaxByExerciseId = db.WorkoutSessions
         .Where(s => s.UserId == userId)
         .SelectMany(s => s.ExerciseLogs)
         .Where(l => l.Weight > 0)
+        .Select(l => new { l.ExerciseId, l.Weight })
+        .AsEnumerable()
         .GroupBy(l => l.ExerciseId)
-        .Select(g => new { ExerciseId = g.Key, MaxWeight = g.Max(l => l.Weight) })
-        .ToDictionary(x => x.ExerciseId, x => x.MaxWeight);
+        .ToDictionary(g => g.Key, g => g.Max(l => l.Weight));
 
     foreach (var ex in request.Exercises)
     {
@@ -1921,3 +1926,7 @@ record SaveMeasurementRequest(
     decimal? ThighLeft = null, decimal? ThighRight = null,
     decimal? CalfLeft = null, decimal? CalfRight = null,
     decimal? Neck = null, decimal? BodyFat = null, string? Notes = null);
+
+// Exposes the Program entry point to WebApplicationFactory<Program> in the
+// integration test project (tests/FitCycle.Api.Tests).
+public partial class Program { }

@@ -190,9 +190,10 @@ async function syncAll(fetchFn) {
 }
 
 function invalidateAfterSync() {
-  ['/workouts', '/workouts/stats', '/measurements'].forEach(p => {
-    localStorage.removeItem(cacheKey(p));
-  });
+  // Substring match, NOT exact keys: the old removeItem(cacheKey(p)) version missed
+  // parameterized paths like /workouts/last-weights/3 — after an offline workout
+  // synced, the next prefill still read the stale cached copy with the old weights.
+  ['/workouts', '/measurements'].forEach(p => invalidateCache(p));
 }
 
 // --- Online/offline events ---
