@@ -1,4 +1,4 @@
-const CACHE = 'fitcycle-v104';
+const CACHE = 'fitcycle-v105';
 // v2: bumped so every client drops the stale-while-revalidate copies of
 // /workouts/last-weights/* that were hiding freshly saved weights (v1.4.5 fix).
 const API_CACHE = 'fitcycle-api-v2';

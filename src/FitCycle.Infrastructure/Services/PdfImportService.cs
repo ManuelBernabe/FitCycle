@@ -218,6 +218,11 @@ public class PdfImportService : IPdfImportService
             var exerciseInputs = new List<RoutineExerciseInput>();
             var supersetMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             int supersetCounter = 1;
+            // Exercise.Id → normalized PDF name that claimed it in THIS day. Two DIFFERENT
+            // PDF exercises must never resolve to the same Exercise row (that's how the two
+            // aperturas of día 1 collapsed into one) — but the same movement repeated in the
+            // day (Extensión de cuadríceps opens AND closes Lunes) legitimately shares its Id.
+            var claimedExerciseIds = new Dictionary<int, string>();
 
             // Force PDF order on save: sort by OrderHint (set by LocalPdfParser, re-numbered by MergeExtractions).
             var orderedExercises = (dayRoutine.Exercises ?? new()).OrderBy(e => e.OrderHint).ToList();
@@ -231,9 +236,14 @@ public class PdfImportService : IPdfImportService
 
                 var pdfExName = pdfEx.Name ?? "Ejercicio";
                 var normalizedPdfName = NormalizeExerciseName(pdfExName);
+                var claimedByOthers = claimedExerciseIds
+                    .Where(kv => !string.Equals(kv.Value, normalizedPdfName, StringComparison.OrdinalIgnoreCase))
+                    .Select(kv => kv.Key)
+                    .ToHashSet();
                 var exercise = allExercises.FirstOrDefault(e =>
-                    string.Equals(e.Name, pdfExName, StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(NormalizeExerciseName(e.Name), normalizedPdfName, StringComparison.OrdinalIgnoreCase));
+                    !claimedByOthers.Contains(e.Id) &&
+                    (string.Equals(e.Name, pdfExName, StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(NormalizeExerciseName(e.Name), normalizedPdfName, StringComparison.OrdinalIgnoreCase)));
 
                 // Fuzzy fallback: reuse the existing exercise even if the new name dropped/added
                 // parenthetical descriptors or articles. Critical for preserving images uploaded
@@ -241,9 +251,25 @@ public class PdfImportService : IPdfImportService
                 // creating a new Exercise would orphan the photo.
                 if (exercise == null)
                 {
-                    exercise = FindBestFuzzyExerciseMatch(pdfExName, allExercises);
+                    exercise = FindBestFuzzyExerciseMatch(pdfExName, allExercises, claimedByOthers);
                     if (exercise != null)
+                    {
                         _logger.LogInformation("Fuzzy-matched '{Pdf}' to existing exercise '{Existing}' (preserves image)", pdfExName, exercise.Name);
+                        // Keep the row (preserves the user's uploaded photo, keyed on the Id),
+                        // but when the PDF name is MORE specific than the stored one, upgrade
+                        // the stored name so the app shows the trainer's full wording
+                        // ("Press militar" → "Press Militar En Barra Multipower").
+                        if (SignificantTokens(pdfExName).Count > SignificantTokens(exercise.Name).Count)
+                        {
+                            var renamed = _repo.RenameExercise(exercise.Id, pdfExName);
+                            if (renamed != null)
+                            {
+                                exercise = renamed;
+                                allExercises = _repo.GetExercises();
+                                _logger.LogInformation("Upgraded exercise {Id} name to '{Name}'", exercise.Id, pdfExName);
+                            }
+                        }
+                    }
                 }
 
                 if (exercise == null)
@@ -253,6 +279,8 @@ public class PdfImportService : IPdfImportService
                     summary.NewExercisesCreated++;
                     _logger.LogInformation("Created new exercise '{Name}' for muscle group {Mg}", pdfExName, exMg?.Name ?? "?");
                 }
+
+                claimedExerciseIds[exercise.Id] = normalizedPdfName;
 
                 var setDetails = (pdfEx.Sets ?? new()).Select(s => new
                 {
@@ -430,7 +458,8 @@ public class PdfImportService : IPdfImportService
     /// Reusing the existing Exercise.Id is what keeps user-uploaded photos attached after a
     /// re-import.
     /// </summary>
-    private static Exercise? FindBestFuzzyExerciseMatch(string pdfName, IReadOnlyList<Exercise> existing)
+    internal static Exercise? FindBestFuzzyExerciseMatch(string pdfName, IReadOnlyList<Exercise> existing,
+        IReadOnlySet<int>? excludeIds = null)
     {
         var pdfTokens = SignificantTokens(pdfName);
         if (pdfTokens.Count == 0) return null;
@@ -439,6 +468,7 @@ public class PdfImportService : IPdfImportService
         double bestScore = 0;
         foreach (var ex in existing)
         {
+            if (excludeIds != null && excludeIds.Contains(ex.Id)) continue;
             var exTokens = SignificantTokens(ex.Name);
             if (exTokens.Count == 0) continue;
             var common = pdfTokens.Intersect(exTokens, StringComparer.OrdinalIgnoreCase).Count();
@@ -447,7 +477,12 @@ public class PdfImportService : IPdfImportService
             double score = (double)common / union;
             // Treat subset relationships as strong matches even when one side has extra words:
             // "Press banca plano" ⊂ "Press banca plano unilateral" should still pair.
-            if (pdfTokens.IsSubsetOf(exTokens) || exTokens.IsSubsetOf(pdfTokens))
+            // ONLY when the smaller side has ≥2 tokens: a single generic token is not an
+            // identity. Without this guard, "APERTURAS EN BANCO PLANO" and "APERTURAS
+            // INCLINADAS CON MANCUERNAS" both collapsed onto the seeded exercise "Aperturas"
+            // and the day ended up with one aperturas instead of two distinct movements.
+            var smaller = Math.Min(pdfTokens.Count, exTokens.Count);
+            if (smaller >= 2 && (pdfTokens.IsSubsetOf(exTokens) || exTokens.IsSubsetOf(pdfTokens)))
                 score = Math.Max(score, 0.85);
             if (score > bestScore) { bestScore = score; best = ex; }
         }
@@ -1233,6 +1268,11 @@ public static class LocalPdfParser
         PdfExercise? current = null;
         var notesBuilder = new StringBuilder();
         bool inTable = false;
+        // True while `current` came from a green line of the form "Section name: inline
+        // description" ("Glúteo en máquina de elevación de lumbar: Nos posicionamos…").
+        // If ANOTHER green exercise line arrives before any sets are captured, the pair is
+        // ONE exercise (section-style header + concrete movement name), not two.
+        bool currentIsColonSectionHeader = false;
         string? pendingFaseType = null; // "positiva" or "negativa" — awaiting numbers on next Seg. line
 
         for (int idx = 0; idx < lines.Count; idx++)
@@ -1287,6 +1327,7 @@ public static class LocalPdfParser
                     exercises.Add(partner);
                     ExtractGripFromName(partner);
                     current = partner;
+                    currentIsColonSectionHeader = false;
                     continue;
                 }
             }
@@ -1391,6 +1432,7 @@ public static class LocalPdfParser
                     exercises.Add(current);
                     // Extract grip from exercise name
                     ExtractGripFromName(current);
+                    currentIsColonSectionHeader = false;
                     continue;
                 }
             }
@@ -1409,6 +1451,19 @@ public static class LocalPdfParser
             // [EX]-marked lines bypass the heuristic — they come from green-coloured text in the PDF.
             if (isMarkedExercise || IsExerciseName(line, lines, idx))
             {
+                // Merge: "[EX] Glúteo en máquina de elevación de lumbar: Nos posicionamos…"
+                // immediately followed by "[EX] Hiperextensiones enfoque glúteo" (no table in
+                // between) is ONE exercise. Fold the section header into the notes and let
+                // this line rename the SAME exercise instead of creating a second one.
+                if (isMarkedExercise && current != null && currentIsColonSectionHeader && current.Sets.Count == 0)
+                {
+                    notesBuilder.AppendLine(current.Name);
+                    current.Name = ToTitleCase(CleanExerciseName(line));
+                    ExtractGripFromName(current);
+                    currentIsColonSectionHeader = false;
+                    continue;
+                }
+
                 FinalizeNotes(current, notesBuilder);
                 inTable = false;
                 pendingFaseType = null;
@@ -1440,6 +1495,7 @@ public static class LocalPdfParser
                         exB.OrderHint = exercises.Count;
                         exercises.Add(exB);
                         current = exB;
+                        currentIsColonSectionHeader = false;
                         ExtractGripFromName(exA);
                         ExtractGripFromName(exB);
                         continue;
@@ -1454,6 +1510,10 @@ public static class LocalPdfParser
                 };
                 exercises.Add(current);
                 ExtractGripFromName(current);
+                // "Name: inline description" green headers may be renamed by the NEXT green
+                // line (see the merge above). A trailing bare colon ("Femoral tumbado:") is
+                // NOT a section header — only a colon followed by more text qualifies.
+                currentIsColonSectionHeader = isMarkedExercise && Regex.IsMatch(line, @":\s*\S");
                 continue;
             }
 
@@ -1674,6 +1734,17 @@ public static class LocalPdfParser
                 for (int i = 0; i < Math.Min(count, 10); i++)
                     current.Sets.Add(new PdfSet { Reps = 12 });
                 continue;
+            }
+
+            // "4 series con peso añadido (disco)" — a set count with no rep spec. Capture the
+            // count (default 12 reps) but DON'T consume the line: the text stays as a note.
+            var bareSeriesMatch = Regex.Match(line, @"^(\d+)\s+series\b", RegexOptions.IgnoreCase);
+            if (bareSeriesMatch.Success && current.Sets.Count == 0
+                && !Regex.IsMatch(line, @"\breps?\b", RegexOptions.IgnoreCase))
+            {
+                var count = int.Parse(bareSeriesMatch.Groups[1].Value);
+                for (int i = 0; i < Math.Min(count, 10); i++)
+                    current.Sets.Add(new PdfSet { Reps = 12 });
             }
 
             // Standalone numbers line after pending Fase: "2 2 3 4" — also accepts "2 4 4 3-4"
@@ -2157,28 +2228,63 @@ public static class LocalPdfParser
             }
         }
 
-        // Truncate at parenthesis if name is already substantial
-        var parenIdx = name.IndexOf('(');
-        if (parenIdx > 5)
-            name = name[..parenIdx].TrimEnd(' ', '-', ',');
-
-        // Truncate long names at "- " break points (instruction after dash)
-        if (name.Length > 50)
+        // Parenthetical groups: KEEP the ones that describe the movement — muscle/equipment
+        // words like "(trapecio)" or "(CURL BÍCEPS CON BANCO INCLINADO)" are part of the
+        // name the trainer wrote. DROP coaching instructions ("(Fijate en la posición…",
+        // "(EL CONTRARIO AL DE LA FOTO)", "(Adelanta los codos en la ejecución)"). Text
+        // AFTER a dropped group survives: "Elevación al mentón (trapecio) con barra montada
+        // o desde polea baja y barra" stays complete. Unclosed groups (wrapped headers)
+        // are treated the same.
+        name = Regex.Replace(name, @"\(\s*([^)]*)\)?", m =>
         {
-            var dashIdx = name.IndexOf("- ", 20);
-            if (dashIdx > 0 && dashIdx < name.Length - 3)
-                name = name[..dashIdx].TrimEnd(' ', '-');
+            var inner = m.Groups[1].Value.Trim().TrimEnd(',', '.', ':');
+            if (inner.Length == 0) return " ";
+            return ContainsExerciseKeyword(inner) && !IsCoachingText(inner) ? $"({inner}) " : " ";
+        });
+        name = Regex.Replace(name, @"\s+", " ").Trim();
+
+        // Dash-joined segments: descriptors stay ("- CON BARRA RECTA- BANCO INCLINADO",
+        // "- agarre neutro"), coaching tails go ("-como en la foto").
+        var dashSegments = Regex.Split(name, @"\s*-\s+|(?<=\S)-(?=[A-Za-zÁÉÍÓÚÑáéíóúñ])")
+            .Select(s => s.Trim())
+            .Where(s => s.Length > 0)
+            .ToList();
+        if (dashSegments.Count > 1)
+        {
+            var kept = dashSegments.Where((seg, i) => i == 0 || !IsCoachingText(seg)).ToList();
+            name = string.Join("- ", kept);
         }
 
         // Final length cap with word boundary
-        if (name.Length > 60)
+        if (name.Length > 100)
         {
-            var lastSpace = name.LastIndexOf(' ', 60);
+            var lastSpace = name.LastIndexOf(' ', 100);
             if (lastSpace > 20)
                 name = name[..lastSpace];
         }
 
         return name.TrimEnd(':', '.', ',', '-', ' ');
+    }
+
+    // Words that flag a parenthetical or dash segment as a coaching instruction rather than
+    // part of the movement's identity ("como en la foto", "el contrario al de la foto",
+    // "con un peso controlado ya que…", "se situan frente al espejo").
+    private static readonly string[] CoachingMarkers =
+    {
+        "FOTO", "IMAGEN", "ESPEJO", "CONTRARIO", "EJECUCIÓN", "EJECUCION",
+        "CONTROLADO", "RECORRIDO", "POSICIÓN", "POSICION", "FIJATE", "FÍJATE",
+        "ADELANTA", "YA QUE", "SITUAN", "SITÚAN", "ASEO",
+    };
+
+    internal static bool IsCoachingText(string text)
+    {
+        foreach (var marker in CoachingMarkers)
+        {
+            if (text.Contains(marker, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+        var first = text.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
+        first = first.TrimEnd(',', '.', ':').ToUpperInvariant();
+        return first is "COMO" or "QUE" or "SE" or "YA" or "EL" or "LA" or "LOS" or "LAS" or "UN" or "UNA" or "AMBAS" or "AMBOS";
     }
 
     private static string ToTitleCase(string text)

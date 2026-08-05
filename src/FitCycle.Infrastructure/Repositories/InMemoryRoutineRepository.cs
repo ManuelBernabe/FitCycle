@@ -109,6 +109,15 @@ public class InMemoryRoutineRepository : IRoutineRepository
         return exercise;
     }
 
+    public Exercise? RenameExercise(int exerciseId, string newName)
+    {
+        if (string.IsNullOrWhiteSpace(newName)) return null;
+        var exercise = _exercises.FirstOrDefault(e => e.Id == exerciseId);
+        if (exercise == null) return null;
+        exercise.Name = newName.Trim();
+        return exercise;
+    }
+
     public Exercise? SetExerciseImageUrl(int exerciseId, string imageUrl)
     {
         var exercise = _exercises.FirstOrDefault(e => e.Id == exerciseId);

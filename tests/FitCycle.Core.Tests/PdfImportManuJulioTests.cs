@@ -601,6 +601,22 @@ public class PdfImportManuJulioTests
     }
 
     [Fact]
+    public void Dia2_GluteoLumbarHeaderAndHiperextensiones_AreOneExercise()
+    {
+        var dia2 = Day(2);
+
+        // "Glúteo en máquina de elevación de lumbar: Nos posicionamos…" is a section-style
+        // header for the very next green line "Hiperextensiones enfoque glúteo" — they must
+        // import as ONE exercise, named after the concrete movement, with the header kept
+        // as a note and "4 series con peso añadido" captured as 4 sets.
+        AssertNoExerciseContaining(dia2, "Glúteo En Máquina");
+
+        var hiper = Find(dia2, "Hiperextensiones");
+        Assert.Equal(4, hiper.Sets.Count);
+        Assert.Contains("Glúteo", hiper.Notes ?? "", StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Dia3_HeaderContinuationsAndRestNote_DoNotStealRemoTable()
     {
         var dia3 = Day(3);
@@ -614,6 +630,27 @@ public class PdfImportManuJulioTests
             Find(dia3, "Remo Agarre Neutro").Sets.Select(s => s.Reps));
         Assert.Equal(new[] { 10, 8, 8 },
             Find(dia3, "Martillo").Sets.Select(s => s.Reps));
+    }
+
+    [Fact]
+    public void ExerciseNames_KeepDescriptiveTails_ButDropCoachingNotes()
+    {
+        var dia3 = Day(3);
+
+        // The trainer's full wording is part of the exercise identity and must survive:
+        // "(trapecio)" and everything after it used to be truncated at the parenthesis.
+        Assert.Equal("Elevación Al Mentón (Trapecio) Con Barra Montada O Desde Polea Baja Y Barra",
+            Find(dia3, "Elevación Al Mentón").Name);
+        Assert.Contains("Curl Bíceps Con Banco Inclinado", Find(dia3, "Barra Libre Z").Name!);
+        Assert.Contains("Con Barra Recta", Find(dia3, "Tríceps Desde Polea Baja").Name!);
+
+        // …but pure coaching instructions still never reach the name.
+        Assert.DoesNotContain("Fijate", Find(dia3, "Remo Agarre Neutro").Name!,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Contrario", Find(Day(1), "Press Agarre Neutro Nautilius").Name!,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Foto", Find(Day(1), "Elevación Frontal De Hombro").Name!,
+            StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
