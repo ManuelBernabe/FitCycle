@@ -204,11 +204,16 @@ async function showImportModal() {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay modal-centered';
 
+  // Default the target to the CURRENTLY LOGGED-IN user. With no default the browser
+  // preselects the FIRST option (admin) and an import done while viewing another
+  // profile silently lands on admin's routines.
+  const currentUid = String(auth.getUserId() ?? '');
   const userOptions = (users || []).map(u => {
     const uid = u.id || u.Id;
     const uname = u.username || u.Username;
     const uemail = u.email || u.Email;
-    return `<option value="${uid}">${escapeHtml(uname)} (${escapeHtml(uemail)})</option>`;
+    const sel = String(uid) === currentUid ? ' selected' : '';
+    return `<option value="${uid}"${sel}>${escapeHtml(uname)} (${escapeHtml(uemail)})</option>`;
   }).join('');
 
   overlay.innerHTML = `
