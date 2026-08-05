@@ -597,9 +597,17 @@ public class PdfImportService : IPdfImportService
                 }
             }
 
+            // True right after emitting an [EX] header whose parentheses are unbalanced —
+            // that means the trainer's header wrapped to the next PDF line ("APERTURAS EN
+            // BANCO PLANO (FIJATE EN LA DISTANCIA…" / "PARA QUE SEA SUFICIENTE RECORRIDO…)").
+            // The immediately-following green line is the tail of the SAME header, not a new
+            // exercise, so it must be demoted to a plain note line.
+            bool prevHeaderLeftParenOpen = false;
+
             foreach (var line in lines.OrderByDescending(l => l.y))
             {
                 var sortedWords = line.words.OrderBy(w => w.x).ToList();
+                var fullLineText = string.Join(" ", sortedWords.Select(w => w.text));
 
                 // Find the LEADING green segment of the line — that's the exercise name.
                 // Any black text after it becomes the description / note on the following line.
@@ -620,15 +628,18 @@ public class PdfImportService : IPdfImportService
                     var greenSegment = string.Join(" ", greenWords.Select(w => w.text));
                     var firstGreenWord = greenWords[0].text;
 
-                    // Filter out lines whose leading green is actually a note (Tiempo, Descanso, Movilidad...)
-                    // or a bare muscle-group section label ("Pectoral:", "Femoral:").
-                    if (LooksLikeNoteHeader(firstGreenWord, greenWords))
+                    // Filter out lines whose leading green is actually a note (Tiempo, Descanso, Movilidad...),
+                    // a bare muscle-group section label ("Pectoral:", "Femoral:"), or the wrapped
+                    // continuation of the previous exercise header.
+                    if (prevHeaderLeftParenOpen || LooksLikeNoteHeader(firstGreenWord, greenWords))
                     {
-                        sb.AppendLine(string.Join(" ", sortedWords.Select(w => w.text)));
+                        prevHeaderLeftParenOpen = false;
+                        sb.AppendLine(fullLineText);
                         continue;
                     }
 
                     sb.Append(ExerciseMarker).AppendLine(greenSegment);
+                    prevHeaderLeftParenOpen = fullLineText.Count(c => c == '(') > fullLineText.Count(c => c == ')');
 
                     // Black portion (if any) goes on the next logical line as a note for the exercise.
                     var blackWords = sortedWords.Skip(leadingGreenEnd).ToList();
@@ -641,7 +652,8 @@ public class PdfImportService : IPdfImportService
                 }
                 else
                 {
-                    sb.AppendLine(string.Join(" ", sortedWords.Select(w => w.text)));
+                    prevHeaderLeftParenOpen = false;
+                    sb.AppendLine(fullLineText);
                 }
             }
 
@@ -670,6 +682,11 @@ public class PdfImportService : IPdfImportService
         "DEJANDO", "GENERANDO", "MANTENIENDO", "HACIENDO", "SIENDO", "DANDO",
         "BAJANDO", "SUBIENDO", "EMPUJANDO", "TIRANDO", "APRETANDO",
         "PONIENDO", "PONIENDONOS", "PONIÉNDONOS", "PONIENDOTE", "PONIÉNDOTE",
+        // Positional adverbs / prepositions that lead wrapped header continuations in the
+        // JULIO plan ("ABAJO ESTA COLOCADA", "ATRÁS", "EN ESTE CASO COJEREMOS…",
+        // "PARA QUE SEA SUFICIENTE RECORRIDO…") — a real exercise never starts with these.
+        "EN", "PARA", "ABAJO", "ARRIBA", "ATRAS", "ATRÁS", "ADENTRO", "AFUERA",
+        "ESTA", "ESTE", "ESTO", "ESTOS", "ESTAS",
     };
 
     // Whole-line annotations that look like exercises but are really table-cell intensity tags
@@ -958,8 +975,8 @@ public static class LocalPdfParser
         "SERIE", "SERIES", "REPS", "REPETICIONES", "FASE", "POSITIVA", "NEGATIVA",
         "TEMPO", "DESCANSO", "REST", "AGARRE", "GRIP", "WEIGHT",
         "PÁGINA", "PAGE", "PLAN", "ENTRENAMIENTO", "TRAINING", "NOTA", "NOTAS",
-        "TIEMPO", "SEG", "SEGUNDOS", "MIN", "MINUTOS", "KG", "LBS",
-        "RGANUTRI", "ASESORÍA", "TOTAL",
+        "TIEMPO", "SEG", "SEGUNDOS", "MIN", "MINUTO", "MINUTOS", "KG", "LBS",
+        "RGANUTRI", "ASESORÍA", "TOTAL", "EJECUCIÓN", "EJECUCION",
     };
 
     private static readonly HashSet<string> NoteStartWords = new(StringComparer.OrdinalIgnoreCase)
@@ -970,6 +987,12 @@ public static class LocalPdfParser
         "TIEMPO", "DESCANSO",
         "BUSCAMOS", "PROCURA", "SUPER", "CALENTAREMOS", "ARRANCAMOS",
         "REALIZAREMOS", "FIN",
+        // First words of coaching notes in the JULIO plan that were being promoted to
+        // bogus exercises ("CALENTAMIENTO DE TRÍCEPS PREVIO…", "HACEMOS PAUSA…",
+        // "FIJATE EN LA PISADA…", "TODAS LAS SERIES…", "POSICIÓN Y REALIZAMOS…").
+        "CALENTAMIENTO", "CALENTAMOS", "HACEMOS", "HAREMOS",
+        "POSICIÓN", "POSICION", "FIJATE", "FÍJATE",
+        "TODAS", "TODOS", "TODA", "TODO",
     };
 
     // Exercise-related keywords (equipment, movements, body parts used as exercise names)
@@ -1015,6 +1038,12 @@ public static class LocalPdfParser
         // Demonstratives / pronouns
         "ESTE", "ESTA", "ESTOS", "ESTAS", "ESE", "ESA",
         "SE", "TE", "NOS", "ME", "QUE",
+        // Body-part positioning cues ("Codo completamente estirado, sin involucrar al
+        // bíceps…") and positional adverbs from wrapped header continuations
+        // ("ABAJO ESTA COLOCADA", "ATRÁS", "FATIGADO DEL ANTERIOR").
+        "CODO", "CODOS", "RODILLA", "RODILLAS",
+        "ABAJO", "ARRIBA", "ATRÁS", "ATRAS", "ADENTRO", "AFUERA",
+        "FATIGADO", "FATIGADA",
     };
 
     public static PdfExtraction Parse(string pdfText)
@@ -1135,7 +1164,40 @@ public static class LocalPdfParser
             extraction.Routines.Add(dayRoutine);
         }
 
+        SuppressTrailingDuplicateRun(extraction);
+
         return extraction;
+    }
+
+    /// <summary>
+    /// The trainer's PDFs sometimes end with leftover pages that repeat a block from an
+    /// earlier day (copy-paste artifact — e.g. the JULIO plan repeats día 2's Abductor /
+    /// Femoral sentado / Aductor / Gemelos after día 5). Those trailing exercises would
+    /// otherwise import into the LAST day. Drop the trailing run of the last day when it is
+    /// ≥2 consecutive exercises that each exactly duplicate (name + rep scheme) an exercise
+    /// of a previous day. If the ENTIRE last day duplicates an earlier one it's a sibling
+    /// day (LUNES-VIERNES share content) and is left untouched.
+    /// </summary>
+    private static void SuppressTrailingDuplicateRun(PdfExtraction extraction)
+    {
+        if (extraction.Routines.Count < 2) return;
+        var last = extraction.Routines[^1];
+
+        static string SignatureOf(PdfExercise ex) =>
+            (ex.Name ?? "").Trim().ToUpperInvariant() + "|" + string.Join(",", ex.Sets.Select(s => s.Reps));
+
+        var earlier = extraction.Routines.Take(extraction.Routines.Count - 1)
+            .SelectMany(r => r.Exercises)
+            .Select(SignatureOf)
+            .ToHashSet();
+
+        int runStart = last.Exercises.Count;
+        while (runStart > 0 && earlier.Contains(SignatureOf(last.Exercises[runStart - 1])))
+            runStart--;
+
+        if (runStart == 0) return; // whole-day duplicate = shared sibling day, keep it
+        if (last.Exercises.Count - runStart >= 2)
+            last.Exercises.RemoveRange(runStart, last.Exercises.Count - runStart);
     }
 
     private static List<string> ExtractMuscleGroups(string text)
@@ -1191,9 +1253,18 @@ public static class LocalPdfParser
             {
                 var partnerLine = Regex.Replace(line, @"^\+\s*(super\s+serie\s+|superserie\s+)?", "", RegexOptions.IgnoreCase).Trim();
                 var partnerUpper = partnerLine.TrimEnd(':', '.', ',').ToUpperInvariant();
+                var partnerWords = partnerLine.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                var partnerFirst = partnerWords.Length > 0 ? partnerWords[0].TrimEnd(':', ',', '.') : "";
                 bool isBogusPartner =
                     PdfImportService.WeightAnnotations.Contains(partnerUpper) ||
-                    Regex.IsMatch(partnerUpper, @"^\d+(\s+(REPS?|SERIES?|PESO\s+(ALTO|LIGERO|MEDIO|BAJO|MAX[IÍ]MO|M[IÍ]NIMO)))?$");
+                    Regex.IsMatch(partnerUpper, @"^\d+(\s+(REPS?|SERIES?|PESO\s+(ALTO|LIGERO|MEDIO|BAJO|MAX[IÍ]MO|M[IÍ]NIMO)))?$") ||
+                    // Table-cell fragments like "+super serie con / mitad de peso / 8reps" wrap
+                    // across PDF lines and produce partners like "con" or "con +2 series". A real
+                    // partner names a movement — reject connector-led or keyword-less short tails.
+                    InstructionStartWords.Contains(partnerFirst) ||
+                    NoteStartWords.Contains(partnerFirst) ||
+                    NonExerciseWords.Contains(partnerFirst) ||
+                    (partnerWords.Length <= 2 && !ContainsExerciseKeyword(partnerLine));
                 if (isBogusPartner)
                 {
                     // Drop the whole line — it's a table-cell annotation, not an exercise.
@@ -1579,8 +1650,10 @@ public static class LocalPdfParser
             if (repsHeaderMatch.Success)
             {
                 var rest = line[repsHeaderMatch.Length..];
-                var repsNums = Regex.Matches(rest, @"\d+")
-                    .Select(m => int.Parse(m.Value))
+                // A range like "8-10" is ONE set (take the top of the range), not two.
+                // Without this, "Reps 8-10 8-10 8-10 8-10" produced 8 sets instead of 4.
+                var repsNums = Regex.Matches(rest, @"\d+(?:\s*-\s*\d+)?")
+                    .Select(m => int.Parse(m.Value.Split('-')[^1].Trim()))
                     .Where(n => n > 0 && n < 1000)
                     .ToList();
                 if (repsNums.Count > 0)
@@ -1841,6 +1914,12 @@ public static class LocalPdfParser
                 return true;
         }
 
+        // Wrapped-header continuations and instruction sentences that arrive green-marked
+        // ("PARA QUE SEA SUFICIENTE…", "ABAJO ESTA COLOCADA", "ATRÁS", "FATIGADO DEL
+        // ANTERIOR", "EN ESTE CASO COJEREMOS…") — no real exercise starts with these words.
+        if (InstructionStartWords.Contains(firstToken) || NoteStartWords.Contains(firstToken))
+            return true;
+
         // Standalone "Max peso" / "Máximo peso" / "Mínimo peso" labels (no other words).
         if (tokens.Length == 2)
         {
@@ -1900,6 +1979,11 @@ public static class LocalPdfParser
         var letterCount = line.Count(char.IsLetter);
         if (letterCount == 0) return false;
 
+        // Exercise names never START with a digit — lines like "1 MINUTO DE DESCANSO X SERIE"
+        // or "2 SEMANAS Y 2 SEMANAS EN MÁQUINA…" are notes/continuations, and promoting them
+        // steals the following table from the real exercise above.
+        if (char.IsDigit(line[0])) return false;
+
         // "N series ... M reps" is a SET PRESCRIPTION, not an exercise name. The trainer's
         // PDF has long-form lines like "Calentamiento 3 series con peso ligero y controlado
         // (15 reps por serie)" that contain the keyword PESO and would otherwise be promoted
@@ -1907,6 +1991,10 @@ public static class LocalPdfParser
         bool hasSeries = Regex.IsMatch(line, @"\d+\s+series?\b", RegexOptions.IgnoreCase);
         bool hasReps = Regex.IsMatch(line, @"\breps?\b", RegexOptions.IgnoreCase);
         if (hasSeries && hasReps) return false;
+
+        // Same idea for the shorthand form "3X10 reps" ("Tríceps barra recta desde polea
+        // alta 3X10 reps" is the warm-up prescription, not a new exercise).
+        if (Regex.IsMatch(line, @"\d\s*[x×*]\s*\d+\s*reps?\b", RegexOptions.IgnoreCase)) return false;
 
         // Skip lines that are mostly numbers
         if (line.Count(char.IsDigit) > letterCount) return false;
