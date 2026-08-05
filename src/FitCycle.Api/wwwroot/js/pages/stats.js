@@ -138,7 +138,11 @@ export async function mount() {
             const durationMs = completedDate - startedDate;
             const dMin = Math.floor(durationMs / 60000);
             const durationStr = dMin > 0 ? `${dMin}${t('MinSuffix')}` : `<1${t('MinSuffix')}`;
-            const wDay = w.day ?? w.Day ?? 0;
+            // Weekday derived from the workout's DATE — w.day is the ROUTINE trained
+            // (día 1 = plan de Lunes) and doesn't have to match the calendar day the
+            // user actually trained on. Using completedDate for both keeps the label
+            // and the date always consistent ("Miércoles -- 5/8/2026").
+            const wDay = completedDate.getDay();
 
             return `
               <div class="exercise-row history-item" data-workout-id="${w.id || ''}" style="cursor:pointer;">

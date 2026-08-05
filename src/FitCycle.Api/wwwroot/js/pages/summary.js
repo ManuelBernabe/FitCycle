@@ -34,7 +34,7 @@ export function render() {
       <div class="summary-hero" style="margin-top:56px;">
         <div class="summary-check">&#10003;</div>
         <div class="summary-title">${t('WorkoutCompleted')}</div>
-        <div style="margin-top:4px;opacity:0.8">${dayName(data.day)}</div>
+        <div style="margin-top:4px;opacity:0.8">${dayName(completedAt.getDay())} — ${completedAt.toLocaleDateString()}</div>
       </div>
       <div class="summary-stats">
         <div class="summary-stat">
