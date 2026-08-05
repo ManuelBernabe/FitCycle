@@ -65,6 +65,23 @@ public class PdfImportExerciseMatchingTests
     }
 
     [Fact]
+    public void IdentityWords_BlockCrossMovementMerges()
+    {
+        // "POSTERIOR en press militar…" (posterior delt) and "Press militar en máquina
+        // hummer" (shoulder press) share 4 of 5 tokens but are DIFFERENT movements — the
+        // PACO import renamed the seeded "Press militar" to the posterior variant and día 4
+        // inherited the wrong exercise. A word like POSTERIOR/PRONO/SUPINO present on only
+        // one side must block the match.
+        var existing = new List<Exercise> { Ex(80, "Posterior En Press Militar De Máquina Hummer") };
+        Assert.Null(PdfImportService.FindBestFuzzyExerciseMatch(
+            "Press militar en máquina hummer", existing));
+
+        var remo = new List<Exercise> { Ex(81, "Remo con barra") };
+        Assert.Null(PdfImportService.FindBestFuzzyExerciseMatch(
+            "REMO CON BARRA AGARRE PRONO", remo));
+    }
+
+    [Fact]
     public void ExcludedIds_AreNeverReturned()
     {
         // The import loop excludes Exercise.Ids already claimed by a DIFFERENT pdf name in

@@ -8,4 +8,4 @@
 //   MAJOR — breaking UX changes (auth, data model, etc.)
 //   MINOR — new pages, features, or notable PDF parser changes
 //   PATCH — small fixes, polish, copy
-export const APP_VERSION = '1.4.8';
+export const APP_VERSION = '1.4.9';

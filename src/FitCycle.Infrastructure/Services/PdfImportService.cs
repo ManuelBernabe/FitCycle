@@ -259,7 +259,11 @@ public class PdfImportService : IPdfImportService
                         // but when the PDF name is MORE specific than the stored one, upgrade
                         // the stored name so the app shows the trainer's full wording
                         // ("Press militar" → "Press Militar En Barra Multipower").
-                        if (SignificantTokens(pdfExName).Count > SignificantTokens(exercise.Name).Count)
+                        // Rename ONLY when the stored name is a pure prefix/subset of the PDF
+                        // name — a strict "same movement, more words" extension. Anything
+                        // looser can graft another exercise's wording onto a shared row.
+                        if (SignificantTokens(pdfExName).Count > SignificantTokens(exercise.Name).Count
+                            && SignificantTokens(exercise.Name).IsSubsetOf(SignificantTokens(pdfExName)))
                         {
                             var renamed = _repo.RenameExercise(exercise.Id, pdfExName);
                             if (renamed != null)
@@ -471,6 +475,11 @@ public class PdfImportService : IPdfImportService
             if (excludeIds != null && excludeIds.Contains(ex.Id)) continue;
             var exTokens = SignificantTokens(ex.Name);
             if (exTokens.Count == 0) continue;
+            // A word that changes the movement's identity must appear on BOTH sides or on
+            // NEITHER: "Press militar en máquina hummer" must never merge with "POSTERIOR
+            // en press militar de máquina hummer" (posterior delt vs shoulder press), nor
+            // "Remo con barra" with "Remo con barra agarre PRONO".
+            if (IdentityTokens.Any(w => pdfTokens.Contains(w) != exTokens.Contains(w))) continue;
             var common = pdfTokens.Intersect(exTokens, StringComparer.OrdinalIgnoreCase).Count();
             if (common == 0) continue;
             var union = pdfTokens.Union(exTokens, StringComparer.OrdinalIgnoreCase).Count();
@@ -486,8 +495,19 @@ public class PdfImportService : IPdfImportService
                 score = Math.Max(score, 0.85);
             if (score > bestScore) { bestScore = score; best = ex; }
         }
-        return bestScore >= 0.6 ? best : null;
+        // 0.65: strict enough that 3-of-5 shared tokens ("Remo con barra agarre prono" vs
+        // "Remo agarre prono- dorsal" — different machines) does NOT pair; subset matches
+        // (0.85) and near-identical names still do.
+        return bestScore >= 0.65 ? best : null;
     }
+
+    // Words that define WHICH movement/variant an exercise is — asymmetric presence between
+    // two names means two different exercises, regardless of token overlap.
+    private static readonly string[] IdentityTokens =
+    {
+        "POSTERIOR", "POSTERIORES", "FRONTAL", "FRONTALES", "LATERAL", "LATERALES",
+        "SUPINO", "PRONO", "NEUTRO", "DECLINADO", "DECLINADA", "INCLINADO", "INCLINADA",
+    };
 
     /// <summary>
     /// Merges local-parser and AI extractions: for each day-of-week, keeps the
@@ -1028,6 +1048,10 @@ public static class LocalPdfParser
         "CALENTAMIENTO", "CALENTAMOS", "HACEMOS", "HAREMOS",
         "POSICIÓN", "POSICION", "FIJATE", "FÍJATE",
         "TODAS", "TODOS", "TODA", "TODO",
+        // From the PACO plan: "Aumenta peso por serie", "DISCOS Y ENTRAMOS DE VUELTA…" /
+        // "HEMOS ALCANZADO COMO MÁXIMO" (wrapped tails of the serie-descendente note).
+        "AUMENTA", "AUMENTAMOS", "SUBE", "SUBIMOS", "BAJAMOS",
+        "HEMOS", "DISCOS", "DESCARGAMOS", "ENTRAMOS",
     };
 
     // Exercise-related keywords (equipment, movements, body parts used as exercise names)
@@ -1078,7 +1102,7 @@ public static class LocalPdfParser
         // ("ABAJO ESTA COLOCADA", "ATRÁS", "FATIGADO DEL ANTERIOR").
         "CODO", "CODOS", "RODILLA", "RODILLAS",
         "ABAJO", "ARRIBA", "ATRÁS", "ATRAS", "ADENTRO", "AFUERA",
-        "FATIGADO", "FATIGADA",
+        "FATIGADO", "FATIGADA", "CONTROLADO", "CONTROLADA",
     };
 
     public static PdfExtraction Parse(string pdfText)
@@ -1206,17 +1230,21 @@ public static class LocalPdfParser
 
     /// <summary>
     /// The trainer's PDFs sometimes end with leftover pages that repeat a block from an
-    /// earlier day (copy-paste artifact — e.g. the JULIO plan repeats día 2's Abductor /
-    /// Femoral sentado / Aductor / Gemelos after día 5). Those trailing exercises would
-    /// otherwise import into the LAST day. Drop the trailing run of the last day when it is
-    /// ≥2 consecutive exercises that each exactly duplicate (name + rep scheme) an exercise
-    /// of a previous day. If the ENTIRE last day duplicates an earlier one it's a sibling
-    /// day (LUNES-VIERNES share content) and is left untouched.
+    /// earlier day (copy-paste artifact — e.g. the MANU JULIO plan repeats día 2's Abductor /
+    /// Femoral sentado / Aductor / Gemelos after the upper-body día 5). Those trailing
+    /// exercises would otherwise import into the LAST day. Drop the trailing run of the last
+    /// day when it is ≥2 consecutive exercises that (a) exactly duplicate (name + rep scheme)
+    /// an exercise of a previous day AND (b) belong to a muscle group the day does NOT train
+    /// — that second condition keeps legit repeats: the PACO plan's día 5 (FEMORAL+ABDUCTOR+
+    /// ADUCTOR+GLUTEO) genuinely re-trains the Aductor/Gemelos it already did on día 2.
+    /// If the ENTIRE last day duplicates an earlier one it's a sibling day (LUNES-VIERNES
+    /// share content) and is left untouched.
     /// </summary>
     private static void SuppressTrailingDuplicateRun(PdfExtraction extraction)
     {
         if (extraction.Routines.Count < 2) return;
         var last = extraction.Routines[^1];
+        if (last.MuscleGroups == null || last.MuscleGroups.Count == 0) return;
 
         static string SignatureOf(PdfExercise ex) =>
             (ex.Name ?? "").Trim().ToUpperInvariant() + "|" + string.Join(",", ex.Sets.Select(s => s.Reps));
@@ -1226,8 +1254,18 @@ public static class LocalPdfParser
             .Select(SignatureOf)
             .ToHashSet();
 
+        bool IsForeignToDay(PdfExercise ex)
+        {
+            var mapped = ExtractMuscleGroups(ex.Name ?? "");
+            // Only drop when the NAME clearly maps to muscle groups and NONE of them is
+            // trained that day. Unmappable names are conservatively kept.
+            return mapped.Count > 0 && !mapped.Any(g => last.MuscleGroups.Contains(g));
+        }
+
         int runStart = last.Exercises.Count;
-        while (runStart > 0 && earlier.Contains(SignatureOf(last.Exercises[runStart - 1])))
+        while (runStart > 0
+            && earlier.Contains(SignatureOf(last.Exercises[runStart - 1]))
+            && IsForeignToDay(last.Exercises[runStart - 1]))
             runStart--;
 
         if (runStart == 0) return; // whole-day duplicate = shared sibling day, keep it
@@ -1273,6 +1311,11 @@ public static class LocalPdfParser
         // If ANOTHER green exercise line arrives before any sets are captured, the pair is
         // ONE exercise (section-style header + concrete movement name), not two.
         bool currentIsColonSectionHeader = false;
+        // Whether the current exercise's sets came from a horizontal "Reps …" table row —
+        // a SECOND Reps row while this is true belongs to a displaced header (photo pushed
+        // the next exercise's title below its own table) and is stashed for that header.
+        bool currentSetsFromRepsRow = false;
+        List<int>? pendingDisplacedSets = null;
         string? pendingFaseType = null; // "positiva" or "negativa" — awaiting numbers on next Seg. line
 
         for (int idx = 0; idx < lines.Count; idx++)
@@ -1298,16 +1341,26 @@ public static class LocalPdfParser
                 bool isBogusPartner =
                     PdfImportService.WeightAnnotations.Contains(partnerUpper) ||
                     Regex.IsMatch(partnerUpper, @"^\d+(\s+(REPS?|SERIES?|PESO\s+(ALTO|LIGERO|MEDIO|BAJO|MAX[IÍ]MO|M[IÍ]NIMO)))?$") ||
+                    // Intensity techniques on the SAME movement are not a partner exercise:
+                    // "+ SUPERSERIE UNILATERAL FALLO", "+super serie con mitad de peso 8reps",
+                    // "+super serie en todas las series de laterales con mancuernas 10 reps".
+                    partnerUpper.Contains("FALLO") ||
+                    partnerUpper.Contains("MITAD DE PESO") ||
+                    Regex.IsMatch(partnerUpper, @"\d+\s*REPS?\b") ||
                     // Table-cell fragments like "+super serie con / mitad de peso / 8reps" wrap
                     // across PDF lines and produce partners like "con" or "con +2 series". A real
-                    // partner names a movement — reject connector-led or keyword-less short tails.
-                    InstructionStartWords.Contains(partnerFirst) ||
-                    NoteStartWords.Contains(partnerFirst) ||
-                    NonExerciseWords.Contains(partnerFirst) ||
+                    // partner names a movement — reject connector-led or keyword-less tails, but
+                    // keep genuine partners like "+SUPERSERIE DE TRAPECIO (ENCOJIMIENTO)…".
+                    ((InstructionStartWords.Contains(partnerFirst) ||
+                      NoteStartWords.Contains(partnerFirst) ||
+                      NonExerciseWords.Contains(partnerFirst))
+                     && !ContainsExerciseKeyword(partnerLine)) ||
                     (partnerWords.Length <= 2 && !ContainsExerciseKeyword(partnerLine));
                 if (isBogusPartner)
                 {
-                    // Drop the whole line — it's a table-cell annotation, not an exercise.
+                    // Keep the technique as a note on the current exercise instead of
+                    // inventing a bogus partner exercise.
+                    notesBuilder.AppendLine(line);
                     continue;
                 }
                 if (partnerLine.Length >= 3 && current != null)
@@ -1315,6 +1368,9 @@ public static class LocalPdfParser
                     FinalizeNotes(current, notesBuilder);
                     inTable = false;
                     pendingFaseType = null;
+
+                    // "+SUPERSERIE DE TRAPECIO…" — drop the leading connector for the name.
+                    partnerLine = Regex.Replace(partnerLine, @"^(de|del|la|el)\s+", "", RegexOptions.IgnoreCase);
 
                     var partner = new PdfExercise
                     {
@@ -1328,6 +1384,7 @@ public static class LocalPdfParser
                     ExtractGripFromName(partner);
                     current = partner;
                     currentIsColonSectionHeader = false;
+                    currentSetsFromRepsRow = false;
                     continue;
                 }
             }
@@ -1510,6 +1567,15 @@ public static class LocalPdfParser
                 };
                 exercises.Add(current);
                 ExtractGripFromName(current);
+                // A stashed displaced table (printed above this header) belongs to THIS
+                // exercise. If a real table follows later it simply replaces these sets.
+                if (pendingDisplacedSets != null)
+                {
+                    foreach (var r in pendingDisplacedSets)
+                        current.Sets.Add(new PdfSet { Reps = r });
+                    pendingDisplacedSets = null;
+                }
+                currentSetsFromRepsRow = false;
                 // "Name: inline description" green headers may be renamed by the NEXT green
                 // line (see the merge above). A trailing bare colon ("Femoral tumbado:") is
                 // NOT a section header — only a colon followed by more text qualifies.
@@ -1718,9 +1784,22 @@ public static class LocalPdfParser
                     .ToList();
                 if (repsNums.Count > 0)
                 {
-                    current.Sets.Clear();
-                    foreach (var r in repsNums)
-                        current.Sets.Add(new PdfSet { Reps = r });
+                    if (currentSetsFromRepsRow && current.Sets.Count > 0)
+                    {
+                        // Displaced-header page layout: a photo can push an exercise's green
+                        // header BELOW its table, so a second Reps row arrives while the
+                        // current exercise already has one. Don't clobber the current
+                        // exercise — stash this table for the NEXT header (día 3 del plan
+                        // PACO: el Pájaro tiene su tabla 10/10/10 impresa antes del título).
+                        pendingDisplacedSets = repsNums;
+                    }
+                    else
+                    {
+                        current.Sets.Clear();
+                        foreach (var r in repsNums)
+                            current.Sets.Add(new PdfSet { Reps = r });
+                        currentSetsFromRepsRow = true;
+                    }
                     continue;
                 }
             }
@@ -1938,6 +2017,11 @@ public static class LocalPdfParser
         if (Regex.IsMatch(stripped, @"^\d+(\s*(reps?|series?)\s*\d*)?$", RegexOptions.IgnoreCase))
             return true;
 
+        // Wrapped intensity cells from the Serie/Reps rows: "Ligero peso Max peso+" — every
+        // token is a weight/intensity word. "Peso muerto" survives (MUERTO isn't one).
+        if (tokens.All(t => IntensityOnlyTokens.Contains(t.TrimEnd('+', ',', '.', ':'))))
+            return true;
+
         // "Peso ALTO …" / "Peso LIGERO …" — keep "Peso muerto". Match even when the modifier
         // has a glued suffix like "LIGERO-LO" (from "PESO LIGERO-LO USAMOS PARA CALENTAR ..."):
         // we accept any token that STARTS WITH one of the intensity modifier words.
@@ -2037,6 +2121,14 @@ public static class LocalPdfParser
         "ALTO", "LIGERO", "MEDIO", "BAJO", "MAXIMO", "MÁXIMO", "MINIMO", "MÍNIMO",
     };
 
+    // Tokens that only ever appear in weight-intensity cell annotations, never alone as an
+    // exercise name ("Ligero peso Max peso+").
+    private static readonly HashSet<string> IntensityOnlyTokens = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "PESO", "ALTO", "LIGERO", "MEDIO", "BAJO",
+        "MAX", "MAXIMO", "MÁXIMO", "MIN", "MINIMO", "MÍNIMO", "KG", "KGS",
+    };
+
     /// <summary>
     /// Multi-tier exercise name detection:
     /// Tier 1: Mostly UPPERCASE (Days 1-2 format: "PRESS BANCA INCLINADO")
@@ -2059,8 +2151,10 @@ public static class LocalPdfParser
         // PDF has long-form lines like "Calentamiento 3 series con peso ligero y controlado
         // (15 reps por serie)" that contain the keyword PESO and would otherwise be promoted
         // to a bogus exercise. The set-count parser downstream still picks them up.
-        bool hasSeries = Regex.IsMatch(line, @"\d+\s+series?\b", RegexOptions.IgnoreCase);
-        bool hasReps = Regex.IsMatch(line, @"\breps?\b", RegexOptions.IgnoreCase);
+        // Tolerant of glued tokens: "3 seriesx10 reps" and "2 series x 10reps" (the PACO
+        // plan's warm-up lines) must match too, hence no trailing/leading \b.
+        bool hasSeries = Regex.IsMatch(line, @"\d+\s*series?", RegexOptions.IgnoreCase);
+        bool hasReps = Regex.IsMatch(line, @"reps?\b", RegexOptions.IgnoreCase);
         if (hasSeries && hasReps) return false;
 
         // Same idea for the shorthand form "3X10 reps" ("Tríceps barra recta desde polea
