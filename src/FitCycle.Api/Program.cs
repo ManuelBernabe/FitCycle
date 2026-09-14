@@ -758,8 +758,12 @@ app.MapPost("/routines/import-pdf", async (HttpRequest request, IPdfImportServic
     {
         var form = await request.ReadFormAsync();
         var file = form.Files["pdf"];
-        if (file == null || file.Length == 0)
+        if (file == null)
             return Results.BadRequest(new { error = "No se proporcionó archivo PDF." });
+
+        // iOS uploads a 0-byte placeholder when the PDF isn't downloaded from iCloud.
+        if (file.Length == 0)
+            return Results.BadRequest(new { error = "El archivo llegó vacío (0 KB). Descarga el PDF en la app Archivos (ábrelo una vez) y vuelve a intentarlo." });
 
         if (file.Length > 10 * 1024 * 1024)
             return Results.BadRequest(new { error = "El archivo excede el límite de 10 MB." });

@@ -246,6 +246,12 @@ async function showImportModal() {
     const statusEl = overlay.querySelector('#import-status');
     const submitBtn = overlay.querySelector('#import-submit');
 
+    // iOS hands over a 0-byte placeholder when the PDF isn't downloaded from iCloud —
+    // catch it BEFORE uploading so the user gets an actionable message.
+    if (fileInput?.files?.length && fileInput.files[0].size === 0) {
+      if (statusEl) { statusEl.style.color = '#dc3545'; statusEl.textContent = t('PdfFileEmpty'); }
+      return;
+    }
     if (!fileInput?.files?.length) {
       if (statusEl) statusEl.textContent = t('SelectPdfFile');
       return;

@@ -308,6 +308,7 @@ const Strings = {
   ImportPdf:       { es: 'Importar PDF',                          en: 'Import PDF',                      fr: 'Importer PDF' },
   SelectUser:      { es: 'Seleccionar usuario',                   en: 'Select user',                     fr: 'Sélectionner utilisateur' },
   SelectPdfFile:   { es: 'Seleccionar archivo PDF',               en: 'Select PDF file',                 fr: 'Sélectionner fichier PDF' },
+  PdfFileEmpty:    { es: 'El archivo está vacío (0 KB). Suele pasar cuando el PDF no está descargado de iCloud: ábrelo primero en la app Archivos y vuelve a intentarlo.', en: 'The file is empty (0 KB). This usually happens when the PDF is not downloaded from iCloud: open it in the Files app first and try again.', fr: "Le fichier est vide (0 Ko). Cela arrive souvent quand le PDF n'est pas téléchargé depuis iCloud : ouvrez-le d'abord dans l'app Fichiers puis réessayez." },
   Importing:       { es: 'Importando rutinas...',                 en: 'Importing routines...',            fr: 'Importation des routines...' },
   ImportSuccess:   { es: 'Rutinas importadas correctamente',      en: 'Routines imported successfully',   fr: 'Routines importées avec succès' },
   ImportError:     { es: 'Error al importar',                     en: 'Import error',                     fr: "Erreur d'importation" },
