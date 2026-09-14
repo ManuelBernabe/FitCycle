@@ -118,12 +118,22 @@ export async function mount(params) {
         let filled = 0;
         let matchedExercises = 0;
         for (const lastEx of lastWorkout.exercises) {
-          const match = exercises.find(ex => {
+          let match = exercises.find(ex => {
             const routineId = ex.exerciseId ?? ex.ExerciseId ?? ex.id ?? ex.Id;
             return routineId === lastEx.exerciseId;
           });
+          // Re-imports can move a movement to a NEW Exercise.Id (full trainer wording →
+          // new catalog row). Fall back to matching by name so the weights history
+          // survives a re-import instead of prefilling zeros.
+          if (!match && lastEx.name) {
+            const lastName = String(lastEx.name).trim().toLowerCase();
+            match = exercises.find(ex => {
+              const exName = (ex.exerciseName ?? ex.ExerciseName ?? ex.name ?? ex.Name ?? '').trim().toLowerCase();
+              return exName && exName === lastName;
+            });
+          }
           if (!match) {
-            console.log('[prefill] no match for exerciseId', lastEx.exerciseId);
+            console.log('[prefill] no match for exerciseId', lastEx.exerciseId, lastEx.name || '');
             continue;
           }
           matchedExercises++;

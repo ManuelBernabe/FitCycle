@@ -1414,6 +1414,9 @@ app.MapGet("/workouts/last-weights/{day}", (int day, FitCycleDbContext db, Claim
     var exerciseWeights = lastSession.ExerciseLogs.Select(log => new
     {
         exerciseId = log.ExerciseId,
+        // Name lets the client prefill by NAME when the routine was re-imported and the
+        // exercise now lives under a different Exercise.Id (same movement, new row).
+        name = log.ExerciseName,
         weight = log.Weight,
         reps = log.Reps,
         sets = log.Sets,

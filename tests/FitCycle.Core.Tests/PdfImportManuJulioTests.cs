@@ -683,6 +683,19 @@ public class PdfImportManuJulioTests
     }
 
     [Fact]
+    public void Dia5_SplitRepsRows_RecoverTheirDisplacedFirstCell()
+    {
+        // The PDF renders these two tables with the first Reps cell displaced onto its own
+        // line ("Serie 1 2 3" / "12" / "Reps 10 10") — they imported as 2 sets of 10
+        // instead of 3 sets of 12/10/10.
+        var dia5 = Day(5);
+        Assert.Equal(new[] { 12, 10, 10 },
+            Find(dia5, "Elevación Frontal- Agarre Supino").Sets.Select(s => s.Reps));
+        Assert.Equal(new[] { 12, 10, 10 },
+            Find(dia5, "Laterales En Máquina Hummer Sentado").Sets.Select(s => s.Reps));
+    }
+
+    [Fact]
     public void Dia5_TrailingLeftoverPages_DuplicatingDia2_AreDropped()
     {
         var dia5 = Day(5);

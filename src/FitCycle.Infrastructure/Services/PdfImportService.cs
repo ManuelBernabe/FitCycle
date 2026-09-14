@@ -1316,6 +1316,10 @@ public static class LocalPdfParser
         // the next exercise's title below its own table) and is stashed for that header.
         bool currentSetsFromRepsRow = false;
         List<int>? pendingDisplacedSets = null;
+        // Column count of the last "Serie 1 2 3…" row + reps cells that arrived displaced
+        // on their own line before the Reps row (see the Serie-row handler).
+        int expectedSerieColumns = 0;
+        List<int>? orphanRepsBeforeRepsRow = null;
         string? pendingFaseType = null; // "positiva" or "negativa" — awaiting numbers on next Seg. line
 
         for (int idx = 0; idx < lines.Count; idx++)
@@ -1405,11 +1409,34 @@ public static class LocalPdfParser
                 continue;
             }
 
-            // Horizontal table "Serie" row: "Serie 1 2 3 4" — just skip (Reps row determines sets)
+            // Horizontal table "Serie" row: "Serie 1 2 3 4" — remember HOW MANY columns the
+            // table has. The Reps row that follows can arrive with its first cell displaced
+            // onto its own line ("Serie 1 2 3" / "12" / "Reps 10 10" — Elevación Frontal and
+            // Laterales Hummer in the JULIO plans), so the column count lets us stitch the
+            // orphan numbers back in.
             if (Regex.IsMatch(line, @"^Serie\s+\d", RegexOptions.IgnoreCase))
             {
                 pendingFaseType = null;
+                expectedSerieColumns = Regex.Matches(line, @"\d+").Count;
+                orphanRepsBeforeRepsRow = null;
                 continue;
+            }
+
+            // Digit-only line BETWEEN the Serie row and the Reps row with FEWER numbers than
+            // the table has columns: it's the displaced first cell(s) of the upcoming Reps
+            // row. Stash it — the Reps handler prepends it. (Never while a Fase row is
+            // waiting for its tempo numbers.)
+            if (expectedSerieColumns > 0 && current != null && pendingFaseType == null
+                && Regex.IsMatch(line, @"^\d+(\s+\d+)*$"))
+            {
+                var orphanNums = Regex.Matches(line, @"\d+")
+                    .Select(m => int.Parse(m.Value)).Where(n => n > 0 && n < 1000).ToList();
+                if (orphanNums.Count > 0 && orphanNums.Count < expectedSerieColumns)
+                {
+                    orphanRepsBeforeRepsRow ??= new List<int>();
+                    orphanRepsBeforeRepsRow.AddRange(orphanNums);
+                    continue;
+                }
             }
 
             // Rest/descanso line — finalize current exercise notes
@@ -1576,6 +1603,8 @@ public static class LocalPdfParser
                     pendingDisplacedSets = null;
                 }
                 currentSetsFromRepsRow = false;
+                expectedSerieColumns = 0;
+                orphanRepsBeforeRepsRow = null;
                 // "Name: inline description" green headers may be renamed by the NEXT green
                 // line (see the merge above). A trailing bare colon ("Femoral tumbado:") is
                 // NOT a section header — only a colon followed by more text qualifies.
@@ -1782,6 +1811,18 @@ public static class LocalPdfParser
                     .Select(m => int.Parse(m.Value.Split('-')[^1].Trim()))
                     .Where(n => n > 0 && n < 1000)
                     .ToList();
+                // Stitch back the displaced first cell(s) captured between the Serie row and
+                // this Reps row: "Serie 1 2 3" / "12" / "Reps 10 10" → 12, 10, 10.
+                if (orphanRepsBeforeRepsRow != null && orphanRepsBeforeRepsRow.Count > 0
+                    && expectedSerieColumns > 0
+                    && repsNums.Count < expectedSerieColumns
+                    && orphanRepsBeforeRepsRow.Count + repsNums.Count <= expectedSerieColumns)
+                {
+                    repsNums.InsertRange(0, orphanRepsBeforeRepsRow);
+                }
+                orphanRepsBeforeRepsRow = null;
+                expectedSerieColumns = 0;
+
                 if (repsNums.Count > 0)
                 {
                     if (currentSetsFromRepsRow && current.Sets.Count > 0)
