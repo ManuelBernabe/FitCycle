@@ -1,4 +1,4 @@
-const CACHE = 'fitcycle-v110';
+const CACHE = 'fitcycle-v111';
 // v2: bumped so every client drops the stale-while-revalidate copies of
 // /workouts/last-weights/* that were hiding freshly saved weights (v1.4.5 fix).
 const API_CACHE = 'fitcycle-api-v2';
@@ -110,6 +110,15 @@ async function trimCache(cacheName, maxItems) {
 }
 
 self.addEventListener('fetch', e => {
+  // Multipart uploads: do NOT intercept — let the browser send them natively. Safari can
+  // drop the body of a POST that the service worker re-dispatches with fetch(e.request),
+  // which made PDF imports arrive as 0-byte files. The client invalidates the relevant
+  // caches itself after these calls succeed.
+  if (e.request.method !== 'GET') {
+    const p = new URL(e.request.url).pathname;
+    if (p === '/routines/import-pdf' || /^\/exercises\/\d+\/image$/.test(p)) return;
+  }
+
   // Images: cache-first with LRU eviction (long-lived assets)
   if (isImageRequest(e.request)) {
     e.respondWith(

@@ -240,6 +240,21 @@ async function showImportModal() {
   overlay.querySelector('#import-modal-close')?.addEventListener('click', () => overlay.remove());
   overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
 
+  // Instant feedback on pick: show name + real size. A "0.0 MB" here means iOS handed
+  // us an iCloud placeholder — the user sees it before even trying to import.
+  overlay.querySelector('#import-file')?.addEventListener('change', (ev) => {
+    const f = ev.target.files?.[0];
+    const statusEl = overlay.querySelector('#import-status');
+    if (!f || !statusEl) return;
+    if (f.size === 0) {
+      statusEl.style.color = '#dc3545';
+      statusEl.textContent = t('PdfFileEmpty');
+    } else {
+      statusEl.style.color = 'var(--text-light)';
+      statusEl.textContent = `${f.name} — ${(f.size / 1048576).toFixed(1)} MB`;
+    }
+  });
+
   overlay.querySelector('#import-submit')?.addEventListener('click', async () => {
     const fileInput = overlay.querySelector('#import-file');
     const userSelect = overlay.querySelector('#import-user');
@@ -270,9 +285,28 @@ async function showImportModal() {
     if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = t('Importing'); }
     if (statusEl) { statusEl.style.color = '#512BD4'; statusEl.textContent = t('Importing'); }
 
+    // Read the file EAGERLY into memory before building the form. iOS Safari keeps the
+    // picked File as a lazy handle; if iCloud/Files invalidates it, the upload silently
+    // sends an EMPTY body and the server answers "No se proporcionó archivo PDF" even
+    // though a file was selected. Materializing it here either gives us real bytes or a
+    // readable error we can explain.
+    let fileBytes;
+    try {
+      fileBytes = await file.arrayBuffer();
+    } catch (readErr) {
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = t('ImportPdf'); }
+      if (statusEl) { statusEl.style.color = '#dc3545'; statusEl.textContent = t('PdfFileUnreadable'); }
+      return;
+    }
+    if (!fileBytes || fileBytes.byteLength === 0) {
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = t('ImportPdf'); }
+      if (statusEl) { statusEl.style.color = '#dc3545'; statusEl.textContent = t('PdfFileEmpty'); }
+      return;
+    }
+
     try {
       const formData = new FormData();
-      formData.append('pdf', file);
+      formData.append('pdf', new File([fileBytes], file.name || 'plan.pdf', { type: 'application/pdf' }));
       formData.append('userId', userId);
       formData.append('language', currentLanguage());
 
