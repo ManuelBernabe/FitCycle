@@ -229,6 +229,7 @@ export async function mount(params) {
 
 export function destroy() {
   stopTimer();
+  closeRestOverlay();
   if (autosaveInterval) { clearInterval(autosaveInterval); autosaveInterval = null; }
   if (typeof document.__fitcycleVisHandler === 'function') {
     document.removeEventListener('visibilitychange', document.__fitcycleVisHandler);
@@ -546,7 +547,16 @@ function renderExercise() {
     renderExercise();
   });
 
-  document.getElementById('workout-next')?.addEventListener('click', () => advanceToNext());
+  document.getElementById('workout-next')?.addEventListener('click', () => {
+    // Unlock iOS audio INSIDE the tap gesture so the end-of-rest beep can actually play.
+    unlockRestAudio();
+    // Read the configured rest BEFORE advancing — renderExercise() rebuilds the pickers.
+    const restSecs = getPickerTotalSeconds();
+    advanceToNext();
+    // Blocking circular countdown over the freshly rendered next set: it can't be
+    // dismissed and the set stays locked until the ring reaches 0.
+    showRestOverlay(restSecs);
+  });
 
   document.getElementById('workout-switch-partner')?.addEventListener('click', () => switchSupersetPartner());
 
@@ -889,46 +899,13 @@ function onTimePickerChanged() {
 }
 
 function onTimerStartClicked() {
-  const startBtn = document.getElementById('timer-start');
-  const pickerRow = document.getElementById('timer-picker-row');
-
-  if (timerRunning) {
-    stopTimer();
-    if (startBtn) { startBtn.textContent = t('Start'); startBtn.style.background = '#512BD4'; }
-    if (pickerRow) pickerRow.style.display = '';
-    return;
-  }
-
+  // The embedded inline countdown is gone: Start now launches the SAME blocking circular
+  // overlay used after each set (manual extra rest), with audio unlocked by this tap.
+  // It does NOT auto-advance — the user is resting on the set they're about to do.
+  unlockRestAudio();
   const total = getPickerTotalSeconds();
   if (total <= 0) return;
-  timerSeconds = total;
-  timerEndsAt = Date.now() + total * 1000;
-  timerRunning = true;
-  if (startBtn) { startBtn.textContent = t('Pause'); startBtn.style.background = '#e67e22'; }
-  if (pickerRow) pickerRow.style.display = 'none';
-
-  timerInterval = setInterval(() => {
-    if (!timerRunning) return; // Defensive: stopTimer was called from outside, drop this tick.
-    // Recompute from wall clock — backgrounded tabs throttle setInterval to once per
-    // minute (or pause it entirely on iOS), so we can't trust how often this fired.
-    const remaining = Math.ceil((timerEndsAt - Date.now()) / 1000);
-    timerSeconds = remaining > 0 ? remaining : 0;
-    updateTimerDisplay();
-    if (timerSeconds <= 0) {
-      // Stop FIRST so the auto-advance can't re-enter and overlap with a new interval
-      // started by the next renderExercise() call.
-      stopTimer();
-      const startBtnNow = document.getElementById('timer-start');
-      const pickerRowNow = document.getElementById('timer-picker-row');
-      if (startBtnNow) { startBtnNow.textContent = t('Start'); startBtnNow.style.background = '#512BD4'; }
-      if (pickerRowNow) pickerRowNow.style.display = '';
-      const display = document.getElementById('timer-display');
-      if (display) display.style.color = '#28a745';
-      playRestEndSound();
-      showRestEndAlert();
-      advanceToNext();
-    }
-  }, 250); // Tick 4x/sec so the UI catches up quickly after foreground resume.
+  showRestOverlay(total);
 }
 
 function onTimerResetClicked() { stopTimer(); resetTimerDisplay(); }
@@ -979,25 +956,125 @@ function resetTimerDisplay() {
   updateTimerDisplay();
 }
 
-function playRestEndSound() {
-  // Two short beeps so it's clearly audible over background noise / earbuds
+// Single shared AudioContext, created/resumed INSIDE a user gesture. iOS Safari mutes
+// any context born outside a tap: the old code built a fresh context when the countdown
+// hit 0 (no gesture in sight) and the beeps were silently dropped on iPhone.
+let restAudioCtx = null;
+
+function unlockRestAudio() {
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const beep = (when, duration = 250) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.frequency.value = 880;
-      osc.type = 'sine';
-      gain.gain.setValueAtTime(0.0001, ctx.currentTime + when);
-      gain.gain.exponentialRampToValueAtTime(0.4, ctx.currentTime + when + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + when + duration / 1000);
-      osc.connect(gain); gain.connect(ctx.destination);
-      osc.start(ctx.currentTime + when);
-      osc.stop(ctx.currentTime + when + duration / 1000 + 0.05);
-    };
-    beep(0); beep(0.35); beep(0.7);
-    setTimeout(() => ctx.close(), 1500);
-  } catch (e) { /* audio not available */ }
+    if (!restAudioCtx) restAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (restAudioCtx.state === 'suspended') restAudioCtx.resume();
+    // Playing a silent 1-sample buffer inside the gesture fully unlocks audio output.
+    const buf = restAudioCtx.createBuffer(1, 1, 22050);
+    const src = restAudioCtx.createBufferSource();
+    src.buffer = buf; src.connect(restAudioCtx.destination); src.start(0);
+  } catch { /* audio not available */ }
+}
+
+function restBeep(freq, when = 0, duration = 250, volume = 0.5) {
+  try {
+    const ctx = restAudioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (!restAudioCtx) restAudioCtx = ctx;
+    if (ctx.state === 'suspended') ctx.resume();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.frequency.value = freq;
+    osc.type = 'sine';
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime + when);
+    gain.gain.exponentialRampToValueAtTime(volume, ctx.currentTime + when + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + when + duration / 1000);
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(ctx.currentTime + when);
+    osc.stop(ctx.currentTime + when + duration / 1000 + 0.05);
+  } catch { /* audio not available */ }
+}
+
+function playRestEndSound() {
+  // Three beeps, last one higher — clearly audible over gym noise / earbuds.
+  restBeep(880, 0);
+  restBeep(880, 0.35);
+  restBeep(1320, 0.7, 350, 0.6);
+}
+
+// ── Blocking rest overlay ──
+// Full-screen circular countdown shown after each completed set. It cannot be dismissed:
+// the next set only unlocks when the ring reaches 0 (then it beeps + vibrates and closes).
+let restOverlayInterval = null;
+
+function closeRestOverlay() {
+  if (restOverlayInterval) { clearInterval(restOverlayInterval); restOverlayInterval = null; }
+  document.getElementById('rest-overlay')?.remove();
+}
+
+function showRestOverlay(totalSeconds) {
+  totalSeconds = Math.max(0, Math.floor(totalSeconds || 0));
+  if (totalSeconds <= 0) return;
+  closeRestOverlay();
+
+  const RADIUS = 95;
+  const CIRC = 2 * Math.PI * RADIUS;
+  const overlay = document.createElement('div');
+  overlay.id = 'rest-overlay';
+  overlay.setAttribute('role', 'timer');
+  overlay.setAttribute('aria-live', 'off');
+  overlay.style.cssText = `
+    position:fixed; inset:0; z-index:10000;
+    background:rgba(10,10,16,0.93); -webkit-backdrop-filter:blur(6px); backdrop-filter:blur(6px);
+    display:flex; align-items:center; justify-content:center;
+    touch-action:none; overscroll-behavior:contain;
+  `;
+  overlay.innerHTML = `
+    <div style="display:flex;flex-direction:column;align-items:center;gap:18px;padding:16px;">
+      <div style="position:relative;width:240px;height:240px;">
+        <svg width="240" height="240" viewBox="0 0 220 220" style="transform:rotate(-90deg);display:block;">
+          <circle cx="110" cy="110" r="${RADIUS}" fill="none" stroke="rgba(255,255,255,0.14)" stroke-width="13"/>
+          <circle id="rest-ring" cx="110" cy="110" r="${RADIUS}" fill="none" stroke="#8b72ff" stroke-width="13"
+            stroke-linecap="round" stroke-dasharray="${CIRC}" stroke-dashoffset="0"/>
+        </svg>
+        <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;transform:none;">
+          <div id="rest-count" style="font-size:64px;font-weight:800;color:#fff;line-height:1;font-variant-numeric:tabular-nums;">${totalSeconds}</div>
+          <div style="font-size:13px;color:rgba(255,255,255,0.65);letter-spacing:2px;text-transform:uppercase;margin-top:6px;">${t('RestOverlayLabel')}</div>
+        </div>
+      </div>
+      <div style="font-size:13px;color:rgba(255,255,255,0.5);text-align:center;max-width:260px;">${t('RestOverlayHint')}</div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const endsAt = Date.now() + totalSeconds * 1000;
+  const numEl = overlay.querySelector('#rest-count');
+  const ringEl = overlay.querySelector('#rest-ring');
+  let lastShown = totalSeconds;
+
+  // Wall-clock based tick: survives background throttling — on foreground resume the
+  // very next tick recomputes from Date.now() and, if the rest already expired, closes.
+  const tick = () => {
+    const msLeft = endsAt - Date.now();
+    const secsLeft = Math.max(0, Math.ceil(msLeft / 1000));
+    if (numEl && secsLeft !== lastShown) {
+      numEl.textContent = String(secsLeft);
+      // Final 3 seconds: turn amber and tick audibly so the end doesn't surprise.
+      if (secsLeft > 0 && secsLeft <= 3) {
+        numEl.style.color = '#ffb020';
+        restBeep(440, 0, 120, 0.25);
+      }
+      lastShown = secsLeft;
+    }
+    if (ringEl) {
+      const frac = Math.min(1, Math.max(0, msLeft / (totalSeconds * 1000)));
+      ringEl.style.strokeDashoffset = String(CIRC * (1 - frac));
+      if (msLeft / 1000 <= 3) ringEl.style.stroke = '#ffb020';
+    }
+    if (msLeft <= 0) {
+      closeRestOverlay();
+      playRestEndSound();
+      haptic('finish');
+      showRestEndAlert();
+    }
+  };
+  tick();
+  restOverlayInterval = setInterval(tick, 100);
 }
 
 function showRestEndAlert() {
