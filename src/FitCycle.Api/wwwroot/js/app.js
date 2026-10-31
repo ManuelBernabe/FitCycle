@@ -102,7 +102,7 @@ function renderShell(route, routeName, params) {
         <div class="header-logo" id="header-logo" style="cursor:pointer;" role="button" tabindex="0" aria-label="Inicio">FC</div>
         <div class="header-title">FitCycle${envTag()} <span class="header-version" id="header-version" role="button" tabindex="0" title="Versión de la app — toca para buscar actualización">v${APP_VERSION}</span></div>
         <select class="lang-picker" id="header-lang">${langOptions}</select>
-        <a href="https://eathealthycycle-production.up.railway.app/portal.html" target="_blank" style="background:rgba(255,255,255,0.2);color:white;border:none;border-radius:8px;padding:6px 12px;font-size:13px;font-weight:600;text-decoration:none;display:flex;align-items:center;">&#127968; Apps</a>
+        <a href="https://eathealthycycle-production.up.railway.app/portal.html" target="_blank" title="Apps" aria-label="Apps" style="background:rgba(255,255,255,0.2);color:white;border:none;border-radius:8px;padding:6px 9px;font-size:15px;font-weight:600;text-decoration:none;display:flex;align-items:center;flex-shrink:0;">&#127968;</a>
         <div class="avatar" id="header-avatar" role="button" tabindex="0" aria-label="Cuenta">${initial}</div>
       </div>
     `;

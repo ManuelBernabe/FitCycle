@@ -94,6 +94,9 @@ body {
   font-weight: 700;
   flex: 1;
   white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .header-version {
