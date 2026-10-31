@@ -139,6 +139,11 @@ export async function mount(params) {
           matchedExercises++;
           let lastSetDetails = null;
           try { lastSetDetails = lastEx.setDetails ? JSON.parse(lastEx.setDetails) : null; } catch { }
+          // Keep the raw per-set history on the exercise: the per-set progression hint
+          // compares what was actually LIFTED last session against today's plan.
+          if (Array.isArray(lastSetDetails) && lastSetDetails.length > 0) {
+            match._lastSets = lastSetDetails;
+          }
           if (Array.isArray(lastSetDetails) && lastSetDetails.length > 0) {
             for (let i = 0; i < match.setDetails.length; i++) {
               const src = i < lastSetDetails.length ? lastSetDetails[i] : lastSetDetails[lastSetDetails.length - 1];
@@ -218,6 +223,9 @@ export async function mount(params) {
       saveCurrentSetValues();
       saveProgress();
     }, 15000);
+
+    // Keep the screen awake for the whole session (re-acquired on foreground resume).
+    acquireWakeLock();
   } catch (err) {
     document.getElementById('workout-content').innerHTML = `
       <div class="page-content">
@@ -230,6 +238,7 @@ export async function mount(params) {
 export function destroy() {
   stopTimer();
   closeRestOverlay();
+  releaseWakeLock();
   if (autosaveInterval) { clearInterval(autosaveInterval); autosaveInterval = null; }
   if (typeof document.__fitcycleVisHandler === 'function') {
     document.removeEventListener('visibilitychange', document.__fitcycleVisHandler);
@@ -307,8 +316,9 @@ function renderExercise() {
   // Default rest stays at the user's setting (1 min by default).
   // suggestRestSeconds() is still available as a helper but we don't auto-apply it.
 
-  // Progression suggestion (only on the FIRST set so it doesn't distract mid-exercise)
-  const progression = currentSet === 0 ? suggestProgression(ex) : null;
+  // Per-set progression hint from the LAST recorded session (double progression:
+  // completed planned reps → +increment; fell short → repeat the weight).
+  const setHint = suggestSetWeight(ex, currentSet);
 
   // After the timer auto-advanced (or was reset), `timerSeconds` can be 0 — which would
   // render the pickers as 00:00 and the next Start press would no-op. Restore the user's
@@ -411,11 +421,13 @@ function renderExercise() {
               ? `<div style="text-align:center;margin-top:6px;"><span class="one-rm-badge" title="${t('OneRMTooltip')}">${t('OneRM')}: ${oneRM} kg</span></div>`
               : '';
           })()}
-          ${progression ? `
-            <button id="apply-progression" class="progression-chip"
-              title="${t('ProgressionTooltip')}"
-              style="display:block;margin:8px auto 0;background:linear-gradient(135deg,#28a745,#20c997);color:#fff;border:none;padding:6px 14px;border-radius:20px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 2px 6px rgba(40,167,69,0.3);">
-              ${t('ProgressionSuggest', '+' + progression.delta, progression.newWeight)}
+          ${setHint ? `
+            <button id="apply-set-hint"
+              title="${t('SetHintTooltip')}"
+              style="display:block;margin:8px auto 0;border:none;padding:6px 14px;border-radius:20px;font-size:13px;font-weight:600;cursor:pointer;color:#fff;
+                background:${setHint.completed ? 'linear-gradient(135deg,#28a745,#20c997)' : 'linear-gradient(135deg,#546e7a,#78909c)'};
+                box-shadow:0 2px 6px rgba(0,0,0,0.2);">
+              ${t(setHint.completed ? 'SetHintProgress' : 'SetHintRepeat', setHint.lastW, setHint.lastR, setHint.target)}
             </button>
           ` : ''}
           ${(currentSetData.tempoPos > 0 || currentSetData.tempoNeg > 0 || currentSetData.grip) ? `
@@ -550,6 +562,9 @@ function renderExercise() {
   document.getElementById('workout-next')?.addEventListener('click', () => {
     // Unlock iOS audio INSIDE the tap gesture so the end-of-rest beep can actually play.
     unlockRestAudio();
+    // User gestures always allow the wake lock — retry here in case mount's attempt
+    // was denied (e.g. the page mounted while the app was still backgrounded).
+    acquireWakeLock();
     // Read the configured rest BEFORE advancing — renderExercise() rebuilds the pickers.
     const restSecs = getPickerTotalSeconds();
     advanceToNext();
@@ -608,13 +623,13 @@ function renderExercise() {
     });
   });
 
-  document.getElementById('apply-progression')?.addEventListener('click', () => {
+  document.getElementById('apply-set-hint')?.addEventListener('click', () => {
     const ex = exercises[currentIndex];
     if (!ex) return;
-    const progression = suggestProgression(ex);
-    if (!progression) return;
-    // Apply new weight to all sets of this exercise
-    for (const sd of ex.setDetails) sd.weight = progression.newWeight;
+    const hint = suggestSetWeight(ex, currentSet);
+    if (!hint) return;
+    // Apply the suggested weight to THIS set only (each set progresses on its own).
+    if (ex.setDetails[currentSet]) ex.setDetails[currentSet].weight = hint.target;
     haptic('success');
     saveProgress();
     renderExercise();
@@ -680,34 +695,27 @@ function buildWorkoutRepsOptions(selected) {
  * - otherwise → no suggestion.
  * Returns { delta: number, newWeight: number } or null.
  */
-function suggestProgression(exercise) {
-  if (!exercise || !exercise.setDetails || exercise.setDetails.length === 0) return null;
-  const sets = exercise.setDetails;
-  const allWeightsEqual = sets.every(s => s.weight === sets[0].weight && s.weight > 0);
-  if (!allWeightsEqual) return null;
-
-  // Get the lowest reps across all sets — if even the hardest set was easy, suggest progression
-  const minReps = Math.min(...sets.map(s => s.reps || 0));
-  if (minReps === 0) return null;
-
-  const name = (exercise.exerciseName || exercise.name || '').toLowerCase();
-  const isCompound = ['press banca', 'sentadilla', 'peso muerto', 'press militar', 'dominada', 'remo', 'hip thrust', 'prensa'].some(k => name.includes(k));
-  const isIsolation = ['curl', 'extension', 'extensión', 'elevación', 'patada', 'aductor', 'abductor', 'gemelo'].some(k => name.includes(k));
-
-  // Target reps assumed from set's reps field (the routine value)
-  const targetReps = sets[0].reps;
-  if (minReps < targetReps) return null; // Didn't complete all reps
-
-  let delta;
-  if (minReps >= targetReps + 2) {
-    delta = isCompound ? 5 : (isIsolation ? 2.5 : 2.5);
-  } else if (minReps >= targetReps) {
-    delta = isCompound ? 2.5 : (isIsolation ? 1.25 : 1.25);
-  } else {
-    return null;
-  }
-
-  return { delta, newWeight: sets[0].weight + delta };
+/**
+ * Per-set double-progression hint based on the LAST recorded session of this exercise
+ * (raw history captured by the prefill into `_lastSets`):
+ *  - completed the planned reps at W → suggest W + increment ("prueba 42.5");
+ *  - fell short of the planned reps  → suggest repeating W ("repite 40").
+ * Increment: 1 kg below 15 kg (small dumbbells), else 2.5 kg.
+ * Returns { lastW, lastR, completed, target } or null when there's no usable history.
+ */
+function suggestSetWeight(exercise, setIdx) {
+  const last = exercise?._lastSets;
+  if (!Array.isArray(last) || last.length === 0) return null;
+  const lastSet = setIdx < last.length ? last[setIdx] : last[last.length - 1];
+  const lastW = parseFloat(lastSet?.weight) || 0;
+  const lastR = parseInt(lastSet?.reps) || 0;
+  if (lastW <= 0 || lastR <= 0) return null;
+  const planReps = exercise.setDetails?.[setIdx]?.reps || 0;
+  if (planReps <= 0) return null;
+  const completed = lastR >= planReps;
+  const increment = lastW < 15 ? 1 : 2.5;
+  const target = completed ? Math.round((lastW + increment) * 100) / 100 : lastW;
+  return { lastW, lastR, completed, target };
 }
 
 /**
@@ -916,6 +924,25 @@ function stopTimer() {
   if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
 }
 
+// ── Screen wake lock ──
+// Keeps the screen on for the whole workout (iOS 16.4+ / Android). Without it the phone
+// dims mid-rest and the end-of-rest beep never plays. The OS releases the lock whenever
+// the app goes to background, so we re-acquire on every visibilitychange and on each tap.
+let screenWakeLock = null;
+
+async function acquireWakeLock() {
+  try {
+    if (!('wakeLock' in navigator) || document.hidden || screenWakeLock) return;
+    screenWakeLock = await navigator.wakeLock.request('screen');
+    screenWakeLock.addEventListener('release', () => { screenWakeLock = null; });
+  } catch { screenWakeLock = null; /* e.g. low-power mode denies it — fail quietly */ }
+}
+
+function releaseWakeLock() {
+  try { screenWakeLock?.release(); } catch { /* already released */ }
+  screenWakeLock = null;
+}
+
 /**
  * Called when the document becomes visible again after the user backgrounded the app.
  * Reconciles `timerSeconds` against the wall clock so the display catches up instantly
@@ -924,6 +951,7 @@ function stopTimer() {
  */
 function onVisibilityChange() {
   if (document.hidden) return;
+  acquireWakeLock(); // the OS dropped the lock while backgrounded — grab it again
   if (!timerRunning || timerEndsAt <= 0) return;
   const remaining = Math.ceil((timerEndsAt - Date.now()) / 1000);
   if (remaining <= 0) {
