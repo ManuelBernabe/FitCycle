@@ -97,17 +97,20 @@ body {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: 1.15;
 }
 
+/* Version on its own smaller line under the app name, so the header row never overflows */
 .header-version {
-  font-size: 11px;
+  display: block;
+  width: fit-content;
+  font-size: 10px;
   font-weight: 600;
   opacity: 0.75;
-  margin-left: 4px;
+  margin: 2px 0 0;
   background: rgba(255, 255, 255, 0.18);
   padding: 1px 6px;
   border-radius: 8px;
-  vertical-align: middle;
   letter-spacing: 0.3px;
   cursor: pointer;
   transition: opacity 0.15s, background 0.15s;
