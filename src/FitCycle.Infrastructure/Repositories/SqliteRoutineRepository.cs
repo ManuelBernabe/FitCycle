@@ -486,6 +486,14 @@ public class SqliteRoutineRepository : IRoutineRepository
             var (normalizedJson, setsCount, mainReps, mainWeight) =
                 NormalizeSetDetails(input.SetDetails, input.Sets, input.Reps, input.Weight);
 
+            // Biweekly variant: only persist ids that exist and differ from the main one.
+            int? alternateId = input.AlternateExerciseId;
+            if (alternateId.HasValue
+                && (alternateId.Value == input.ExerciseId || !_db.Exercises.Any(e => e.Id == alternateId.Value)))
+            {
+                alternateId = null;
+            }
+
             _db.DayExercises.Add(new DayExerciseEntity
             {
                 Day = day,
@@ -497,7 +505,8 @@ public class SqliteRoutineRepository : IRoutineRepository
                 SupersetGroup = input.SupersetGroup,
                 Notes = input.Notes ?? string.Empty,
                 Position = i,
-                UserId = userId
+                UserId = userId,
+                AlternateExerciseId = alternateId
             });
         }
 
@@ -553,24 +562,46 @@ public class SqliteRoutineRepository : IRoutineRepository
             .OrderBy(d => d.Position).ThenBy(d => d.Id)
             .ToList();
 
+        var isAltWeek = FitCycle.Core.BiweeklyRotation.IsAlternateWeek(DateTime.UtcNow);
+
         var routineExercises = dayExercises.Select(de =>
         {
-            var mg = de.Exercise != null
-                ? _db.MuscleGroups.FirstOrDefault(m => m.Id == de.Exercise.MuscleGroupId)
+            // Biweekly variant: on "B" weeks the alternate exercise IS this week's exercise.
+            // Serving the swap from the repository means the workout page, the prefill and
+            // the saved logs all use the correct variant (and its own weight history) with
+            // no client-side week logic.
+            Exercise? served = de.Exercise;
+            Exercise? other = null;
+            if (de.AlternateExerciseId.HasValue)
+            {
+                var alt = _db.Exercises.FirstOrDefault(e => e.Id == de.AlternateExerciseId.Value);
+                if (alt != null)
+                {
+                    if (isAltWeek) { other = served; served = alt; }
+                    else { other = alt; }
+                }
+            }
+
+            var mg = served != null
+                ? _db.MuscleGroups.FirstOrDefault(m => m.Id == served.MuscleGroupId)
                 : null;
 
             return new RoutineExercise
             {
-                ExerciseId = de.ExerciseId,
-                ExerciseName = de.Exercise?.Name ?? string.Empty,
+                ExerciseId = served?.Id ?? de.ExerciseId,
+                ExerciseName = served?.Name ?? string.Empty,
                 Sets = de.Sets,
                 Reps = de.Reps,
                 Weight = de.Weight,
                 SetDetails = de.SetDetails ?? string.Empty,
                 SupersetGroup = de.SupersetGroup,
                 Notes = de.Notes ?? string.Empty,
-                ImageUrl = de.Exercise?.ImageUrl ?? string.Empty,
-                MuscleGroupName = mg?.Name ?? string.Empty
+                ImageUrl = served?.ImageUrl ?? string.Empty,
+                MuscleGroupName = mg?.Name ?? string.Empty,
+                BaseExerciseId = de.ExerciseId,
+                AlternateExerciseId = de.AlternateExerciseId,
+                AlternateExerciseName = other?.Name ?? string.Empty,
+                IsAlternateWeek = de.AlternateExerciseId.HasValue && isAltWeek
             };
         }).ToList();
 

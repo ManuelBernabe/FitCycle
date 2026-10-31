@@ -237,6 +237,7 @@ export async function mount(params) {
 
 export function destroy() {
   stopTimer();
+  stopTempoMetronome();
   closeRestOverlay();
   releaseWakeLock();
   if (autosaveInterval) { clearInterval(autosaveInterval); autosaveInterval = null; }
@@ -375,6 +376,7 @@ function renderExercise() {
               <div style="font-size:12px;color:#512BD4;font-weight:600;">${t('ExerciseProgress', currentIndex + 1, exercises.length)}</div>
               <button id="workout-video-btn" class="video-btn ${ex.videoUrl || ex.VideoUrl ? '' : 'empty'}" title="${t('Demo') || 'Demo'}">▶ ${t('Demo') || 'Demo'}</button>
               <button id="workout-tips-btn" class="video-btn" style="background:#ffc107;color:#000;" title="${t('FormTips')}">💡 ${t('FormTips')}</button>
+              <button id="workout-history-btn" class="video-btn" style="background:#512BD4;color:#fff;" title="${t('ExerciseHistory')}">📊</button>
             </div>
             <div class="workout-exercise-name">${escapeHtml(exName)}</div>
             <div style="font-size:13px;color:gray;">${mgTranslate(exMuscle)}</div>
@@ -384,6 +386,11 @@ function renderExercise() {
                 <button id="workout-switch-partner" style="background:#e67e22;color:#fff;border:none;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:600;cursor:pointer;">
                   &#8644; ${t('SwitchPartner')}
                 </button>
+              </div>
+            ` : ''}
+            ${(ex.alternateExerciseName || ex.AlternateExerciseName) ? `
+              <div style="margin-top:3px;font-size:11px;color:#512BD4;font-weight:600;">
+                &#8646; ${t('BiweeklyWorkoutBadge', escapeHtml(exTranslate(ex.alternateExerciseName || ex.AlternateExerciseName)))}
               </div>
             ` : ''}
           </div>
@@ -435,9 +442,11 @@ function renderExercise() {
               ${currentSetData.tempoPos > 0 || currentSetData.tempoNeg > 0 ? `
                 <div style="display:flex;gap:6px;align-items:center;background:#f3f0fc;padding:4px 10px;border-radius:8px;border:1px solid #d4c4f5;">
                   <span style="font-size:13px;font-weight:700;color:#512BD4;">⏱</span>
-                  <span style="font-size:13px;font-weight:600;color:#512BD4;">${currentSetData.tempoPos}s ${t('TempoAsc')}</span>
+                  <span id="tempo-pos-span" style="font-size:13px;font-weight:600;color:#512BD4;">${currentSetData.tempoPos}s ${t('TempoAsc')}</span>
                   <span style="color:#999;font-size:11px;">·</span>
-                  <span style="font-size:13px;font-weight:600;color:#512BD4;">${currentSetData.tempoNeg}s ${t('TempoDesc')}</span>
+                  <span id="tempo-neg-span" style="font-size:13px;font-weight:600;color:#512BD4;">${currentSetData.tempoNeg}s ${t('TempoDesc')}</span>
+                  <button id="tempo-metro-btn" title="${t('TempoMetronome')}"
+                    style="background:#512BD4;color:#fff;border:none;border-radius:6px;padding:2px 8px;font-size:12px;font-weight:700;cursor:pointer;">&#9654;</button>
                 </div>
               ` : ''}
               ${currentSetData.grip ? `<span style="font-size:12px;font-weight:600;color:#e67e22;background:#fff3e0;padding:4px 10px;border-radius:8px;border:1px solid #ffe0b2;">✊ ${t('Grip')}: ${t('Grip' + currentSetData.grip.charAt(0).toUpperCase() + currentSetData.grip.slice(1).toLowerCase()) || currentSetData.grip}</span>` : ''}
@@ -663,6 +672,10 @@ function renderExercise() {
   // multiple intervals. To be defensive, ensure any running timer is cleared FIRST so a
   // stale callback can't fire and increment a second interval.
   stopTimer();
+  stopTempoMetronome(); // fresh DOM — the old metronome's highlighted spans are gone
+
+  document.getElementById('workout-history-btn')?.addEventListener('click', showExerciseHistoryModal);
+  document.getElementById('tempo-metro-btn')?.addEventListener('click', toggleTempoMetronome);
 
   document.getElementById('timer-start')?.addEventListener('click', onTimerStartClicked);
   document.getElementById('timer-reset')?.addEventListener('click', onTimerResetClicked);
@@ -1035,10 +1048,115 @@ function closeRestOverlay() {
   document.getElementById('rest-overlay')?.remove();
 }
 
+// ── Tempo metronome ──
+// Marks the prescribed rep rhythm (e.g. 2s positive / 3s negative) with a high beep at
+// the start of the lifting phase and a low one at the start of the lowering phase,
+// looping until stopped. Audio goes through the gesture-unlocked shared context.
+let tempoMetroInterval = null;
+let tempoMetroPhase = null;
+
+function stopTempoMetronome() {
+  if (tempoMetroInterval) { clearInterval(tempoMetroInterval); tempoMetroInterval = null; }
+  tempoMetroPhase = null;
+  const btn = document.getElementById('tempo-metro-btn');
+  if (btn) btn.innerHTML = '&#9654;';
+  const posEl = document.getElementById('tempo-pos-span');
+  const negEl = document.getElementById('tempo-neg-span');
+  if (posEl) posEl.style.cssText = 'font-size:13px;font-weight:600;color:#512BD4;';
+  if (negEl) negEl.style.cssText = 'font-size:13px;font-weight:600;color:#512BD4;';
+}
+
+function toggleTempoMetronome() {
+  if (tempoMetroInterval) { stopTempoMetronome(); return; }
+  const ex = exercises[currentIndex];
+  const sd = ex?.setDetails?.[currentSet];
+  const pos = sd?.tempoPos || 0;
+  const neg = sd?.tempoNeg || 0;
+  if (pos + neg <= 0) return;
+  unlockRestAudio(); // we're inside the tap — unlock so the phase beeps can play on iOS
+  const btn = document.getElementById('tempo-metro-btn');
+  if (btn) btn.innerHTML = '&#9632;';
+  const cycleMs = (pos + neg) * 1000;
+  const startedAt = Date.now();
+  tempoMetroPhase = null;
+  const tick = () => {
+    const tMs = (Date.now() - startedAt) % cycleMs;
+    const phase = tMs < pos * 1000 ? 'up' : 'down';
+    if (phase === tempoMetroPhase) return;
+    tempoMetroPhase = phase;
+    restBeep(phase === 'up' ? 990 : 550, 0, phase === 'up' ? 120 : 200, 0.35);
+    try { navigator.vibrate?.(phase === 'up' ? 40 : [40, 50, 40]); } catch { /* */ }
+    const posEl = document.getElementById('tempo-pos-span');
+    const negEl = document.getElementById('tempo-neg-span');
+    if (posEl) posEl.style.cssText = phase === 'up'
+      ? 'font-size:13px;font-weight:800;color:#28a745;' : 'font-size:13px;font-weight:600;color:#512BD4;';
+    if (negEl) negEl.style.cssText = phase === 'down'
+      ? 'font-size:13px;font-weight:800;color:#e67e22;' : 'font-size:13px;font-weight:600;color:#512BD4;';
+  };
+  tick();
+  tempoMetroInterval = setInterval(tick, 60);
+}
+
+// ── Exercise history modal ──
+// Last sessions of the current exercise, set by set — so the weight can be chosen with
+// real context instead of only the single prefit value.
+async function showExerciseHistoryModal() {
+  const ex = exercises[currentIndex];
+  if (!ex) return;
+  const exId = ex.exerciseId || ex.ExerciseId || ex.id || ex.Id;
+  const exName = ex.exerciseName || ex.ExerciseName || ex.name || ex.Name || '';
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay modal-centered';
+  overlay.innerHTML = `
+    <div class="modal-content" style="max-width:420px;">
+      <div class="modal-header">
+        <div class="modal-title">&#128202; ${t('ExerciseHistory')}</div>
+        <button class="modal-close" id="exhist-close">&times;</button>
+      </div>
+      <div style="font-size:13px;font-weight:600;margin-bottom:8px;">${escapeHtml(exTranslate(exName))}</div>
+      <div id="exhist-body" style="font-size:13px;max-height:55vh;overflow-y:auto;">
+        <div class="spinner" style="margin:12px auto;"></div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#exhist-close')?.addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+  try {
+    const rows = await api.get(`/workouts/exercise/${exId}/history?name=${encodeURIComponent(exName)}`);
+    const body = overlay.querySelector('#exhist-body');
+    if (!body) return;
+    if (!Array.isArray(rows) || rows.length === 0) {
+      body.innerHTML = `<div style="color:gray;text-align:center;padding:8px 0;">${t('NoHistoryYet')}</div>`;
+      return;
+    }
+    body.innerHTML = rows.map(r => {
+      let sets = [];
+      try { sets = r.setDetails ? JSON.parse(r.setDetails) : []; } catch { /* legacy row */ }
+      const chips = (sets.length > 0 ? sets : [{ weight: r.weight, reps: r.reps }]).map(s =>
+        `<span style="white-space:nowrap;background:#f3f0fc;color:#512BD4;border-radius:6px;padding:2px 7px;font-weight:600;">${(parseFloat(s.weight) || 0) > 0 ? s.weight : '–'} kg × ${s.reps}</span>`
+      ).join(' ');
+      const d = new Date(r.date);
+      return `
+        <div style="padding:7px 0;border-bottom:1px solid #eee;">
+          <div style="font-size:11px;color:gray;margin-bottom:3px;">${dayName(d.getDay())} ${d.toLocaleDateString()}</div>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;">${chips}</div>
+        </div>
+      `;
+    }).join('');
+  } catch (err) {
+    const body = overlay.querySelector('#exhist-body');
+    if (body) body.innerHTML = `<div style="color:#dc3545;">${t('ErrorFmt', err.message)}</div>`;
+  }
+}
+
 function showRestOverlay(totalSeconds) {
   totalSeconds = Math.max(0, Math.floor(totalSeconds || 0));
   if (totalSeconds <= 0) return;
   closeRestOverlay();
+  stopTempoMetronome(); // the set is over — the rep rhythm must not keep beeping
 
   const RADIUS = 95;
   const CIRC = 2 * Math.PI * RADIUS;

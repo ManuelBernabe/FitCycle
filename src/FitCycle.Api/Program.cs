@@ -1361,6 +1361,34 @@ app.MapGet("/workouts/exercise/{exerciseId}/progress", (int exerciseId, FitCycle
 .WithOpenApi()
 .RequireAuthorization();
 
+// Last N sessions of ONE exercise, set by set — powers the in-workout history modal.
+// Matches by ExerciseId OR by name (case-insensitive) so history survives re-imports
+// that moved the movement to a new Exercise row (same rationale as last-weights).
+app.MapGet("/workouts/exercise/{exerciseId}/history", (int exerciseId, string? name, FitCycleDbContext db, ClaimsPrincipal user) =>
+{
+    var userId = int.Parse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+    var nameLower = (name ?? string.Empty).Trim().ToLower();
+    var logs = db.WorkoutExerciseLogs
+        .Include(l => l.WorkoutSession)
+        .Where(l => l.WorkoutSession!.UserId == userId
+            && (l.ExerciseId == exerciseId || (nameLower != "" && l.ExerciseName.ToLower() == nameLower)))
+        .OrderByDescending(l => l.WorkoutSession!.CompletedAt)
+        .Take(6)
+        .Select(l => new
+        {
+            date = l.WorkoutSession!.CompletedAt,
+            weight = l.Weight,
+            sets = l.Sets,
+            reps = l.Reps,
+            setDetails = l.SetDetails
+        })
+        .ToList();
+    return Results.Ok(logs);
+})
+.WithName("GetExerciseHistory")
+.WithOpenApi()
+.RequireAuthorization();
+
 // Get last weights used per exercise for a given day (from most recent completed workout)
 // Diagnostic: list every workout this user has saved for a given day so we can verify the pre-fill source.
 app.MapGet("/workouts/diag/{day}", (int day, FitCycleDbContext db, ClaimsPrincipal user) =>

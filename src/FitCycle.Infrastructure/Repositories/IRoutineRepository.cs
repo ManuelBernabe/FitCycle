@@ -16,4 +16,4 @@ public interface IRoutineRepository
         string cardioType = "", int cardioMinutes = 0, string absExercise = "", int absSets = 0, int absReps = 0);
 }
 
-public record RoutineExerciseInput(int ExerciseId, int Sets, int Reps, decimal Weight, string SetDetails = "", int SupersetGroup = 0, string Notes = "");
+public record RoutineExerciseInput(int ExerciseId, int Sets, int Reps, decimal Weight, string SetDetails = "", int SupersetGroup = 0, string Notes = "", int? AlternateExerciseId = null);

@@ -124,8 +124,10 @@ async function loadData() {
         .filter(e => (e.muscleGroupId || e.MuscleGroupId) === mgId)
         .map(e => {
           const eId = e.id || e.Id;
+          // Match on the STORED id (baseExerciseId): on "B" weeks the served exerciseId
+          // is the biweekly variant and matching on it would silently swap the pair.
           const existingIdx = selectedExercises.findIndex(se =>
-            (se.exerciseId || se.ExerciseId) === eId
+            (se.baseExerciseId || se.BaseExerciseId || se.exerciseId || se.ExerciseId) === eId
           );
           const existing = existingIdx >= 0 ? selectedExercises[existingIdx] : null;
           const sets = existing ? (existing.sets || existing.Sets || 3) : 3;
@@ -136,8 +138,10 @@ async function loadData() {
 
           const supersetGroup = existing ? (existing.supersetGroup || existing.SupersetGroup || 0) : 0;
           const notes = existing ? (existing.notes || existing.Notes || '') : '';
+          const alternateExerciseId = existing ? (existing.alternateExerciseId ?? existing.AlternateExerciseId ?? null) : null;
           return {
             exerciseId: eId,
+            alternateExerciseId,
             name: e.name || e.Name,
             imageUrl: e.imageUrl || e.ImageUrl || '',
             isSelected: !!existing,
@@ -384,6 +388,7 @@ function buildExerciseRows(group, gi) {
           <button class="btn-delete-ex" data-gi="${gi}" data-ei="${ei}" style="background:#dc3545;color:#fff;border:none;border-radius:6px;padding:2px 6px;font-size:12px;cursor:pointer;flex-shrink:0;">&#10005;</button>
         </div>
         ${isInSuperset ? `<div style="font-size:10px;color:#e67e22;font-weight:600;margin:2px 0 0 24px;">&#8644; ${partnerName ? escapeHtml(exTranslate(partnerName)) : t('Superset')}</div>` : ''}
+        ${ex.alternateExerciseId ? `<div style="font-size:10px;color:#512BD4;font-weight:600;margin:2px 0 0 24px;">&#8646; ${t('BiweeklyShort')}: ${escapeHtml(exTranslate(findExerciseNameById(ex.alternateExerciseId)))}</div>` : ''}
         <div style="margin:4px 0 0 24px;">
           <div style="font-size:10px;color:#666;word-break:break-word;">${summaryText}</div>
           ${badgesHtml}
@@ -412,11 +417,38 @@ function buildExerciseRows(group, gi) {
               style="background:none;border:1px dashed #512BD4;color:#512BD4;border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer;margin-top:4px;width:100%;">
               + ${t('AddSet')}
             </button>
+            <div style="display:flex;align-items:center;gap:6px;margin-top:6px;flex-wrap:wrap;">
+              <span style="font-size:11px;color:#512BD4;font-weight:600;" title="${t('BiweeklyTooltip')}">&#8646; ${t('BiweeklyLabel')}</span>
+              <select class="picker-select alt-exercise-picker" data-gi="${gi}" data-ei="${ei}" style="flex:1;min-width:140px;font-size:11px;padding:2px;">
+                ${buildAlternateOptions(ex)}
+              </select>
+            </div>
           </div>
         ` : ''}
       </div>
     `;
   }).join('');
+}
+
+/** Options for the biweekly-variant picker: whole catalog grouped by muscle, minus self. */
+function buildAlternateOptions(ex) {
+  let html = `<option value="">${t('BiweeklyNone')}</option>`;
+  for (const g of groups) {
+    const opts = g.exercises
+      .filter(e => e.exerciseId !== ex.exerciseId)
+      .map(e => `<option value="${e.exerciseId}" ${ex.alternateExerciseId === e.exerciseId ? 'selected' : ''}>${escapeHtml(exTranslate(e.name))}</option>`)
+      .join('');
+    if (opts) html += `<optgroup label="${escapeHtml(mgTranslate(g.name))}">${opts}</optgroup>`;
+  }
+  return html;
+}
+
+function findExerciseNameById(id) {
+  for (const g of groups) {
+    const hit = g.exercises.find(e => e.exerciseId === id);
+    if (hit) return hit.name;
+  }
+  return '';
 }
 
 function showSupersetModal(sourceGi, sourceEi) {
@@ -607,6 +639,16 @@ function attachEvents(container) {
     });
   });
 
+  // Biweekly variant picker ("2 semanas X y 2 semanas Y")
+  container.querySelectorAll('.alt-exercise-picker').forEach(sel => {
+    sel.addEventListener('change', () => {
+      const gi = parseInt(sel.dataset.gi);
+      const ei = parseInt(sel.dataset.ei);
+      groups[gi].exercises[ei].alternateExerciseId = sel.value ? parseInt(sel.value) : null;
+      buildUI(); // refresh the "alterna con" badge
+    });
+  });
+
   // Toggle notes
   container.querySelectorAll('.btn-toggle-notes').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -792,6 +834,7 @@ async function doSave() {
       setDetails: JSON.stringify(it.ex.setDetails),
       supersetGroup: it.ex.supersetGroup || 0,
       notes: it.ex.notes || '',
+      alternateExerciseId: it.ex.alternateExerciseId || null,
     }));
 
     await api.put(`/routines/${dayNum}`, {

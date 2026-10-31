@@ -16,5 +16,11 @@ public class DayExerciseEntity
     public string Notes { get; set; } = string.Empty;
     /// <summary>0-based position within the day. Persists the user-defined exercise order across the whole day.</summary>
     public int Position { get; set; }
+    /// <summary>
+    /// Optional biweekly variant ("2 semanas en barra y 2 semanas en máquina"): on
+    /// alternate ISO weeks the day serves this exercise instead of ExerciseId. Each
+    /// variant keeps its own weight history because logs store the served exercise.
+    /// </summary>
+    public int? AlternateExerciseId { get; set; }
     public Exercise? Exercise { get; set; }
 }

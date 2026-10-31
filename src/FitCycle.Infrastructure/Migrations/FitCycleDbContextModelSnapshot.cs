@@ -556,6 +556,9 @@ namespace FitCycle.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<int?>("AlternateExerciseId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("Day")
                         .HasColumnType("INTEGER");
 

@@ -22,4 +22,16 @@ public class RoutineExercise
     /// Free-text notes/instructions for this exercise (e.g. trainer cues).
     /// </summary>
     public string Notes { get; set; } = string.Empty;
+    /// <summary>
+    /// Biweekly variant support. ExerciseId/Name/Image describe the exercise to train
+    /// THIS week (the repository swaps in the variant on "B" weeks). BaseExerciseId and
+    /// AlternateExerciseId are the STORED pair, unaffected by the weekly swap, so the
+    /// editor can round-trip them without inverting the cycle.
+    /// </summary>
+    public int BaseExerciseId { get; set; }
+    public int? AlternateExerciseId { get; set; }
+    /// <summary>Name of the variant NOT served this week (for the "alterna con: X" badge).</summary>
+    public string AlternateExerciseName { get; set; } = string.Empty;
+    /// <summary>True when this week serves the alternate variant (week "B").</summary>
+    public bool IsAlternateWeek { get; set; }
 }
