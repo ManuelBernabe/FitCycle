@@ -372,12 +372,7 @@ function renderExercise() {
             <div class="workout-img-placeholder" style="display:${exImage ? 'none' : 'flex'};align-items:center;justify-content:center;width:100%;height:100%;font-size:40px;opacity:0.3;">&#128247;</div>
           </div>
           <div style="min-width:0;flex:1;">
-            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-              <div style="font-size:12px;color:#512BD4;font-weight:600;white-space:nowrap;">${t('ExerciseProgress', currentIndex + 1, exercises.length)}</div>
-              <button id="workout-video-btn" class="video-btn ${ex.videoUrl || ex.VideoUrl ? '' : 'empty'}" title="${t('Demo') || 'Demo'}">▶ ${t('Demo') || 'Demo'}</button>
-              <button id="workout-tips-btn" class="video-btn" style="background:#ffc107;color:#000;" title="${t('FormTips')}">💡 ${t('FormTips')}</button>
-              <button id="workout-history-btn" class="video-btn" style="background:#512BD4;color:#fff;" title="${t('ExerciseHistory')}">📊</button>
-            </div>
+            <div style="font-size:12px;color:#512BD4;font-weight:600;">${t('ExerciseProgress', currentIndex + 1, exercises.length)}</div>
             <div class="workout-exercise-name">${escapeHtml(exName)}</div>
             <div style="font-size:13px;color:gray;">${mgTranslate(exMuscle)}</div>
             ${ssPartnerName ? `
@@ -394,6 +389,12 @@ function renderExercise() {
               </div>
             ` : ''}
           </div>
+        </div>
+
+        <div style="display:flex;gap:8px;margin:8px 0 2px;">
+          <button id="workout-video-btn" class="video-btn ${ex.videoUrl || ex.VideoUrl ? '' : 'empty'}" style="flex:1;justify-content:center;padding:7px 4px;font-size:12px;" title="${t('Demo') || 'Demo'}">▶ ${t('Demo') || 'Demo'}</button>
+          <button id="workout-tips-btn" class="video-btn" style="flex:1;justify-content:center;padding:7px 4px;font-size:12px;background:#ffc107;color:#000;" title="${t('FormTips')}">💡 ${t('FormTips')}</button>
+          <button id="workout-history-btn" class="video-btn" style="flex:1;justify-content:center;padding:7px 4px;font-size:12px;background:#512BD4;color:#fff;" title="${t('ExerciseHistory')}">📊 ${t('ExerciseHistory')}</button>
         </div>
 
         <div class="set-indicator" style="margin:6px 0;">${setDots}</div>
