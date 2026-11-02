@@ -1,8 +1,48 @@
 // FitCycle Stats Page — workout statistics and history
 
-import { t, dayName, exerciseName as exTranslate } from '../l10n.js';
+import { t, dayName, exerciseName as exTranslate, muscleGroup as mgTranslate } from '../l10n.js';
 import { api } from '../api.js';
 import { escapeHtml, calculateStreak, skeleton } from '../utils.js';
+
+// Accent color per muscle group (Spanish DB names) so each history day reads
+// at a glance; chips/borders derive translucent shades from these.
+const MG_COLORS = {
+  'pecho': '#e74c3c', 'espalda': '#3498db', 'piernas': '#8e44ad',
+  'cuádriceps': '#8e44ad', 'femoral': '#9b59b6', 'glúteos': '#e84393',
+  'hombros': '#f39c12', 'bíceps': '#16a085', 'tríceps': '#e67e22',
+  'abdominales': '#2ecc71', 'gemelos': '#1abc9c', 'cardio': '#ff6b35',
+  'trapecio': '#2980b9', 'antebrazo': '#7f8c8d', 'lumbar': '#c0392b',
+};
+
+function mgColor(name) {
+  return MG_COLORS[(name || '').trim().toLowerCase()] || '#512BD4';
+}
+
+function workoutMuscleGroups(exLogs) {
+  const seen = [];
+  for (const log of exLogs) {
+    const mg = (log.muscleGroupName || log.MuscleGroupName || '').trim();
+    if (mg && !seen.includes(mg)) seen.push(mg);
+  }
+  return seen;
+}
+
+function workoutVolume(exLogs) {
+  let vol = 0;
+  for (const log of exLogs) {
+    let details = null;
+    try {
+      const raw = log.setDetails || log.SetDetails || '';
+      if (raw) details = JSON.parse(raw);
+    } catch (e) { /* fall through to aggregate fields */ }
+    if (Array.isArray(details) && details.length > 0) {
+      details.forEach(s => { vol += (Number(s.reps) || 0) * (Number(s.weight) || 0); });
+    } else {
+      vol += (log.sets || log.Sets || 0) * (log.reps || log.Reps || 0) * (Number(log.weight || log.Weight) || 0);
+    }
+  }
+  return Math.round(vol);
+}
 
 export function render() {
   return `
@@ -60,6 +100,50 @@ export async function mount() {
         </div>
       </div>
     `;
+
+    // Recent workout history — FIRST, before any chart: each day shows the
+    // muscle groups trained (colored chips), exercise count, duration, volume.
+    const history = workouts || [];
+    if (history.length > 0) {
+      html += `
+        <div class="card mb-8">
+          <div class="card-title mb-8">${t('RecentHistory')}</div>
+          ${history.slice(0, 10).map((w, idx) => {
+            const completedDate = new Date(w.completedAt || w.CompletedAt);
+            const startedDate = new Date(w.startedAt || w.StartedAt);
+            const dateStr = completedDate.toLocaleDateString();
+            const exLogs = w.exerciseLogs || w.ExerciseLogs || [];
+            const durationMs = completedDate - startedDate;
+            const dMin = Math.floor(durationMs / 60000);
+            const durationStr = dMin > 0 ? `${dMin}${t('MinSuffix')}` : `<1${t('MinSuffix')}`;
+            // Weekday derived from the workout's DATE — w.day is the ROUTINE trained
+            // (día 1 = plan de Lunes) and doesn't have to match the calendar day the
+            // user actually trained on.
+            const wDay = completedDate.getDay();
+            const mgs = workoutMuscleGroups(exLogs);
+            const accent = mgColor(mgs[0]);
+            const vol = workoutVolume(exLogs);
+            const mgChips = mgs.map(mg => {
+              const c = mgColor(mg);
+              return `<span style="background:${c}22;color:${c};border:1px solid ${c}55;border-radius:10px;padding:2px 9px;font-size:12px;font-weight:700;">${escapeHtml(mgTranslate(mg))}</span>`;
+            }).join('');
+
+            return `
+              <div class="history-item" data-idx="${idx}" style="cursor:pointer;padding:10px 12px;margin-bottom:8px;border-radius:12px;background:rgba(127,127,127,0.07);border-left:4px solid ${accent};">
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+                  <div style="font-weight:700;font-size:15px;">${dayName(wDay)} · ${dateStr}</div>
+                  <span class="hist-chevron" style="color:${accent};font-size:13px;transition:transform 0.2s;">&#9660;</span>
+                </div>
+                ${mgChips ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:7px;">${mgChips}</div>` : ''}
+                <div style="font-size:12px;color:var(--text-light,gray);margin-top:7px;">
+                  &#128170; ${t('ExercisesCount', exLogs.length, durationStr)}${vol > 0 ? ` &nbsp;&middot;&nbsp; &#127947;&#65039; ${vol.toLocaleString()} ${t('WeightKg')}` : ''}
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
 
     // Streak card
     if (streak > 0) {
@@ -123,41 +207,7 @@ export async function mount() {
       `;
     }
 
-    // Recent workout history (last 10)
-    const history = workouts || [];
-    if (history.length > 0) {
-      html += `
-        <div class="card">
-          <div class="card-title mb-8">${t('RecentHistory')}</div>
-          ${history.slice(0, 10).map(w => {
-            const completedDate = new Date(w.completedAt || w.CompletedAt);
-            const startedDate = new Date(w.startedAt || w.StartedAt);
-            const dateStr = completedDate.toLocaleDateString();
-            const exLogs = w.exerciseLogs || w.ExerciseLogs || [];
-            const exCount = exLogs.length;
-            const durationMs = completedDate - startedDate;
-            const dMin = Math.floor(durationMs / 60000);
-            const durationStr = dMin > 0 ? `${dMin}${t('MinSuffix')}` : `<1${t('MinSuffix')}`;
-            // Weekday derived from the workout's DATE — w.day is the ROUTINE trained
-            // (día 1 = plan de Lunes) and doesn't have to match the calendar day the
-            // user actually trained on. Using completedDate for both keeps the label
-            // and the date always consistent ("Miércoles -- 5/8/2026").
-            const wDay = completedDate.getDay();
-
-            return `
-              <div class="exercise-row history-item" data-workout-id="${w.id || ''}" style="cursor:pointer;">
-                <div class="exercise-info">
-                  <div class="exercise-name">${dayName(wDay)} -- ${dateStr}</div>
-                  <div class="exercise-detail">${t('ExercisesCount', exCount, durationStr)}</div>
-                </div>
-              </div>
-            `;
-          }).join('')}
-        </div>
-      `;
-    }
-
-    // Achievements card (after stats, before history)
+    // Achievements card (last)
     if (achievementsData && achievementsData.achievements) {
       const unlocked = achievementsData.achievements.filter(a => a.unlocked).length;
       const total = achievementsData.achievements.length;
@@ -183,36 +233,51 @@ export async function mount() {
     container.innerHTML = html;
 
     // Make history items expandable to show exercise details
-    container.querySelectorAll('.history-item').forEach((item, idx) => {
+    container.querySelectorAll('.history-item').forEach((item) => {
       item.addEventListener('click', () => {
+        const idx = parseInt(item.dataset.idx);
         const w = history[idx];
         if (!w) return;
         const exLogs = w.exerciseLogs || w.ExerciseLogs || [];
         const detailId = `history-detail-${idx}`;
+        const chevron = item.querySelector('.hist-chevron');
         let existing = document.getElementById(detailId);
         if (existing) {
           existing.remove();
+          if (chevron) chevron.style.transform = '';
           return;
         }
+        if (chevron) chevron.style.transform = 'rotate(180deg)';
         const detailDiv = document.createElement('div');
         detailDiv.id = detailId;
-        detailDiv.style.cssText = 'margin-left:16px;margin-bottom:8px;font-size:14px;';
+        detailDiv.style.cssText = 'margin:-4px 0 8px;padding:10px 12px;border-radius:0 0 12px 12px;background:rgba(127,127,127,0.04);border-left:4px solid rgba(127,127,127,0.2);font-size:14px;';
         detailDiv.innerHTML = exLogs.map(log => {
           const logName = exTranslate(log.exerciseName || log.ExerciseName || '');
-          const logMg = log.muscleGroupName || log.MuscleGroupName || '';
-          let setInfo = '';
+          const logMg = (log.muscleGroupName || log.MuscleGroupName || '').trim();
+          const c = mgColor(logMg);
           const rawDetails = log.setDetails || log.SetDetails || '';
           let details = null;
           try { if (rawDetails) details = JSON.parse(rawDetails); } catch (e) { /* */ }
+          let setChips = '';
           if (Array.isArray(details) && details.length > 0) {
-            setInfo = details.map((s, i) => `S${i + 1}: ${s.reps}r/${s.weight > 0 ? '<span class="weight-val">' + s.weight + 'kg</span>' : '-'}`).join(' | ');
+            setChips = details.map(s =>
+              `<span style="background:${c}18;color:${c};border-radius:6px;padding:2px 7px;font-size:12px;font-weight:700;white-space:nowrap;">${s.weight > 0 ? s.weight + ' ' + t('WeightKg') + ' × ' : ''}${s.reps}</span>`
+            ).join('');
           } else {
             const logSets = log.sets || log.Sets || 0;
             const logReps = log.reps || log.Reps || 0;
-            const logWeight = log.weight || log.Weight || 0;
-            setInfo = `${logSets}x${logReps}${logWeight > 0 ? ' @ <span class="weight-val">' + logWeight + ' ' + t('WeightKg') + '</span>' : ''}`;
+            const logWeight = Number(log.weight || log.Weight) || 0;
+            setChips = `<span style="background:${c}18;color:${c};border-radius:6px;padding:2px 7px;font-size:12px;font-weight:700;white-space:nowrap;">${logSets}×${logReps}${logWeight > 0 ? ' @ ' + logWeight + ' ' + t('WeightKg') : ''}</span>`;
           }
-          return `<div style="margin-bottom:4px;">&bull; <b>${logName}</b> — ${setInfo}${logMg ? ` <span style="font-size:11px;color:#512BD4;">(${logMg})</span>` : ''}</div>`;
+          return `
+            <div style="margin-bottom:9px;">
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
+                <span style="width:8px;height:8px;border-radius:50%;background:${c};flex-shrink:0;"></span>
+                <b style="font-size:13px;">${escapeHtml(logName)}</b>
+              </div>
+              <div style="display:flex;flex-wrap:wrap;gap:4px;margin-left:14px;">${setChips}</div>
+            </div>
+          `;
         }).join('');
         item.after(detailDiv);
       });
