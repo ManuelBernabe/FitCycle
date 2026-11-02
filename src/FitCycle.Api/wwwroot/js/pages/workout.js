@@ -1354,9 +1354,17 @@ function showRestOverlay(totalSeconds) {
       </div>
       ${nextCard}
       <div style="font-size:13px;color:rgba(255,255,255,0.5);text-align:center;max-width:260px;">${t('RestOverlayHint')}</div>
+      <button id="rest-skip-btn" style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.35);color:rgba(255,255,255,0.9);border-radius:12px;padding:10px 22px;font-size:14px;font-weight:700;cursor:pointer;">${t('RestSkipBtn')}</button>
     </div>
   `;
   document.body.appendChild(overlay);
+
+  // Early exit back to the set — no end beeps, no green banner, just close and lift.
+  overlay.querySelector('#rest-skip-btn')?.addEventListener('click', () => {
+    closeRestOverlay();
+    stopRestKeepalive();
+    haptic('tap');
+  });
 
   // Both call sites run inside a tap, so the context is unlocked; the keepalive holds
   // the Bluetooth audio link open for the whole rest so the ticks and end beeps are
