@@ -519,7 +519,11 @@ function renderExercise() {
         </button>
         ${isLastExercise && isLastSet
           ? `<button id="workout-finish" class="btn btn-success" style="padding:10px;">${t('Finish')}</button>`
-          : `<button id="workout-next" class="btn btn-primary" style="padding:10px;">${isLastSet ? t('Next') : t('NextSet')}</button>`
+          : `
+          <div style="display:flex;min-width:0;">
+            <button id="workout-next" class="btn btn-primary" style="flex:1;min-width:0;padding:10px 4px;border-radius:10px 0 0 10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">⏱ ${isLastSet ? t('Next') : t('NextSet')}</button>
+            <button id="workout-next-skip" class="btn btn-primary" title="${t('SkipRest')}" aria-label="${t('SkipRest')}" style="width:48px;flex-shrink:0;padding:10px 0;border-radius:0 10px 10px 0;border-left:1px solid rgba(255,255,255,0.4);font-size:16px;">⏭</button>
+          </div>`
         }
       </div>
     </div>
@@ -615,6 +619,12 @@ function renderExercise() {
     // Blocking circular countdown over the freshly rendered next set: it can't be
     // dismissed and the set stays locked until the ring reaches 0.
     showRestOverlay(restSecs);
+  });
+
+  // Right half of the split button: advance WITHOUT the rest countdown (skip rest).
+  document.getElementById('workout-next-skip')?.addEventListener('click', () => {
+    acquireWakeLock();
+    advanceToNext();
   });
 
   document.getElementById('workout-switch-partner')?.addEventListener('click', () => switchSupersetPartner());
