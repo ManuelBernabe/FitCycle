@@ -528,7 +528,7 @@ function renderExercise() {
           ? `<button id="workout-finish" class="btn btn-success" style="padding:10px;">${t('Finish')}</button>`
           : `
           <div style="display:flex;min-width:0;">
-            <button id="workout-next" class="btn btn-primary" style="flex:1;min-width:0;padding:10px 4px;border-radius:10px 0 0 10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">⏱ ${isLastSet ? t('Next') : t('NextSet')}</button>
+            <button id="workout-next" class="btn btn-primary" style="flex:1;min-width:0;padding:10px 4px;border-radius:10px 0 0 10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${isLastSet ? `${t('Next')} →` : `⏱ ${t('NextSet')}`}</button>
             <button id="workout-next-skip" class="btn btn-primary" title="${t('SkipRest')}" aria-label="${t('SkipRest')}" style="width:48px;flex-shrink:0;padding:10px 0;border-radius:0 10px 10px 0;border-left:1px solid rgba(255,255,255,0.4);font-size:16px;">⏭</button>
           </div>`
         }
@@ -625,11 +625,14 @@ function renderExercise() {
     acquireWakeLock();
     // Read the configured rest BEFORE advancing — renderExercise() rebuilds the pickers.
     const restSecs = getPickerTotalSeconds();
+    // Completing the exercise's LAST set moves on to a NEW exercise: no rest pop-up
+    // there (user request) — show the next exercise directly. The countdown only runs
+    // BETWEEN sets of the same exercise; a manual rest is always available via Start.
+    const exerciseJustCompleted = isLastSet;
     advanceToNext();
     window.scrollTo(0, 0); // new set/exercise always starts at the top of the screen
-    // Blocking circular countdown over the freshly rendered next set: it can't be
-    // dismissed and the set stays locked until the ring reaches 0.
-    showRestOverlay(restSecs);
+    // Circular countdown over the freshly rendered next set.
+    if (!exerciseJustCompleted) showRestOverlay(restSecs);
   });
 
   // Right half of the split button: advance WITHOUT the rest countdown (skip rest).
