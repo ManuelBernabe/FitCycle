@@ -38,8 +38,27 @@ export function render() {
   `;
 }
 
-export function mount() {
+export async function mount() {
   renderStep();
+  // The done-flag only lives in this device's localStorage, so it is lost on
+  // reinstall / new device / iOS storage purge. Veteran users (routine or
+  // workout history already on the server) must never see the wizard: detect
+  // them and skip straight to home.
+  try {
+    const [stats, week] = await Promise.all([
+      api.get('/workouts/stats'),
+      api.get('/routines'),
+    ]);
+    const days = week?.days || week?.Days || (Array.isArray(week) ? week : []);
+    const hasRoutine = days.some(d => (d.exercises || d.Exercises || []).length > 0);
+    const hasWorkouts = (stats?.totalWorkouts || stats?.TotalWorkouts || 0) > 0;
+    if (hasRoutine || hasWorkouts) {
+      markOnboardingDone();
+      location.hash = '#home';
+    }
+  } catch {
+    // Offline or API error: leave the wizard visible, it can still be skipped.
+  }
 }
 
 export function destroy() {}
