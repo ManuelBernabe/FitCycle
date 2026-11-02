@@ -206,6 +206,7 @@ export function render() {
           ${tip(t('TutWorkoutTip5'), '#fff8e1', '#f9a825')}
           ${tip(t('TutWorkoutTip6'), '#f3f0fc', '#512BD4')}
           ${tip(t('TutWorkoutTip7'), '#e3f2fd', '#1565c0')}
+          ${tip(t('TutWorkoutTip8'), '#fff8e1', '#b8860b')}
         `)}
 
         <!-- 7. Resumen -->

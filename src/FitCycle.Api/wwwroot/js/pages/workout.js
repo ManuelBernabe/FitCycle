@@ -20,6 +20,10 @@ let timerInterval = null;
 let timerEndsAt = 0;
 let showExerciseList = false;
 let prefillSource = null; // { date, count } when pre-fill applied weights from a previous workout
+// All-time max weight per exercise (key: lowercase name), loaded in background at
+// mount. Lets us celebrate a PR the moment the set is completed instead of only in
+// the end-of-workout summary. Empty when offline — live PRs just stay silent then.
+let bestWeights = {};
 // Periodic autosave so a forgotten or crashed session can still recover the user's last
 // typed values from sessionStorage. Cleared on destroy() / finish.
 let autosaveInterval = null;
@@ -168,6 +172,9 @@ export async function mount(params) {
         console.log('[prefill] no previous workout for this day');
       }
     } catch (err) { console.warn('[prefill] failed:', err); }
+
+    // Background: all-time bests for live PR detection (never blocks the workout UI).
+    loadBestWeights();
 
     // Restore saved progress if same day AND recent (within 4 hours).
     // Reps come from the PLAN (the routine's setDetails) and must NEVER be overwritten
@@ -826,6 +833,7 @@ function advanceToNext() {
     document.activeElement.blur();
   }
   saveCurrentSetValues();
+  checkLivePR();
   stopTimer();
   haptic('success');
   const ex2 = exercises[currentIndex];
@@ -1133,7 +1141,44 @@ async function showExerciseHistoryModal() {
       body.innerHTML = `<div style="color:gray;text-align:center;padding:8px 0;">${t('NoHistoryYet')}</div>`;
       return;
     }
-    body.innerHTML = rows.map(r => {
+    // Sparkline of the max weight per session (oldest → newest) so the trend is
+    // visible at a glance before the per-session breakdown.
+    const maxPerSession = rows.map(r => {
+      let maxW = Number(r.weight) || 0;
+      try {
+        const sets = r.setDetails ? JSON.parse(r.setDetails) : [];
+        if (Array.isArray(sets)) sets.forEach(s => { const sw = Number(s.weight) || 0; if (sw > maxW) maxW = sw; });
+      } catch { /* legacy row */ }
+      return maxW;
+    }).reverse();
+    let sparkline = '';
+    if (rows.length >= 2 && maxPerSession.some(v => v > 0)) {
+      const W = 300, H = 70, PAD = 14;
+      const maxV = Math.max(...maxPerSession, 1);
+      const minV = Math.min(...maxPerSession);
+      const range = maxV - minV || 1;
+      const pts = maxPerSession.map((v, i) => ({
+        x: PAD + (i / (maxPerSession.length - 1)) * (W - PAD * 2),
+        y: PAD + (H - PAD * 2) - ((v - minV) / range) * (H - PAD * 2),
+        v,
+      }));
+      const poly = pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+      const circles = pts.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="#512BD4"/>`).join('');
+      const first = pts[0], last = pts[pts.length - 1];
+      const trendUp = last.v > first.v;
+      sparkline = `
+        <div style="margin-bottom:8px;padding:6px 4px;background:rgba(81,43,212,0.06);border-radius:10px;">
+          <svg width="100%" viewBox="0 0 ${W} ${H}" style="display:block;">
+            <polyline points="${poly}" fill="none" stroke="${trendUp ? '#28a745' : '#512BD4'}" stroke-width="2.5" stroke-linejoin="round"/>
+            ${circles}
+            <text x="${first.x.toFixed(1)}" y="${Math.max(first.y - 7, 9).toFixed(1)}" text-anchor="start" font-size="10" font-weight="700" fill="currentColor" opacity="0.8">${first.v}</text>
+            <text x="${last.x.toFixed(1)}" y="${Math.max(last.y - 7, 9).toFixed(1)}" text-anchor="end" font-size="10" font-weight="700" fill="currentColor" opacity="0.8">${last.v}</text>
+          </svg>
+        </div>
+      `;
+    }
+
+    body.innerHTML = sparkline + rows.map(r => {
       let sets = [];
       try { sets = r.setDetails ? JSON.parse(r.setDetails) : []; } catch { /* legacy row */ }
       const chips = (sets.length > 0 ? sets : [{ weight: r.weight, reps: r.reps }]).map(s =>
@@ -1265,6 +1310,69 @@ function updateTimerDisplay() {
 }
 
 // ── Finish ──
+
+async function loadBestWeights() {
+  bestWeights = {};
+  try {
+    const workouts = await api.get('/workouts');
+    for (const w of workouts || []) {
+      for (const log of (w.exerciseLogs || w.ExerciseLogs || [])) {
+        const key = String(log.exerciseName || log.ExerciseName || '').trim().toLowerCase();
+        if (!key) continue;
+        let maxW = Number(log.weight || log.Weight) || 0;
+        try {
+          const details = JSON.parse(log.setDetails || log.SetDetails || '[]');
+          if (Array.isArray(details)) {
+            details.forEach(s => { const sw = Number(s.weight) || 0; if (sw > maxW) maxW = sw; });
+          }
+        } catch { /* legacy row without setDetails */ }
+        if (maxW > (bestWeights[key] || 0)) bestWeights[key] = maxW;
+      }
+    }
+  } catch (e) { console.warn('[livePR] could not load bests:', e); }
+}
+
+/**
+ * Celebrates in the moment when the set just saved beats the all-time max weight
+ * for the exercise. Called right after saveCurrentSetValues() while currentIndex/
+ * currentSet still point at the completed set. Raises the stored best so each new
+ * record only fires once.
+ */
+function checkLivePR() {
+  const ex = exercises[currentIndex];
+  if (!ex) return;
+  const key = (ex.exerciseName || ex.ExerciseName || ex.name || ex.Name || '').trim().toLowerCase();
+  const prev = bestWeights[key] || 0;
+  if (prev <= 0) return; // first sessions of an exercise are baselines, not records
+  const lifted = Number(ex.setDetails?.[currentSet]?.weight) || 0;
+  if (lifted <= prev) return;
+  bestWeights[key] = lifted;
+  haptic('pr');
+  confetti(2500);
+  showLivePRToast(t('NewRecordLive', exTranslate(ex.exerciseName || ex.ExerciseName || ''), lifted, prev));
+}
+
+function showLivePRToast(message) {
+  document.getElementById('live-pr-toast')?.remove();
+  const el = document.createElement('div');
+  el.id = 'live-pr-toast';
+  // z-index above the rest overlay (10000) so the record shows over the countdown.
+  el.style.cssText = `
+    position:fixed; top:calc(env(safe-area-inset-top, 0px) + 70px); left:50%; transform:translateX(-50%);
+    z-index:10001; max-width:92vw; text-align:center;
+    background:linear-gradient(135deg,#ffd700,#ffb347); color:#5d4e00;
+    font-size:14px; font-weight:800; border-radius:12px; padding:12px 18px;
+    box-shadow:0 4px 16px rgba(255,183,0,0.5);
+    animation: pr-bounce 0.6s cubic-bezier(0.16,1,0.3,1);
+  `;
+  el.textContent = message;
+  document.body.appendChild(el);
+  setTimeout(() => {
+    el.style.transition = 'opacity 0.5s';
+    el.style.opacity = '0';
+    setTimeout(() => el.remove(), 550);
+  }, 3500);
+}
 
 async function finishWorkout() {
   stopTimer();
