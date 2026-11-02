@@ -1237,6 +1237,27 @@ function showRestOverlay(totalSeconds) {
 
   const RADIUS = 95;
   const CIRC = 2 * Math.PI * RADIUS;
+
+  // "Up next" card: by the time the overlay shows, advanceToNext() has already moved
+  // currentIndex/currentSet to the UPCOMING set (and on a manual Start rest, the current
+  // set IS the one about to be done) — so this always describes what comes after the rest.
+  let nextCard = '';
+  const nx = exercises[currentIndex];
+  const nxSet = nx?.setDetails?.[currentSet];
+  if (nxSet) {
+    const nxName = exTranslate(nx.exerciseName || nx.ExerciseName || nx.name || nx.Name || '');
+    const w = Number(nxSet.weight) || 0;
+    const line = w > 0
+      ? `${nxSet.reps} <span style="font-size:17px;font-weight:600;color:rgba(255,255,255,0.55);">reps ×</span> ${w} <span style="font-size:17px;font-weight:600;color:rgba(255,255,255,0.55);">kg</span>`
+      : `${nxSet.reps} <span style="font-size:17px;font-weight:600;color:rgba(255,255,255,0.55);">reps</span>`;
+    nextCard = `
+      <div style="background:rgba(139,114,255,0.14);border:1px solid rgba(139,114,255,0.45);border-radius:14px;padding:10px 20px;text-align:center;max-width:300px;">
+        <div style="font-size:11px;color:#b3a3ff;letter-spacing:1.5px;text-transform:uppercase;font-weight:700;">${t('NextUp')} · ${t('SetN', currentSet + 1, nx.setDetails.length)}</div>
+        <div style="font-size:14px;font-weight:600;color:rgba(255,255,255,0.85);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(nxName)}</div>
+        <div style="font-size:26px;font-weight:800;color:#fff;margin-top:2px;line-height:1.1;font-variant-numeric:tabular-nums;">${line}</div>
+      </div>`;
+  }
+
   const overlay = document.createElement('div');
   overlay.id = 'rest-overlay';
   overlay.setAttribute('role', 'timer');
@@ -1260,6 +1281,7 @@ function showRestOverlay(totalSeconds) {
           <div style="font-size:13px;color:rgba(255,255,255,0.65);letter-spacing:2px;text-transform:uppercase;margin-top:6px;">${t('RestOverlayLabel')}</div>
         </div>
       </div>
+      ${nextCard}
       <div style="font-size:13px;color:rgba(255,255,255,0.5);text-align:center;max-width:260px;">${t('RestOverlayHint')}</div>
     </div>
   `;
