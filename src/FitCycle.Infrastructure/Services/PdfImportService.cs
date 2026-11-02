@@ -228,13 +228,19 @@ public class PdfImportService : IPdfImportService
             var orderedExercises = (dayRoutine.Exercises ?? new()).OrderBy(e => e.OrderHint).ToList();
             foreach (var pdfEx in orderedExercises)
             {
+                var pdfExName = pdfEx.Name ?? "Ejercicio";
+                // The NAME is the strongest signal: "Femoral tumbado" is legs even when the
+                // AI labeled it "Espalda" (it has), and "Elevación lateral" is shoulders, not
+                // chest. Deterministic keyword inference wins; then the parsed label; then
+                // the day's first muscle group.
+                var inferredMgName = InferMuscleGroupFromName(pdfExName);
                 var exMg = allMuscleGroups.FirstOrDefault(m =>
-                    string.Equals(m.Name, pdfEx.MuscleGroup, StringComparison.OrdinalIgnoreCase));
+                        string.Equals(m.Name, inferredMgName, StringComparison.OrdinalIgnoreCase))
+                    ?? allMuscleGroups.FirstOrDefault(m =>
+                        string.Equals(m.Name, pdfEx.MuscleGroup, StringComparison.OrdinalIgnoreCase));
                 var muscleGroupId = exMg?.Id ?? mgIds.FirstOrDefault();
                 if (muscleGroupId == 0 && allMuscleGroups.Count > 0)
                     muscleGroupId = allMuscleGroups[0].Id;
-
-                var pdfExName = pdfEx.Name ?? "Ejercicio";
                 var normalizedPdfName = NormalizeExerciseName(pdfExName);
                 var claimedByOthers = claimedExerciseIds
                     .Where(kv => !string.Equals(kv.Value, normalizedPdfName, StringComparison.OrdinalIgnoreCase))
@@ -417,6 +423,26 @@ public class PdfImportService : IPdfImportService
     /// Normalizes an exercise name for fuzzy matching: lowercase, no accents,
     /// collapsed whitespace. Used to dedupe variants like "Press Banca" vs "press banca".
     /// </summary>
+    /// <summary>
+    /// Deterministic muscle group from well-known Spanish movement keywords in the
+    /// exercise name. Stronger than the AI's per-exercise label, which has tagged
+    /// "Femoral tumbado" as Espalda and "Elevación lateral" as Pecho. Returns null
+    /// when the name carries no unambiguous keyword.
+    /// </summary>
+    private static string? InferMuscleGroupFromName(string name)
+    {
+        var n = NormalizeExerciseName(name); // lowercase, accents stripped
+        if (n.Contains("gluteo") || n.Contains("hip thrust")) return "Glúteos";
+        if (n.Contains("femoral") || n.Contains("isquio") || n.Contains("gemelo") ||
+            n.Contains("cuadriceps") || n.Contains("abductor") || n.Contains("aductor") ||
+            n.Contains("sentadilla") || n.Contains("zancada") || n.Contains("pantorrilla") ||
+            n.Contains("prensa")) return "Piernas";
+        if (n.Contains("elevacion lateral") || n.Contains("elevacion frontal") ||
+            n.Contains("press militar") || n.Contains("pajaro")) return "Hombros";
+        if (n.Contains("hiperextension")) return "Espalda"; // lumbar; "enfoque glúteo" matched above
+        return null;
+    }
+
     private static string NormalizeExerciseName(string name)
     {
         if (string.IsNullOrWhiteSpace(name)) return "";
