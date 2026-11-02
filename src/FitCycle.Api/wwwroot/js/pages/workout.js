@@ -253,6 +253,7 @@ export function destroy() {
   stopTimer();
   stopTempoMetronome();
   closeRestOverlay();
+  stopRestKeepalive();
   releaseWakeLock();
   if (autosaveInterval) { clearInterval(autosaveInterval); autosaveInterval = null; }
   if (typeof document.__fitcycleVisHandler === 'function') {
@@ -1005,6 +1006,9 @@ function releaseWakeLock() {
 function onVisibilityChange() {
   if (document.hidden) return;
   acquireWakeLock(); // the OS dropped the lock while backgrounded — grab it again
+  // iOS marks the AudioContext interrupted while backgrounded; wake it now so the
+  // next tick/beep doesn't have to pay the async-resume cost at its scheduled time.
+  try { if (restAudioCtx && restAudioCtx.state !== 'running') restAudioCtx.resume(); } catch { /* */ }
   if (!timerRunning || timerEndsAt <= 0) return;
   const remaining = Math.ceil((timerEndsAt - Date.now()) / 1000);
   if (remaining <= 0) {
@@ -1057,18 +1061,63 @@ function restBeep(freq, when = 0, duration = 250, volume = 0.5) {
   try {
     const ctx = restAudioCtx || new (window.AudioContext || window.webkitAudioContext)();
     if (!restAudioCtx) restAudioCtx = ctx;
-    if (ctx.state === 'suspended') ctx.resume();
+    const schedule = () => {
+      try {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.frequency.value = freq;
+        osc.type = 'sine';
+        gain.gain.setValueAtTime(0.0001, ctx.currentTime + when);
+        gain.gain.exponentialRampToValueAtTime(volume, ctx.currentTime + when + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + when + duration / 1000);
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start(ctx.currentTime + when);
+        osc.stop(ctx.currentTime + when + duration / 1000 + 0.05);
+      } catch { /* audio not available */ }
+    };
+    // resume() is ASYNC: scheduling against currentTime while still suspended places the
+    // beep at an instant that has already passed when the context finally wakes — that
+    // beep is silently dropped (iOS suspends the ctx on screen lock / backgrounding).
+    if (ctx.state === 'running') schedule();
+    else ctx.resume().then(schedule).catch(() => { /* audio not available */ });
+  } catch { /* audio not available */ }
+}
+
+// ── Bluetooth keepalive ──
+// Wireless earbuds power their audio link down after a few seconds of silence. A lone
+// 120–350 ms beep after a minute-long quiet rest falls entirely inside the ~1 s the
+// link needs to wake back up — the user hears NOTHING (reported on iPhone + BT buds).
+// Fix: play an inaudible low tone for the whole rest so the stream never closes and
+// every tick/beep is delivered from its first millisecond.
+let restKeepaliveNodes = null;
+let restKeepaliveStopTimer = null;
+
+function startRestKeepalive() {
+  try {
+    if (!restAudioCtx) return;
+    if (restKeepaliveStopTimer) { clearTimeout(restKeepaliveStopTimer); restKeepaliveStopTimer = null; }
+    if (restKeepaliveNodes) return;
+    const ctx = restAudioCtx;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-    osc.frequency.value = freq;
-    osc.type = 'sine';
-    gain.gain.setValueAtTime(0.0001, ctx.currentTime + when);
-    gain.gain.exponentialRampToValueAtTime(volume, ctx.currentTime + when + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + when + duration / 1000);
+    osc.frequency.value = 50;   // below earbud response at this level — inaudible
+    gain.gain.value = 0.004;
     osc.connect(gain); gain.connect(ctx.destination);
-    osc.start(ctx.currentTime + when);
-    osc.stop(ctx.currentTime + when + duration / 1000 + 0.05);
+    osc.start();
+    restKeepaliveNodes = { osc, gain };
   } catch { /* audio not available */ }
+}
+
+function stopRestKeepalive(delayMs = 0) {
+  if (restKeepaliveStopTimer) { clearTimeout(restKeepaliveStopTimer); restKeepaliveStopTimer = null; }
+  const doStop = () => {
+    restKeepaliveStopTimer = null;
+    try { restKeepaliveNodes?.osc.stop(); } catch { /* already stopped */ }
+    try { restKeepaliveNodes?.osc.disconnect(); restKeepaliveNodes?.gain.disconnect(); } catch { /* */ }
+    restKeepaliveNodes = null;
+  };
+  if (delayMs > 0) restKeepaliveStopTimer = setTimeout(doStop, delayMs);
+  else doStop();
 }
 
 function playRestEndSound() {
@@ -1287,6 +1336,12 @@ function showRestOverlay(totalSeconds) {
   `;
   document.body.appendChild(overlay);
 
+  // Both call sites run inside a tap, so the context is unlocked; the keepalive holds
+  // the Bluetooth audio link open for the whole rest so the ticks and end beeps are
+  // actually heard on wireless earbuds (they drop the first ~1 s after silence).
+  unlockRestAudio();
+  startRestKeepalive();
+
   const endsAt = Date.now() + totalSeconds * 1000;
   const numEl = overlay.querySelector('#rest-count');
   const ringEl = overlay.querySelector('#rest-ring');
@@ -1299,21 +1354,23 @@ function showRestOverlay(totalSeconds) {
     const secsLeft = Math.max(0, Math.ceil(msLeft / 1000));
     if (numEl && secsLeft !== lastShown) {
       numEl.textContent = String(secsLeft);
-      // Final 3 seconds: turn amber and tick audibly so the end doesn't surprise.
-      if (secsLeft > 0 && secsLeft <= 3) {
+      // Final 4 seconds: turn amber and tick audibly so the end doesn't surprise.
+      if (secsLeft > 0 && secsLeft <= 4) {
         numEl.style.color = '#ffb020';
-        restBeep(440, 0, 120, 0.25);
+        restBeep(440, 0, 160, 0.35);
       }
       lastShown = secsLeft;
     }
     if (ringEl) {
       const frac = Math.min(1, Math.max(0, msLeft / (totalSeconds * 1000)));
       ringEl.style.strokeDashoffset = String(CIRC * (1 - frac));
-      if (msLeft / 1000 <= 3) ringEl.style.stroke = '#ffb020';
+      if (msLeft / 1000 <= 4) ringEl.style.stroke = '#ffb020';
     }
     if (msLeft <= 0) {
       closeRestOverlay();
       playRestEndSound();
+      // Keep the BT stream open until the triple end beep (ends ~1.05 s in) has played.
+      stopRestKeepalive(2500);
       haptic('finish');
       showRestEndAlert();
     }
