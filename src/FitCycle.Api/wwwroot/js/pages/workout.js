@@ -238,13 +238,13 @@ export async function mount(params) {
     // or the browser crashes, the last typed values stay in sessionStorage and the next
     // visit (within the 4-hour window in loadProgress) restores the weights.
     if (autosaveInterval) clearInterval(autosaveInterval);
-    autosaveInterval = setInterval(() => {
-      saveCurrentSetValues();
-      saveProgress();
-    }, 15000);
+    autosaveInterval = setInterval(autosaveTick, 15000);
+
+    // Any touch on the page re-arms the wake lock and its idle timestamp.
+    document.getElementById('workout-content')?.addEventListener('pointerdown', noteInteraction, { passive: true });
 
     // Keep the screen awake for the whole session (re-acquired on foreground resume).
-    acquireWakeLock();
+    noteInteraction();
   } catch (err) {
     document.getElementById('workout-content').innerHTML = `
       <div class="page-content">
@@ -1019,6 +1019,33 @@ function releaseWakeLock() {
   screenWakeLock = null;
 }
 
+// ── Privacy guard ──
+// The wake lock is a convenience, not a commitment: an unlocked always-on phone left
+// on a gym bench is a gift to whoever walks past. If the user hasn't touched the page
+// for WAKE_IDLE_LIMIT_MS and no rest countdown is running, release the lock so the
+// iPhone's own auto-lock takes over and the phone ends up behind Face ID. Any touch
+// re-arms both the timestamp and the lock, so during normal training (tap every
+// couple of minutes) the screen never dims.
+const WAKE_IDLE_LIMIT_MS = 3 * 60 * 1000;
+let lastInteractionAt = Date.now();
+
+function noteInteraction() {
+  lastInteractionAt = Date.now();
+  acquireWakeLock();
+}
+
+function enforceWakeIdleLimit() {
+  if (document.getElementById('rest-overlay')) return; // resting — beeps need the screen on
+  if (Date.now() - lastInteractionAt > WAKE_IDLE_LIMIT_MS) releaseWakeLock();
+}
+
+/** Shared 15 s tick: defensive autosave + the wake-lock privacy guard. */
+function autosaveTick() {
+  saveCurrentSetValues();
+  saveProgress();
+  enforceWakeIdleLimit();
+}
+
 /**
  * Called when the document becomes visible again after the user backgrounded the app.
  * Reconciles `timerSeconds` against the wall clock so the display catches up instantly
@@ -1027,6 +1054,8 @@ function releaseWakeLock() {
  */
 function onVisibilityChange() {
   if (document.hidden) return;
+  // Coming back to the app is a user action: re-arm the privacy-guard timestamp too.
+  lastInteractionAt = Date.now();
   acquireWakeLock(); // the OS dropped the lock while backgrounded — grab it again
   // iOS marks the AudioContext interrupted while backgrounded; wake it now so the
   // next tick/beep doesn't have to pay the async-resume cost at its scheduled time.
@@ -1157,6 +1186,9 @@ let restOverlayInterval = null;
 function closeRestOverlay() {
   if (restOverlayInterval) { clearInterval(restOverlayInterval); restOverlayInterval = null; }
   document.getElementById('rest-overlay')?.remove();
+  // The set starts now — give the user the full idle window before the privacy guard
+  // may release the wake lock (long sets shouldn't end with a dimmed screen).
+  lastInteractionAt = Date.now();
 }
 
 // ── Tempo metronome ──
@@ -1802,7 +1834,7 @@ async function finishWorkout() {
       // and stay on the page so the user can fix connectivity and hit Finish again.
       saveProgress();
       if (!autosaveInterval) {
-        autosaveInterval = setInterval(() => { saveCurrentSetValues(); saveProgress(); }, 15000);
+        autosaveInterval = setInterval(autosaveTick, 15000);
       }
       alert(t('ErrorFmt', e?.message || 'HTTP'));
       return;
