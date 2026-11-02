@@ -1461,6 +1461,54 @@ app.MapGet("/workouts/last-weights/{day}", (int day, FitCycleDbContext db, Claim
 .WithOpenApi()
 .RequireAuthorization();
 
+// -- Notas personales por ejercicio --
+// Keyed by exercise NAME (not id) so notes survive PDF re-imports, same as last-weights.
+app.MapGet("/exercise-notes", (FitCycleDbContext db, ClaimsPrincipal user) =>
+{
+    var userId = int.Parse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+    var notes = db.UserExerciseNotes
+        .Where(n => n.UserId == userId)
+        .Select(n => new { exerciseName = n.ExerciseName, note = n.Note, updatedAt = n.UpdatedAt })
+        .ToList();
+    return Results.Ok(notes);
+})
+.WithName("GetExerciseNotes")
+.WithOpenApi()
+.RequireAuthorization();
+
+app.MapPut("/exercise-notes", (SaveExerciseNoteRequest request, FitCycleDbContext db, ClaimsPrincipal user) =>
+{
+    var userId = int.Parse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+    var name = (request.ExerciseName ?? string.Empty).Trim();
+    if (name.Length == 0) return Results.BadRequest(new { error = "exerciseName is required" });
+    if (name.Length > 200) name = name[..200];
+    var note = (request.Note ?? string.Empty).Trim();
+    if (note.Length > 1000) note = note[..1000];
+
+    var existing = db.UserExerciseNotes
+        .FirstOrDefault(n => n.UserId == userId && n.ExerciseName.ToLower() == name.ToLower());
+
+    if (note.Length == 0)
+    {
+        // Empty note = delete: the client clears a note by saving it empty.
+        if (existing is not null) { db.UserExerciseNotes.Remove(existing); db.SaveChanges(); }
+        return Results.Ok(new { exerciseName = name, note = string.Empty });
+    }
+
+    if (existing is null)
+    {
+        existing = new UserExerciseNoteEntity { UserId = userId, ExerciseName = name };
+        db.UserExerciseNotes.Add(existing);
+    }
+    existing.Note = note;
+    existing.UpdatedAt = DateTime.UtcNow;
+    db.SaveChanges();
+    return Results.Ok(new { exerciseName = existing.ExerciseName, note = existing.Note, updatedAt = existing.UpdatedAt });
+})
+.WithName("SaveExerciseNote")
+.WithOpenApi()
+.RequireAuthorization();
+
 // -- Medidas corporales --
 app.MapGet("/measurements", (FitCycleDbContext db, ClaimsPrincipal user) =>
 {
@@ -1950,6 +1998,7 @@ record UpdateDayRoutineRequest(List<int> MuscleGroupIds, List<RoutineExerciseInp
     string? CardioType = "", int CardioMinutes = 0, string? AbsExercise = "", int AbsSets = 0, int AbsReps = 0);
 record SaveWorkoutExerciseInput(int ExerciseId, string ExerciseName, int Sets, int Reps, decimal Weight, string MuscleGroupName, string SetDetails = "");
 record SaveWorkoutRequest(DayOfWeek Day, DateTime StartedAt, DateTime CompletedAt, List<SaveWorkoutExerciseInput> Exercises);
+record SaveExerciseNoteRequest(string ExerciseName, string Note);
 record CopyRoutinesRequest(int SourceUserId, int TargetUserId);
 record SaveTemplateRequest(string Name, string? Description, int SourceUserId);
 record ApplyTemplateRequest(int TargetUserId);

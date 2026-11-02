@@ -695,6 +695,36 @@ namespace FitCycle.Infrastructure.Migrations
                     b.ToTable("RoutineTemplates");
                 });
 
+            modelBuilder.Entity("FitCycle.Infrastructure.Entities.UserExerciseNoteEntity", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ExerciseName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Note")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "ExerciseName")
+                        .IsUnique();
+
+                    b.ToTable("UserExerciseNotes");
+                });
+
             modelBuilder.Entity("FitCycle.Core.Models.Exercise", b =>
                 {
                     b.HasOne("FitCycle.Core.Models.MuscleGroup", "MuscleGroup")

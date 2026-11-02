@@ -24,6 +24,9 @@ let prefillSource = null; // { date, count } when pre-fill applied weights from 
 // mount. Lets us celebrate a PR the moment the set is completed instead of only in
 // the end-of-workout summary. Empty when offline — live PRs just stay silent then.
 let bestWeights = {};
+// Personal per-exercise notes (key: lowercase name), loaded at mount. Kept server-side
+// (keyed by NAME so they survive PDF re-imports) — localStorage would be purged by iOS.
+let myNotes = {};
 // Periodic autosave so a forgotten or crashed session can still recover the user's last
 // typed values from sessionStorage. Cleared on destroy() / finish.
 let autosaveInterval = null;
@@ -175,6 +178,10 @@ export async function mount(params) {
 
     // Background: all-time bests for live PR detection (never blocks the workout UI).
     loadBestWeights();
+
+    // Personal notes must be there on the FIRST render of each exercise, so this one
+    // is awaited (a single tiny GET). Offline → empty map, the add-note button still shows.
+    await loadMyNotes();
 
     // Restore saved progress if same day AND recent (within 4 hours).
     // Reps come from the PLAN (the routine's setDetails) and must NEVER be overwritten
@@ -429,6 +436,8 @@ function renderExercise() {
               <span id="weight-saved-badge" style="position:absolute;right:-6px;top:-2px;background:#28a745;color:#fff;font-size:10px;font-weight:bold;padding:2px 6px;border-radius:10px;opacity:0;transition:opacity .25s;pointer-events:none;">&#10003;</span>
               <datalist id="workout-weight-options">${buildWorkoutWeightOptions(currentSetData.weight)}</datalist>
             </div>
+            <button id="plate-calc-btn" title="${t('PlateCalc')}"
+              style="align-self:flex-end;width:36px;height:36px;flex-shrink:0;border:1px solid #d4c4f5;border-radius:8px;background:#f3f0fc;font-size:17px;line-height:1;padding:0;cursor:pointer;">🏋️</button>
           </div>
           ${(() => {
             const oneRM = estimate1RM(currentSetData.weight, currentSetData.reps);
@@ -470,6 +479,23 @@ function renderExercise() {
             <div id="workout-notes-body" style="display:none;font-size:11px;color:#333;white-space:pre-wrap;margin-top:4px;">${escapeHtml(exNotes)}</div>
           </div>
         ` : ''}
+
+        ${(() => {
+          // Personal note (mine, not the trainer's): always visible when it exists,
+          // otherwise a subtle add button. Tapping either opens the same editor.
+          const myNote = myNotes[exName.trim().toLowerCase()] || '';
+          return myNote ? `
+            <div id="workout-mynote" style="background:#e8f0fe;border:1px solid #b6d0f7;border-radius:8px;padding:5px 10px;margin:6px auto 0;max-width:300px;text-align:left;cursor:pointer;user-select:none;">
+              <div style="font-size:10px;color:#1a66c2;font-weight:600;display:flex;align-items:center;justify-content:space-between;gap:6px;">
+                <span>&#128221; ${t('MyNote')}</span>
+                <span style="font-size:11px;opacity:0.7;">&#9998;</span>
+              </div>
+              <div style="font-size:11px;color:#333;white-space:pre-wrap;margin-top:3px;">${escapeHtml(myNote)}</div>
+            </div>
+          ` : `
+            <button id="workout-mynote" style="display:block;margin:6px auto 0;background:none;border:1px dashed #b6d0f7;color:#1a66c2;border-radius:8px;padding:4px 14px;font-size:11px;font-weight:600;cursor:pointer;">${t('AddMyNote')}</button>
+          `;
+        })()}
 
         <div style="border-top:1px solid #eee;margin-top:8px;padding-top:6px;">
           <div style="display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;">
@@ -684,6 +710,11 @@ function renderExercise() {
 
   document.getElementById('workout-history-btn')?.addEventListener('click', showExerciseHistoryModal);
   document.getElementById('tempo-metro-btn')?.addEventListener('click', toggleTempoMetronome);
+  document.getElementById('plate-calc-btn')?.addEventListener('click', () => {
+    saveCurrentSetValues(); // commit whatever is typed in the weight input first
+    showPlateCalcModal();
+  });
+  document.getElementById('workout-mynote')?.addEventListener('click', showMyNoteModal);
 
   document.getElementById('timer-start')?.addEventListener('click', onTimerStartClicked);
   document.getElementById('timer-reset')?.addEventListener('click', onTimerResetClicked);
@@ -1330,6 +1361,237 @@ async function loadBestWeights() {
       }
     }
   } catch (e) { console.warn('[livePR] could not load bests:', e); }
+}
+
+/** Loads the user's personal per-exercise notes into `myNotes` (key: lowercase name). */
+async function loadMyNotes() {
+  try {
+    const rows = await api.get('/exercise-notes');
+    const map = {};
+    if (Array.isArray(rows)) {
+      for (const r of rows) {
+        const key = (r.exerciseName || '').trim().toLowerCase();
+        if (key && r.note) map[key] = r.note;
+      }
+    }
+    myNotes = map;
+  } catch (e) {
+    console.warn('[myNotes] could not load:', e);
+    myNotes = {};
+  }
+}
+
+/** Editor for the personal note of the current exercise (create / edit / delete). */
+function showMyNoteModal() {
+  const ex = exercises[currentIndex];
+  if (!ex) return;
+  saveCurrentSetValues(); // the save path re-renders — don't lose a half-typed weight
+  const exName = ex.exerciseName || ex.ExerciseName || ex.name || ex.Name || '';
+  const key = exName.trim().toLowerCase();
+  const existing = myNotes[key] || '';
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay modal-centered';
+  overlay.innerHTML = `
+    <div class="modal-content" style="max-width:420px;">
+      <div class="modal-header">
+        <div class="modal-title">&#128221; ${t('MyNote')}</div>
+        <button class="modal-close" id="mynote-close">&times;</button>
+      </div>
+      <div style="font-size:13px;font-weight:600;margin-bottom:6px;">${escapeHtml(exTranslate(exName))}</div>
+      <textarea id="mynote-text" maxlength="1000" rows="4" placeholder="${t('MyNotePlaceholder')}"
+        style="width:100%;box-sizing:border-box;border:1px solid #ccc;border-radius:8px;padding:8px;font-size:14px;font-family:inherit;resize:vertical;background:#fff;color:#333;">${escapeHtml(existing)}</textarea>
+      <div style="font-size:11px;color:gray;margin:4px 0 10px;">${t('MyNoteHint')}</div>
+      <div style="display:flex;gap:8px;">
+        ${existing ? `<button id="mynote-delete" class="btn" style="flex:1;background:#dc3545;color:#fff;">${t('Delete')}</button>` : ''}
+        <button id="mynote-save" class="btn btn-primary" style="flex:2;">${t('Save')}</button>
+      </div>
+      <div id="mynote-error" style="color:#dc3545;font-size:12px;margin-top:6px;display:none;"></div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const close = () => overlay.remove();
+  overlay.querySelector('#mynote-close')?.addEventListener('click', close);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+  const save = async (text) => {
+    const btn = overlay.querySelector('#mynote-save');
+    if (btn) btn.disabled = true;
+    try {
+      await api.put('/exercise-notes', { exerciseName: exName, note: text });
+      if (text) myNotes[key] = text; else delete myNotes[key];
+      close();
+      renderExercise();
+    } catch (err) {
+      const errEl = overlay.querySelector('#mynote-error');
+      if (errEl) { errEl.style.display = 'block'; errEl.textContent = t('ErrorFmt', err.message); }
+      if (btn) btn.disabled = false;
+    }
+  };
+  overlay.querySelector('#mynote-save')?.addEventListener('click', () => {
+    save((overlay.querySelector('#mynote-text')?.value || '').trim());
+  });
+  overlay.querySelector('#mynote-delete')?.addEventListener('click', () => save(''));
+}
+
+// ── Plate calculator ──
+// Olympic color code per plate size; height/width give the side-view proportions.
+const PLATE_STYLE = {
+  25:     { color: '#d32f2f', h: 58, w: 15 },
+  20:     { color: '#1565c0', h: 54, w: 15 },
+  15:     { color: '#f9a825', h: 47, w: 14 },
+  10:     { color: '#2e7d32', h: 40, w: 13 },
+  5:      { color: '#eceff1', h: 32, w: 12 },
+  2.5:    { color: '#e57373', h: 26, w: 11 },
+  1.25:   { color: '#90a4ae', h: 22, w: 10 },
+  0.5:    { color: '#b0bec5', h: 18, w: 9 },
+};
+const PLATE_SIZES = Object.keys(PLATE_STYLE).map(Number).sort((a, b) => b - a);
+const BAR_OPTIONS = [20, 15, 10, 6];
+
+function getPlateCfg() {
+  let bar = parseFloat(localStorage.getItem('fc_plate_bar'));
+  if (!Number.isFinite(bar) || bar <= 0) bar = 20;
+  let plates = null;
+  try { plates = JSON.parse(localStorage.getItem('fc_plate_set') || 'null'); } catch { /* reset below */ }
+  if (!Array.isArray(plates) || plates.some(p => !PLATE_SIZES.includes(p))) plates = [...PLATE_SIZES];
+  return { bar, plates };
+}
+
+/** Greedy per-side breakdown. Returns counts (descending), leftover per side, achieved total. */
+function computePlates(target, bar, plates) {
+  const perSide = (target - bar) / 2;
+  let remaining = Math.round(perSide * 1000) / 1000;
+  const counts = [];
+  for (const p of [...plates].sort((a, b) => b - a)) {
+    const n = Math.floor((remaining + 1e-9) / p);
+    if (n > 0) {
+      counts.push({ plate: p, n });
+      remaining = Math.round((remaining - n * p) * 1000) / 1000;
+    }
+  }
+  const achieved = Math.round((target - remaining * 2) * 100) / 100;
+  return { counts, remaining, achieved, perSide };
+}
+
+function showPlateCalcModal() {
+  const ex = exercises[currentIndex];
+  const initialTarget = Number(ex?.setDetails?.[currentSet]?.weight) || 0;
+  const cfg = getPlateCfg();
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay modal-centered';
+  overlay.innerHTML = `
+    <div class="modal-content" style="max-width:420px;">
+      <div class="modal-header">
+        <div class="modal-title">&#127947;&#65039; ${t('PlateCalc')}</div>
+        <button class="modal-close" id="platecalc-close">&times;</button>
+      </div>
+      <div style="display:flex;gap:10px;align-items:flex-end;margin-bottom:8px;">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:10px;color:gray;margin-bottom:2px;">${t('PlateCalcTarget')}</div>
+          <input id="plate-target" type="number" step="any" min="0" max="500" inputmode="decimal" value="${initialTarget > 0 ? initialTarget : ''}"
+            style="width:100%;box-sizing:border-box;font-size:18px;font-weight:bold;text-align:center;border:1px solid #ddd;border-radius:8px;padding:6px;background:#fff;color:#333;">
+        </div>
+        <div style="width:96px;flex-shrink:0;">
+          <div style="font-size:10px;color:gray;margin-bottom:2px;">${t('PlateCalcBar')} (kg)</div>
+          <select id="plate-bar" style="width:100%;font-size:16px;font-weight:bold;text-align:center;border:1px solid #ddd;border-radius:8px;padding:7px 2px;background:#fff;color:#333;">
+            ${(BAR_OPTIONS.includes(cfg.bar) ? BAR_OPTIONS : [...BAR_OPTIONS, cfg.bar].sort((a, b) => b - a))
+              .map(b => `<option value="${b}" ${b === cfg.bar ? 'selected' : ''}>${b}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div id="plate-result" style="min-height:110px;"></div>
+      <div style="font-size:11px;color:gray;margin:10px 0 6px;">${t('PlateCalcPlates')}</div>
+      <div id="plate-toggles" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#platecalc-close')?.addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+
+  const renderToggles = () => {
+    const { plates } = getPlateCfg();
+    const el = overlay.querySelector('#plate-toggles');
+    if (!el) return;
+    el.innerHTML = PLATE_SIZES.map(p => {
+      const on = plates.includes(p);
+      return `<button data-plate="${p}" style="border-radius:16px;padding:5px 11px;font-size:13px;font-weight:700;cursor:pointer;
+        border:1px solid ${on ? PLATE_STYLE[p].color : '#bbb'};
+        background:${on ? PLATE_STYLE[p].color : 'transparent'};
+        color:${on ? (p === 5 || p === 0.5 ? '#333' : '#fff') : '#999'};
+        ${on ? '' : 'text-decoration:line-through;opacity:0.6;'}">${p}</button>`;
+    }).join('');
+    el.querySelectorAll('[data-plate]').forEach(btn => btn.addEventListener('click', () => {
+      const p = parseFloat(btn.dataset.plate);
+      const { plates: cur } = getPlateCfg();
+      const next = cur.includes(p) ? cur.filter(x => x !== p) : [...cur, p];
+      localStorage.setItem('fc_plate_set', JSON.stringify(next));
+      renderToggles();
+      renderResult();
+    }));
+  };
+
+  const renderResult = () => {
+    const el = overlay.querySelector('#plate-result');
+    if (!el) return;
+    const raw = (overlay.querySelector('#plate-target')?.value ?? '').trim().replace(',', '.');
+    const target = parseFloat(raw);
+    const { bar, plates } = getPlateCfg();
+
+    if (!Number.isFinite(target) || target <= 0) {
+      el.innerHTML = `<div style="color:gray;text-align:center;padding:24px 0;font-size:13px;">${t('EnterWeightHint')}</div>`;
+      return;
+    }
+    if (target < bar) {
+      el.innerHTML = `<div style="color:#e67e22;text-align:center;padding:24px 8px;font-size:13px;font-weight:600;">&#9888;&#65039; ${t('PlateCalcBelowBar', bar)}</div>`;
+      return;
+    }
+    const { counts, remaining, achieved } = computePlates(target, bar, plates);
+    const totalPlates = counts.reduce((s, c) => s + c.n, 0);
+
+    if (totalPlates === 0 && remaining <= 0.001) {
+      el.innerHTML = `<div style="color:#28a745;text-align:center;padding:24px 0;font-size:14px;font-weight:700;">&#10003; ${t('PlateCalcEmptyBar')} (${bar} kg)</div>`;
+      return;
+    }
+
+    // Side view of one bar end: sleeve stub + plates standing on it (capped at 12 plates).
+    let visual = '';
+    if (totalPlates > 0 && totalPlates <= 12) {
+      const plateDivs = counts.flatMap(c => Array.from({ length: c.n }, () => {
+        const s = PLATE_STYLE[c.plate];
+        return `<div title="${c.plate} kg" style="width:${s.w}px;height:${s.h}px;background:${s.color};border:1px solid rgba(0,0,0,0.25);border-radius:3px;flex-shrink:0;"></div>`;
+      })).join('');
+      visual = `
+        <div style="display:flex;align-items:center;justify-content:center;gap:2px;padding:8px 0 4px;">
+          <div style="width:34px;height:8px;background:#9e9e9e;border-radius:3px 0 0 3px;flex-shrink:0;"></div>
+          <div style="width:7px;height:20px;background:#757575;border-radius:2px;flex-shrink:0;"></div>
+          ${plateDivs}
+          <div style="width:22px;height:8px;background:#9e9e9e;border-radius:0 3px 3px 0;flex-shrink:0;"></div>
+        </div>`;
+    }
+    const summary = counts.map(c => `<b>${c.n} × ${c.plate}</b>`).join(' &nbsp;+&nbsp; ');
+    const warn = remaining > 0.001
+      ? `<div style="margin-top:8px;background:#fff8e1;border:1px solid #ffe082;color:#8a6d00;border-radius:8px;padding:6px 10px;font-size:12px;">&#9888;&#65039; ${t('PlateCalcShort', achieved, Math.round(remaining * 2 * 100) / 100)}</div>`
+      : '';
+    el.innerHTML = `
+      <div style="text-align:center;">
+        ${visual}
+        <div style="font-size:11px;color:#512BD4;font-weight:700;letter-spacing:0.5px;margin-top:4px;">${t('PlateCalcPerSide').toUpperCase()}</div>
+        <div style="font-size:16px;margin-top:3px;">${summary || '—'} kg</div>
+        ${warn}
+      </div>`;
+  };
+
+  overlay.querySelector('#plate-target')?.addEventListener('input', renderResult);
+  overlay.querySelector('#plate-bar')?.addEventListener('change', () => {
+    const v = parseFloat(overlay.querySelector('#plate-bar').value);
+    if (Number.isFinite(v) && v > 0) localStorage.setItem('fc_plate_bar', String(v));
+    renderResult();
+  });
+
+  renderToggles();
+  renderResult();
 }
 
 /**

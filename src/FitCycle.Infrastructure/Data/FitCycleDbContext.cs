@@ -18,6 +18,7 @@ public class FitCycleDbContext : DbContext
     public DbSet<BodyMeasurement> BodyMeasurements => Set<BodyMeasurement>();
     public DbSet<RoutineTemplateEntity> RoutineTemplates => Set<RoutineTemplateEntity>();
     public DbSet<DayExtrasEntity> DayExtras => Set<DayExtrasEntity>();
+    public DbSet<UserExerciseNoteEntity> UserExerciseNotes => Set<UserExerciseNoteEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -106,6 +107,15 @@ public class FitCycleDbContext : DbContext
             e.HasIndex(d => new { d.UserId, d.Day }).IsUnique();
             e.Property(d => d.CardioType).HasMaxLength(100);
             e.Property(d => d.AbsExercise).HasMaxLength(100);
+        });
+
+        // UserExerciseNote (personal per-exercise note, keyed by name so it survives re-imports)
+        modelBuilder.Entity<UserExerciseNoteEntity>(e =>
+        {
+            e.HasKey(n => n.Id);
+            e.HasIndex(n => new { n.UserId, n.ExerciseName }).IsUnique();
+            e.Property(n => n.ExerciseName).IsRequired().HasMaxLength(200);
+            e.Property(n => n.Note).IsRequired().HasMaxLength(1000);
         });
 
         // RoutineTemplate
