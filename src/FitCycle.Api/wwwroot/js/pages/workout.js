@@ -513,8 +513,8 @@ function renderExercise() {
         </div>
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
-        <button id="workout-prev" class="btn btn-outline" style="padding:10px;" ${currentIndex === 0 && currentSet === 0 ? 'disabled' : ''}>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;position:sticky;bottom:0;z-index:100;background:var(--bg);padding:8px 0 calc(env(safe-area-inset-bottom, 0px) + 8px);">
+        <button id="workout-prev" class="btn btn-outline" style="padding:10px;background:var(--card-bg);" ${currentIndex === 0 && currentSet === 0 ? 'disabled' : ''}>
           ${currentSet > 0 ? t('PrevSet') : t('Previous')}
         </button>
         ${isLastExercise && isLastSet
@@ -563,6 +563,7 @@ function renderExercise() {
         saveProgress();
         stopTimer();
         renderExercise();
+        window.scrollTo(0, 0);
       }
     });
   });
@@ -597,6 +598,7 @@ function renderExercise() {
         }
         saveProgress();
         renderExercise();
+        window.scrollTo(0, 0);
         return;
       }
     }
@@ -605,6 +607,7 @@ function renderExercise() {
     else if (currentIndex > 0) { currentIndex--; currentSet = exercises[currentIndex].setDetails.length - 1; }
     saveProgress();
     renderExercise();
+    window.scrollTo(0, 0);
   });
 
   document.getElementById('workout-next')?.addEventListener('click', () => {
@@ -616,6 +619,7 @@ function renderExercise() {
     // Read the configured rest BEFORE advancing — renderExercise() rebuilds the pickers.
     const restSecs = getPickerTotalSeconds();
     advanceToNext();
+    window.scrollTo(0, 0); // new set/exercise always starts at the top of the screen
     // Blocking circular countdown over the freshly rendered next set: it can't be
     // dismissed and the set stays locked until the ring reaches 0.
     showRestOverlay(restSecs);
@@ -625,6 +629,7 @@ function renderExercise() {
   document.getElementById('workout-next-skip')?.addEventListener('click', () => {
     acquireWakeLock();
     advanceToNext();
+    window.scrollTo(0, 0);
   });
 
   document.getElementById('workout-switch-partner')?.addEventListener('click', () => switchSupersetPartner());

@@ -1,4 +1,4 @@
-﻿const CACHE = 'fitcycle-v127';
+﻿const CACHE = 'fitcycle-v128';
 // v2: bumped so every client drops the stale-while-revalidate copies of
 // /workouts/last-weights/* that were hiding freshly saved weights (v1.4.5 fix).
 const API_CACHE = 'fitcycle-api-v2';
@@ -68,7 +68,18 @@ function isImageRequest(request) {
 
 self.addEventListener('install', e => {
   self.skipWaiting();
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)));
+  // cache:'reload' bypasses the browser's HTTP cache. With plain addAll(), iOS could
+  // satisfy some SHELL fetches from a stale HTTP cache and bake an OLD file into the
+  // NEW version's cache (seen live: v127 shipped with a v123-era l10n.js — untranslated
+  // keys showing while the rest of the app was current). Every file must come from
+  // the network on install; a single failure aborts so we never go live half-updated.
+  e.waitUntil(caches.open(CACHE).then(c =>
+    Promise.all(SHELL.map(async url => {
+      const res = await fetch(new Request(url, { cache: 'reload' }));
+      if (!res.ok) throw new Error(`precache ${url}: ${res.status}`);
+      await c.put(url, res);
+    }))
+  ));
 });
 
 self.addEventListener('activate', e => {
@@ -203,8 +214,9 @@ self.addEventListener('fetch', e => {
     const url = new URL(e.request.url);
     const isShellMember = SHELL.includes(url.pathname) || url.pathname === '/';
     if (isShellMember) {
+      // Cache miss fallback also bypasses the HTTP cache — same staleness risk as install.
       e.respondWith(
-        caches.match(e.request).then(cached => cached || fetch(e.request).then(res => {
+        caches.match(e.request).then(cached => cached || fetch(new Request(e.request.url, { cache: 'reload' })).then(res => {
           if (res.ok) caches.open(CACHE).then(c => c.put(e.request, res.clone()));
           return res;
         })).catch(() => new Response('Not found', { status: 503 }))
