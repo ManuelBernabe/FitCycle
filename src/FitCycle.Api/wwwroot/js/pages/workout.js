@@ -77,6 +77,11 @@ export function render(params) {
 export async function mount(params) {
   dayNum = parseInt(params);
 
+  // The workout page pins the Prev/Next bar to the bottom of the viewport — lift the
+  // global font-size FAB above it so neither covers the other. Restored in destroy().
+  const zoomFab = document.getElementById('zoom-fab');
+  if (zoomFab) zoomFab.style.bottom = 'calc(env(safe-area-inset-bottom, 0px) + 108px)';
+
   try {
     const dayData = await api.get(`/routines/${dayNum}`);
     const rawExercises = dayData?.exercises || dayData?.Exercises || [];
@@ -255,6 +260,8 @@ export function destroy() {
   closeRestOverlay();
   stopRestKeepalive();
   releaseWakeLock();
+  const zoomFab = document.getElementById('zoom-fab');
+  if (zoomFab) zoomFab.style.bottom = '';
   if (autosaveInterval) { clearInterval(autosaveInterval); autosaveInterval = null; }
   if (typeof document.__fitcycleVisHandler === 'function') {
     document.removeEventListener('visibilitychange', document.__fitcycleVisHandler);
@@ -351,8 +358,8 @@ function renderExercise() {
   }).join('');
 
   container.innerHTML = `
-    <button id="workout-back" class="floating-back-btn">${t('Back')}</button>
-    <div class="page-content" style="padding-top:8px;">
+    <button id="workout-back" class="floating-back-btn" style="bottom:calc(env(safe-area-inset-bottom, 0px) + 108px);">${t('Back')}</button>
+    <div class="page-content" style="padding-top:8px;padding-bottom:calc(env(safe-area-inset-bottom, 0px) + 96px);">
       <div class="flex items-center justify-between" style="margin-bottom:4px;">
         <button id="toggle-exercise-list" class="btn btn-ghost text-primary" style="font-size:12px;padding:4px 8px;">
           ${showExerciseList ? '&#9650; ' + t('Exercises') : '&#9660; ' + t('Exercises')} (${exercises.length})
@@ -498,22 +505,22 @@ function renderExercise() {
           `;
         })()}
 
-        <div style="border-top:1px solid #eee;margin-top:8px;padding-top:6px;">
-          <div style="display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;">
-            <span style="font-size:11px;color:#512BD4;font-weight:bold;letter-spacing:1px;">${t('Rest')}</span>
-            <div id="timer-display" style="font-size:24px;font-weight:bold;color:#333;background:#f5f5f5;border-radius:10px;padding:2px 12px;">${String(currentMin).padStart(2, '0')}:${String(currentSec).padStart(2, '0')}</div>
+        <div style="border-top:1px solid #eee;margin-top:6px;padding-top:5px;">
+          <div style="display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;">
+            <span style="font-size:10px;color:#512BD4;font-weight:bold;letter-spacing:1px;">${t('Rest')}</span>
+            <div id="timer-display" style="font-size:18px;font-weight:bold;color:#333;background:#f5f5f5;border-radius:8px;padding:2px 8px;">${String(currentMin).padStart(2, '0')}:${String(currentSec).padStart(2, '0')}</div>
             <div id="timer-picker-row" class="flex items-center gap-4" style="font-size:12px;">
-              <select id="timer-min" class="picker-select" style="width:50px;font-size:12px;padding:3px;">${minOptions}</select>
+              <select id="timer-min" class="picker-select" style="width:46px;font-size:12px;padding:3px 2px;">${minOptions}</select>
               <span style="color:gray;">:</span>
-              <select id="timer-sec" class="picker-select" style="width:50px;font-size:12px;padding:3px;">${secOptions}</select>
+              <select id="timer-sec" class="picker-select" style="width:46px;font-size:12px;padding:3px 2px;">${secOptions}</select>
             </div>
-            <button id="timer-start" class="btn btn-sm" style="background:#512BD4;color:#fff;padding:4px 12px;border-radius:8px;font-size:12px;">${t('Start')}</button>
-            <button id="timer-reset" class="btn btn-sm" style="background:#6c757d;color:#fff;padding:4px 12px;border-radius:8px;font-size:12px;">${t('Reset')}</button>
+            <button id="timer-start" class="btn btn-sm" style="background:#512BD4;color:#fff;padding:4px 10px;border-radius:8px;font-size:11px;">${t('Start')}</button>
+            <button id="timer-reset" class="btn btn-sm" style="background:#6c757d;color:#fff;padding:4px 10px;border-radius:8px;font-size:11px;">${t('Reset')}</button>
           </div>
         </div>
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;position:sticky;bottom:0;z-index:100;background:var(--bg);padding:8px 0 calc(env(safe-area-inset-bottom, 0px) + 8px);">
+      <div style="position:fixed;left:0;right:0;bottom:0;z-index:100;display:grid;grid-template-columns:1fr 1fr;gap:8px;background:var(--bg);padding:8px 20px calc(env(safe-area-inset-bottom, 0px) + 8px);box-shadow:0 -4px 14px rgba(0,0,0,0.12);">
         <button id="workout-prev" class="btn btn-outline" style="padding:10px;background:var(--card-bg);" ${currentIndex === 0 && currentSet === 0 ? 'disabled' : ''}>
           ${currentSet > 0 ? t('PrevSet') : t('Previous')}
         </button>
