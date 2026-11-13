@@ -19,6 +19,7 @@ public class FitCycleDbContext : DbContext
     public DbSet<RoutineTemplateEntity> RoutineTemplates => Set<RoutineTemplateEntity>();
     public DbSet<DayExtrasEntity> DayExtras => Set<DayExtrasEntity>();
     public DbSet<UserExerciseNoteEntity> UserExerciseNotes => Set<UserExerciseNoteEntity>();
+    public DbSet<WatchTokenEntity> WatchTokens => Set<WatchTokenEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -116,6 +117,15 @@ public class FitCycleDbContext : DbContext
             e.HasIndex(n => new { n.UserId, n.ExerciseName }).IsUnique();
             e.Property(n => n.ExerciseName).IsRequired().HasMaxLength(200);
             e.Property(n => n.Note).IsRequired().HasMaxLength(1000);
+        });
+
+        // WatchToken (Apple Watch / Shortcuts remote-control key, hashed, one per user)
+        modelBuilder.Entity<WatchTokenEntity>(e =>
+        {
+            e.HasKey(w => w.Id);
+            e.HasIndex(w => w.UserId).IsUnique();
+            e.HasIndex(w => w.TokenHash).IsUnique();
+            e.Property(w => w.TokenHash).IsRequired().HasMaxLength(64);
         });
 
         // RoutineTemplate

@@ -1,4 +1,4 @@
-﻿const CACHE = 'fitcycle-v132';
+const CACHE = 'fitcycle-v133';
 // v2: bumped so every client drops the stale-while-revalidate copies of
 // /workouts/last-weights/* that were hiding freshly saved weights (v1.4.5 fix).
 const API_CACHE = 'fitcycle-api-v2';
@@ -21,7 +21,9 @@ function isApiCall(url) {
     url.includes('/musclegroups') || url.includes('/users') ||
     url.includes('/measurements') || url.includes('/admin/') ||
     url.includes('/templates') || url.includes('/me/2fa') ||
-    url.includes('/achievements') || url.includes('/ai/') || url.includes('/export/');
+    url.includes('/achievements') || url.includes('/ai/') || url.includes('/export/') ||
+    // Apple Watch live session: never cached (network only — stale state = wrong set)
+    url.includes('/watch');
 }
 
 function isCacheableApi(request) {

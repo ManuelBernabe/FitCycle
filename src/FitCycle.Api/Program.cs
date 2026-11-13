@@ -29,6 +29,7 @@ builder.Services.AddDbContext<FitCycleDbContext>(options =>
     options.UseSqlite(connStr));
 
 builder.Services.AddScoped<IRoutineRepository, SqliteRoutineRepository>();
+builder.Services.AddSingleton<WatchSessionStore>();
 
 // JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("Jwt").Get<JwtSettings>() ?? new JwtSettings();
@@ -1508,6 +1509,124 @@ app.MapPut("/exercise-notes", (SaveExerciseNoteRequest request, FitCycleDbContex
 .WithName("SaveExerciseNote")
 .WithOpenApi()
 .RequireAuthorization();
+
+// -- Apple Watch remote control (via iOS Shortcuts) --
+// A PWA can't talk to the watch, but a Shortcut running ON the watch can hit a URL.
+// The phone publishes its live workout (the exact list of steps its Next button walks)
+// and polls; the watch sends next/prev/±kg commands authenticated with a personal token
+// (Shortcuts can't refresh JWTs). Commands work even while the phone is locked: the
+// server moves the cursor and the phone catches up as soon as it wakes.
+
+static string HashWatchToken(string token) =>
+    Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(token))).ToLowerInvariant();
+
+app.MapGet("/me/watch", (FitCycleDbContext db, ClaimsPrincipal user) =>
+{
+    var userId = int.Parse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+    var tok = db.WatchTokens.FirstOrDefault(w => w.UserId == userId);
+    return Results.Ok(new { enabled = tok is not null, createdAt = tok?.CreatedAt, lastUsedAt = tok?.LastUsedAt });
+})
+.WithName("GetWatchStatus")
+.WithOpenApi()
+.RequireAuthorization();
+
+// Creates (or replaces → revokes the old one) the user's watch token. The plain token
+// is returned ONCE; only its hash is stored.
+app.MapPost("/me/watch/token", (FitCycleDbContext db, ClaimsPrincipal user) =>
+{
+    var userId = int.Parse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+    var token = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(24))
+        .Replace('+', '-').Replace('/', '_').TrimEnd('=');
+    var existing = db.WatchTokens.FirstOrDefault(w => w.UserId == userId);
+    if (existing is null)
+    {
+        existing = new WatchTokenEntity { UserId = userId };
+        db.WatchTokens.Add(existing);
+    }
+    existing.TokenHash = HashWatchToken(token);
+    existing.CreatedAt = DateTime.UtcNow;
+    existing.LastUsedAt = null;
+    db.SaveChanges();
+    return Results.Ok(new { token, createdAt = existing.CreatedAt });
+})
+.WithName("CreateWatchToken")
+.WithOpenApi()
+.RequireAuthorization();
+
+app.MapDelete("/me/watch/token", (FitCycleDbContext db, ClaimsPrincipal user, WatchSessionStore store) =>
+{
+    var userId = int.Parse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+    var existing = db.WatchTokens.FirstOrDefault(w => w.UserId == userId);
+    if (existing is not null) { db.WatchTokens.Remove(existing); db.SaveChanges(); }
+    store.End(userId);
+    return Results.Ok(new { enabled = false });
+})
+.WithName("DeleteWatchToken")
+.WithOpenApi()
+.RequireAuthorization();
+
+// Phone → server: publish the live workout. Accepted=false means the watch moved things
+// the phone hasn't applied yet; the returned view tells the phone what to apply first.
+app.MapPut("/watch/session", (WatchSessionPublish request, ClaimsPrincipal user, WatchSessionStore store) =>
+{
+    var userId = int.Parse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+    if (request.Steps is null || request.Steps.Count == 0)
+        return Results.BadRequest(new { error = "steps are required" });
+    var result = store.Publish(userId, request);
+    return Results.Ok(new { accepted = result.Accepted, view = result.View });
+})
+.WithName("PublishWatchSession")
+.WithOpenApi()
+.RequireAuthorization();
+
+app.MapGet("/watch/session", (ClaimsPrincipal user, WatchSessionStore store) =>
+{
+    var userId = int.Parse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+    return Results.Ok(new { view = store.Get(userId) });
+})
+.WithName("GetWatchSession")
+.WithOpenApi()
+.RequireAuthorization();
+
+app.MapDelete("/watch/session", (ClaimsPrincipal user, WatchSessionStore store) =>
+{
+    var userId = int.Parse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+    store.End(userId);
+    return Results.Ok(new { ended = true });
+})
+.WithName("EndWatchSession")
+.WithOpenApi()
+.RequireAuthorization();
+
+// Watch → server. GET and POST both accepted so the Shortcut is a bare "Get contents of
+// URL". Plain text by default (the Shortcut just shows it); ?format=json for structured.
+app.MapMethods("/watch/cmd/{action}", new[] { "GET", "POST" },
+    (string action, string? k, decimal? kg, string? lang, string? format, HttpRequest req,
+     FitCycleDbContext db, WatchSessionStore store) =>
+{
+    var token = !string.IsNullOrWhiteSpace(k) ? k.Trim() : req.Headers["X-Watch-Token"].ToString().Trim();
+    var asJson = string.Equals(format, "json", StringComparison.OrdinalIgnoreCase);
+    var hash = string.IsNullOrEmpty(token) ? null : HashWatchToken(token);
+    var tok = hash is null ? null : db.WatchTokens.FirstOrDefault(w => w.TokenHash == hash);
+    if (tok is null)
+    {
+        const string msg = "Enlace del reloj no válido. Genera uno nuevo en FitCycle › Cuenta › Apple Watch.";
+        return asJson
+            ? Results.Json(new { ok = false, text = msg }, statusCode: 401)
+            : Results.Text(msg, "text/plain; charset=utf-8", statusCode: 401);
+    }
+    // Throttled bookkeeping: one write per minute at most.
+    if (tok.LastUsedAt is null || DateTime.UtcNow - tok.LastUsedAt > TimeSpan.FromMinutes(1))
+    {
+        tok.LastUsedAt = DateTime.UtcNow;
+        db.SaveChanges();
+    }
+    var result = store.Command(tok.UserId, action, kg, lang);
+    return asJson
+        ? Results.Json(result)
+        : Results.Text(result.Text, "text/plain; charset=utf-8");
+})
+.WithName("WatchCommand"); // no WithOpenApi(): it throws at startup on multi-verb endpoints
 
 // -- Medidas corporales --
 app.MapGet("/measurements", (FitCycleDbContext db, ClaimsPrincipal user) =>

@@ -47,6 +47,7 @@ function saveProgress() {
     })),
   };
   sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  scheduleWatchPublish(); // every local change also reaches the Apple Watch (no-op if not connected)
 }
 
 function loadProgress() {
@@ -245,6 +246,9 @@ export async function mount(params) {
 
     // Keep the screen awake for the whole session (re-acquired on foreground resume).
     noteInteraction();
+
+    // Apple Watch remote control (only if connected in Account; never blocks the UI).
+    initWatchSync();
   } catch (err) {
     document.getElementById('workout-content').innerHTML = `
       <div class="page-content">
@@ -255,6 +259,7 @@ export async function mount(params) {
 }
 
 export function destroy() {
+  stopWatchSync();
   stopTimer();
   stopTempoMetronome();
   closeRestOverlay();
@@ -323,7 +328,10 @@ function renderExercise() {
   }
   const exNotes = ex.notes || '';
   const progressPct = ((currentIndex + 1) / exercises.length * 100).toFixed(0);
-  const isLastExercise = currentIndex === exercises.length - 1;
+  // "Finalizar" shows when Next has nowhere further to go (also covers a superset pair
+  // that closes the workout, where the final set isn't on the last exercise index).
+  const endPos = nextPosition(currentIndex, currentSet);
+  const isWorkoutEnd = endPos.idx === currentIndex && endPos.set === currentSet;
   const isLastSet = currentSet >= totalSets - 1;
 
   // Superset partner info
@@ -524,7 +532,7 @@ function renderExercise() {
         <button id="workout-prev" class="btn btn-outline" style="padding:10px;background:var(--card-bg);" ${currentIndex === 0 && currentSet === 0 ? 'disabled' : ''}>
           ${currentSet > 0 ? t('PrevSet') : t('Previous')}
         </button>
-        ${isLastExercise && isLastSet
+        ${isWorkoutEnd
           ? `<button id="workout-finish" class="btn btn-success" style="padding:10px;">${t('Finish')}</button>`
           : `
           <div style="display:flex;min-width:0;">
@@ -581,37 +589,9 @@ function renderExercise() {
     }
     saveCurrentSetValues();
     stopTimer();
-    const ex2 = exercises[currentIndex];
-    const ssGrp = ex2.supersetGroup || 0;
-
-    if (ssGrp > 0) {
-      const partnerIdx = exercises.findIndex((e, i) => i !== currentIndex && (e.supersetGroup || 0) === ssGrp);
-      if (partnerIdx >= 0) {
-        const isFirstInPair = currentIndex < partnerIdx;
-        if (isFirstInPair) {
-          // On first exercise: go to previous exercise before the pair, or decrement set via partner
-          if (currentSet > 0) {
-            // Go to partner at previous set (reverse of: partner→first + set++)
-            currentIndex = partnerIdx;
-            currentSet--;
-          } else {
-            // Set 0 of first exercise — go to exercise before superset pair
-            const minIdx = Math.min(currentIndex, partnerIdx);
-            if (minIdx > 0) { currentIndex = minIdx - 1; currentSet = exercises[currentIndex].setDetails.length - 1; }
-          }
-        } else {
-          // On second exercise: go back to first exercise, same set
-          currentIndex = partnerIdx;
-        }
-        saveProgress();
-        renderExercise();
-        window.scrollTo(0, 0);
-        return;
-      }
-    }
-
-    if (currentSet > 0) { currentSet--; }
-    else if (currentIndex > 0) { currentIndex--; currentSet = exercises[currentIndex].setDetails.length - 1; }
+    const pos = prevPosition(currentIndex, currentSet);
+    currentIndex = pos.idx;
+    currentSet = pos.set;
     saveProgress();
     renderExercise();
     window.scrollTo(0, 0);
@@ -893,60 +873,241 @@ function advanceToNext() {
   checkLivePR();
   stopTimer();
   haptic('success');
-  const ex2 = exercises[currentIndex];
-  if (!ex2) return;
-  const ssGrp = ex2.supersetGroup || 0;
+  if (!exercises[currentIndex]) return;
+  const pos = nextPosition(currentIndex, currentSet);
+  currentIndex = pos.idx;
+  currentSet = pos.set;
+  saveProgress();
+  renderExercise();
+}
+
+/**
+ * Pure navigation rule behind Next: where (exercise, set) goes after (idx, set). Shared by
+ * advanceToNext and the Apple Watch step list so both walk the workout identically.
+ * Returns the same position when there is nowhere further to go.
+ */
+function nextPosition(idx, set) {
+  const ex = exercises[idx];
+  if (!ex) return { idx, set };
+  const ssGrp = ex.supersetGroup || 0;
 
   if (ssGrp > 0) {
-    const partnerIdx = exercises.findIndex((e, i) => i !== currentIndex && (e.supersetGroup || 0) === ssGrp);
+    const partnerIdx = exercises.findIndex((e, i) => i !== idx && (e.supersetGroup || 0) === ssGrp);
     if (partnerIdx >= 0) {
-      const isFirstInPair = currentIndex < partnerIdx;
-      if (isFirstInPair) {
+      if (idx < partnerIdx) {
         // After the FIRST partner's set, hop to the SECOND partner at the same set index.
-        // If the second partner has fewer sets, clamp to its last set. Don't increment yet.
-        currentIndex = partnerIdx;
-        if (currentSet >= exercises[partnerIdx].setDetails.length) currentSet = exercises[partnerIdx].setDetails.length - 1;
-      } else {
-        // After the SECOND partner's set, go back to the FIRST partner at the NEXT set.
-        // If both partners have finished all their sets, exit the pair and move past it.
-        const origIdx = currentIndex;
-        const firstIdx = partnerIdx;
-        const nextSet = currentSet + 1;
-        const firstDone = nextSet >= exercises[firstIdx].setDetails.length;
-        const secondDone = nextSet >= exercises[origIdx].setDetails.length;
-        // The pair completes when neither partner has another set to do.
-        if (firstDone && secondDone) {
-          const pairLastIdx = Math.max(origIdx, firstIdx);
-          if (pairLastIdx + 1 < exercises.length) {
-            currentIndex = pairLastIdx + 1;
-            currentSet = 0;
-          } else {
-            // No exercises after the pair — stay on the last partner's last set.
-            // The user finalizes by pressing the "Finalizar" button; pressing Next again
-            // must NOT loop back into the pair.
-            currentIndex = origIdx;
-            currentSet = exercises[origIdx].setDetails.length - 1;
-          }
-        } else if (firstDone) {
-          // First partner has no sets left — keep doing sets of the second partner.
-          currentIndex = origIdx;
-          currentSet = nextSet;
-        } else {
-          // Normal alternation: jump back to the first partner at the incremented set.
-          currentIndex = firstIdx;
-          currentSet = nextSet;
-        }
+        const partnerSets = exercises[partnerIdx].setDetails.length;
+        if (set < partnerSets) return { idx: partnerIdx, set };
+        // The second partner has no set at this index (fewer sets): keep going with the
+        // first partner's remaining sets, then leave the pair. (Clamping to the partner's
+        // last set here used to loop forever: A3 → B2 → A3 → B2 …)
+        if (set + 1 < ex.setDetails.length) return { idx, set: set + 1 };
+        const pairLastIdx = Math.max(idx, partnerIdx);
+        if (pairLastIdx + 1 < exercises.length) return { idx: pairLastIdx + 1, set: 0 };
+        return { idx, set };
       }
-      saveProgress();
-      renderExercise();
-      return;
+      // After the SECOND partner's set, go back to the FIRST partner at the NEXT set.
+      // If both partners have finished all their sets, exit the pair and move past it.
+      const nextSet = set + 1;
+      const firstDone = nextSet >= exercises[partnerIdx].setDetails.length;
+      const secondDone = nextSet >= ex.setDetails.length;
+      if (firstDone && secondDone) {
+        const pairLastIdx = Math.max(idx, partnerIdx);
+        if (pairLastIdx + 1 < exercises.length) return { idx: pairLastIdx + 1, set: 0 };
+        // No exercises after the pair — stay on the last partner's last set. The user
+        // finalizes with "Finalizar"; Next again must NOT loop back into the pair.
+        return { idx, set: ex.setDetails.length - 1 };
+      }
+      // First partner has no sets left — keep doing sets of the second partner.
+      if (firstDone) return { idx, set: nextSet };
+      // Normal alternation: jump back to the first partner at the incremented set.
+      return { idx: partnerIdx, set: nextSet };
     }
   }
 
-  if (currentSet < ex2.setDetails.length - 1) { currentSet++; }
-  else if (currentIndex < exercises.length - 1) { currentIndex++; currentSet = 0; }
+  if (set < ex.setDetails.length - 1) return { idx, set: set + 1 };
+  if (idx < exercises.length - 1) return { idx: idx + 1, set: 0 };
+  return { idx, set };
+}
+
+/** Pure navigation rule behind Prev (inverse walk, superset-aware). */
+function prevPosition(idx, set) {
+  const ex = exercises[idx];
+  if (!ex) return { idx, set };
+  const ssGrp = ex.supersetGroup || 0;
+
+  if (ssGrp > 0) {
+    const partnerIdx = exercises.findIndex((e, i) => i !== idx && (e.supersetGroup || 0) === ssGrp);
+    if (partnerIdx >= 0) {
+      if (idx < partnerIdx) {
+        // On first exercise: go to partner at previous set (reverse of: partner→first + set++),
+        // or to our own previous set when the partner had fewer sets.
+        if (set > 0) return set - 1 < exercises[partnerIdx].setDetails.length
+          ? { idx: partnerIdx, set: set - 1 }
+          : { idx, set: set - 1 };
+        // Set 0 of first exercise — go to the exercise before the superset pair
+        const minIdx = Math.min(idx, partnerIdx);
+        if (minIdx > 0) return { idx: minIdx - 1, set: exercises[minIdx - 1].setDetails.length - 1 };
+        return { idx, set };
+      }
+      // On second exercise: go back to first exercise, same set
+      return { idx: partnerIdx, set };
+    }
+  }
+
+  if (set > 0) return { idx, set: set - 1 };
+  if (idx > 0) return { idx: idx - 1, set: exercises[idx - 1].setDetails.length - 1 };
+  return { idx, set };
+}
+
+// ── Apple Watch remote control ──
+// The watch runs iOS Shortcuts that hit /watch/cmd/{action}. This page publishes the
+// exact list of steps its Next button walks (so the server just moves a cursor) and
+// polls for moves made from the watch. Only active once the user connected a watch in
+// Account; otherwise no extra traffic at all. Commands sent while the phone is locked
+// wait on the server and are applied as soon as the page is visible again.
+const WATCH_POLL_MS = 2500;
+let watchEnabled = false;
+let watchPollInterval = null;
+let watchPublishTimer = null;
+let watchRevision = 0;
+let watchBusy = false;
+
+function watchSessionKey() {
+  return `${dayNum}:${startedAt ? startedAt.toISOString() : ''}`;
+}
+
+/** Natural Next order from the first set; falls back to a local walk if the user jumped off-path. */
+function buildWatchSteps() {
+  const walk = (start, step) => {
+    const out = [];
+    const seen = new Set();
+    let pos = start;
+    while (exercises[pos.idx] && !seen.has(`${pos.idx}:${pos.set}`) && out.length < 400) {
+      seen.add(`${pos.idx}:${pos.set}`);
+      out.push(pos);
+      const nxt = step(pos.idx, pos.set);
+      if (nxt.idx === pos.idx && nxt.set === pos.set) break;
+      pos = nxt;
+    }
+    return out;
+  };
+  let path = walk({ idx: 0, set: 0 }, nextPosition);
+  let cursor = path.findIndex(p => p.idx === currentIndex && p.set === currentSet);
+  if (cursor < 0) {
+    const back = walk({ idx: currentIndex, set: currentSet }, prevPosition).reverse();
+    const fwd = walk({ idx: currentIndex, set: currentSet }, nextPosition);
+    path = back.concat(fwd.slice(1));
+    cursor = back.length - 1;
+  }
+  const steps = path.map(p => {
+    const ex = exercises[p.idx];
+    const sd = ex.setDetails[p.set] || {};
+    return {
+      ex: p.idx,
+      set: p.set,
+      name: exTranslate(ex.exerciseName || ex.ExerciseName || ex.name || ex.Name || ''),
+      setNo: p.set + 1,
+      totalSets: ex.setDetails.length,
+      reps: Number(sd.reps) || 0,
+      weight: Number(sd.weight) || 0,
+      lastOfExercise: p.set >= ex.setDetails.length - 1,
+    };
+  });
+  return { steps, cursor: Math.max(0, cursor) };
+}
+
+function scheduleWatchPublish() {
+  if (!watchEnabled) return;
+  if (watchPublishTimer) clearTimeout(watchPublishTimer);
+  watchPublishTimer = setTimeout(() => { watchPublishTimer = null; watchPublish(); }, 400);
+}
+
+async function watchPublish(isRetry = false) {
+  if (!watchEnabled || watchBusy || !exercises.length) return;
+  watchBusy = true;
+  let retry = false;
+  try {
+    const { steps, cursor } = buildWatchSteps();
+    if (!steps.length) return;
+    const res = await api.put('/watch/session', {
+      sessionKey: watchSessionKey(), dayNum, cursor, steps,
+      restSeconds: getPickerTotalSeconds(), baseRevision: watchRevision,
+    });
+    if (res?.view) {
+      if (res.accepted) watchRevision = res.view.revision;
+      else { applyWatchView(res.view); retry = !isRetry; }
+    }
+  } catch { /* offline — the next autosave tick republishes */ }
+  finally { watchBusy = false; }
+  if (retry) watchPublish(true);
+}
+
+async function watchPoll() {
+  if (!watchEnabled || watchBusy || document.hidden || !exercises.length) return;
+  try {
+    const res = await api.get('/watch/session');
+    const v = res?.view;
+    // No session server-side (restart / expiry) or one from an older workout → republish ours.
+    if (!v || v.sessionKey !== watchSessionKey()) { scheduleWatchPublish(); return; }
+    if (v.pending && v.revision > watchRevision) applyWatchView(v);
+  } catch { /* offline */ }
+}
+
+/** Applies moves/weight changes made from the watch, then republishes (via saveProgress). */
+function applyWatchView(v) {
+  if (document.activeElement && typeof document.activeElement.blur === 'function') {
+    document.activeElement.blur();
+  }
+  saveCurrentSetValues(); // keep whatever was typed on the phone before moving
+  for (const e of (v.weightEdits || [])) {
+    const sd = exercises[e.ex]?.setDetails?.[e.set];
+    if (sd) sd.weight = Number(e.weight) || 0;
+  }
+  const moved = v.ex !== currentIndex || v.set !== currentSet;
+  if (exercises[v.ex]?.setDetails?.[v.set]) { currentIndex = v.ex; currentSet = v.set; }
+  watchRevision = v.revision;
+  stopTimer();
   saveProgress();
   renderExercise();
+  if (moved) {
+    window.scrollTo(0, 0);
+    if (v.restRemaining > 0) showRestOverlay(v.restRemaining); else closeRestOverlay();
+  }
+  haptic('success');
+  showWatchToast(v.finished ? t('WatchFinishedHint') : t('WatchMovedToast'));
+}
+
+function showWatchToast(msg) {
+  document.getElementById('watch-toast')?.remove();
+  const el = document.createElement('div');
+  el.id = 'watch-toast';
+  el.textContent = msg;
+  el.style.cssText = 'position:fixed;left:16px;right:16px;top:calc(env(safe-area-inset-top, 0px) + 12px);z-index:10002;'
+    + 'background:#1f1d2b;color:#fff;border:1px solid rgba(139,114,255,0.6);border-radius:12px;padding:10px 14px;'
+    + 'font-size:14px;font-weight:600;text-align:center;box-shadow:0 6px 20px rgba(0,0,0,0.3);';
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+
+async function initWatchSync() {
+  stopWatchSync();
+  try {
+    const status = await api.get('/me/watch');
+    watchEnabled = !!status?.enabled;
+  } catch { watchEnabled = false; }
+  if (!watchEnabled) return;
+  // Pick up the server's revision first so commands sent before the page opened
+  // (e.g. the user tapped the watch while the app was loading) are applied, not lost.
+  await watchPoll();
+  await watchPublish();
+  watchPollInterval = setInterval(watchPoll, WATCH_POLL_MS);
+}
+
+function stopWatchSync() {
+  if (watchPollInterval) { clearInterval(watchPollInterval); watchPollInterval = null; }
+  if (watchPublishTimer) { clearTimeout(watchPublishTimer); watchPublishTimer = null; }
+  watchEnabled = false;
 }
 
 /** Switches to the partner exercise of the current superset, keeping the same set index. */
@@ -1057,6 +1218,8 @@ function autosaveTick() {
  */
 function onVisibilityChange() {
   if (document.hidden) return;
+  // Catch up at once with whatever was done on the Apple Watch while we were locked.
+  watchPoll();
   // Coming back to the app is a user action: re-arm the privacy-guard timestamp too.
   lastInteractionAt = Date.now();
   acquireWakeLock(); // the OS dropped the lock while backgrounded — grab it again
@@ -1845,6 +2008,8 @@ async function finishWorkout() {
   }
 
   clearProgress();
+  // The workout is saved: tell the watch there's nothing open any more.
+  if (watchEnabled) { stopWatchSync(); api.del('/watch/session').catch(() => { /* best-effort */ }); }
 
   // Celebration: vibration + confetti, plus extra punch on PR
   haptic(prs.length > 0 ? 'pr' : 'finish');

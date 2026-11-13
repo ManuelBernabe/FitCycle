@@ -3,7 +3,7 @@
 import { t, availableLanguages, languageDisplayName, currentLanguage, setLanguage } from '../l10n.js';
 import { api } from '../api.js';
 import { auth } from '../auth.js';
-import { showAlert, showConfirm, getTheme, setTheme } from '../utils.js';
+import { showAlert, showConfirm, getTheme, setTheme, escapeHtml } from '../utils.js';
 
 let allUsers = [];
 
@@ -97,6 +97,16 @@ export function render() {
         <div class="account-section" id="account-2fa">
           <div class="account-section-title">${t('TwoFactorAuth')}</div>
           <div id="twofa-status" class="card" style="text-align:center;padding:16px;">
+            <div class="spinner" style="margin:0 auto;"></div>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- Apple Watch (Shortcuts remote control) -->
+        <div class="account-section" id="account-watch">
+          <div class="account-section-title">⌚ ${t('WatchTitle')}</div>
+          <div id="watch-status" class="card" style="padding:16px;">
             <div class="spinner" style="margin:0 auto;"></div>
           </div>
         </div>
@@ -246,6 +256,9 @@ export async function mount() {
   // Load 2FA status
   load2FAStatus();
 
+  // Load Apple Watch connection status
+  loadWatchStatus();
+
   // Load users if SuperUserMaster
   if (auth.isSuperUserMaster()) {
     await loadUsers();
@@ -253,6 +266,122 @@ export async function mount() {
 }
 
 export function destroy() {}
+
+// ── Apple Watch ──
+// The watch drives the workout through iOS Shortcuts calling /watch/cmd/{action}?k=TOKEN.
+// The token is shown only once (server stores its hash) — regenerating revokes the old one.
+
+async function loadWatchStatus() {
+  const container = document.getElementById('watch-status');
+  if (!container) return;
+  let status = null;
+  try { status = await api.get('/me/watch'); } catch { /* offline */ }
+  const intro = `<p style="font-size:13px;color:var(--text-light);line-height:1.5;margin:0 0 12px;">${t('WatchIntro')}</p>`;
+  if (status?.enabled) {
+    const last = status.lastUsedAt
+      ? t('WatchLastUsed', new Date(status.lastUsedAt).toLocaleString(currentLanguage()))
+      : t('WatchNeverUsed');
+    container.innerHTML = `
+      ${intro}
+      <div style="color:var(--success);font-weight:bold;">${t('WatchConnected')}</div>
+      <div style="font-size:12px;color:var(--text-muted);margin:2px 0 12px;">${escapeHtml(last)}</div>
+      <div style="display:flex;gap:8px;">
+        <button id="watch-regen-btn" class="btn btn-outline" style="flex:1;min-width:0;">${t('WatchRegenerate')}</button>
+        <button id="watch-off-btn" class="btn btn-outline" style="flex:1;min-width:0;color:var(--danger);border-color:var(--danger);">${t('WatchDisconnect')}</button>
+      </div>
+    `;
+    container.querySelector('#watch-regen-btn')?.addEventListener('click', async () => {
+      if (!(await showConfirm(t('WatchRegenerateConfirm')))) return;
+      createWatchToken();
+    });
+    container.querySelector('#watch-off-btn')?.addEventListener('click', async () => {
+      if (!(await showConfirm(t('WatchDisconnectConfirm')))) return;
+      try { await api.del('/me/watch/token'); } catch (err) { await showAlert(t('ErrorFmt', err.message)); }
+      loadWatchStatus();
+    });
+  } else {
+    container.innerHTML = `
+      ${intro}
+      <button id="watch-connect-btn" class="btn btn-primary btn-block">⌚ ${t('WatchConnect')}</button>
+    `;
+    container.querySelector('#watch-connect-btn')?.addEventListener('click', createWatchToken);
+  }
+}
+
+async function createWatchToken() {
+  try {
+    const res = await api.post('/me/watch/token');
+    if (res?.token) showWatchLinksModal(res.token);
+  } catch (err) {
+    await showAlert(t('ErrorFmt', err.message));
+  }
+  loadWatchStatus();
+}
+
+function showWatchLinksModal(token) {
+  const lang = currentLanguage();
+  const base = `${location.origin}/watch/cmd`;
+  const actions = [
+    { key: 'next', label: t('WatchActNext') },
+    { key: 'skip', label: t('WatchActSkip') },
+    { key: 'prev', label: t('WatchActPrev') },
+    { key: 'plus', label: t('WatchActPlus') },
+    { key: 'minus', label: t('WatchActMinus') },
+    { key: 'status', label: t('WatchActStatus') },
+  ].map(a => ({ ...a, url: `${base}/${a.key}?k=${encodeURIComponent(token)}&lang=${encodeURIComponent(lang)}` }));
+
+  const rows = actions.map((a, i) => `
+    <div style="margin-bottom:10px;">
+      <div style="font-size:13px;font-weight:600;margin-bottom:4px;">${escapeHtml(a.label)}</div>
+      <div style="display:flex;gap:6px;align-items:stretch;">
+        <input class="form-input" readonly value="${escapeHtml(a.url)}" data-watch-url="${i}"
+          style="flex:1;min-width:0;font-family:monospace;font-size:11px;padding:6px 8px;">
+        <button class="btn btn-outline btn-sm" data-watch-copy="${i}" style="flex:0 0 auto;font-size:12px;padding:6px 10px;">${t('WatchCopy')}</button>
+      </div>
+    </div>`).join('');
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay modal-centered';
+  overlay.innerHTML = `
+    <div class="modal-content" style="max-width:420px;max-height:85vh;overflow-y:auto;">
+      <div class="modal-header">
+        <div class="modal-title">⌚ ${t('WatchLinksTitle')}</div>
+        <button class="modal-close" id="modal-close">&times;</button>
+      </div>
+      <p style="font-size:13px;color:var(--danger);line-height:1.5;margin:0 0 12px;font-weight:500;">${t('WatchLinksOnce')}</p>
+      ${rows}
+      <div class="divider" style="margin:14px 0;"></div>
+      <div style="font-size:14px;font-weight:700;margin-bottom:6px;">${t('WatchHowTo')}</div>
+      <ol style="font-size:13px;line-height:1.5;padding-left:20px;margin:0 0 10px;color:var(--text);">
+        <li>${t('WatchStep1')}</li>
+        <li>${t('WatchStep2')}</li>
+        <li>${t('WatchStep3')}</li>
+        <li>${t('WatchStep4')}</li>
+      </ol>
+      <p style="font-size:12px;color:var(--text-light);line-height:1.5;margin:0 0 12px;">${t('WatchStepNote')}</p>
+      <button id="watch-links-done" class="btn btn-primary btn-block">${t('OK')}</button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  bindModalClose(overlay);
+  overlay.querySelector('#watch-links-done')?.addEventListener('click', () => overlay.remove());
+
+  overlay.querySelectorAll('[data-watch-copy]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const i = Number(btn.dataset.watchCopy);
+      const input = overlay.querySelector(`[data-watch-url="${i}"]`);
+      try {
+        await navigator.clipboard.writeText(actions[i].url);
+      } catch {
+        // Older iOS / no clipboard permission: select so the user can copy by hand.
+        input?.focus(); input?.select(); input?.setSelectionRange?.(0, 99999);
+        try { document.execCommand('copy'); } catch { /* manual copy */ }
+      }
+      btn.textContent = t('WatchCopied');
+      setTimeout(() => { btn.textContent = t('WatchCopy'); }, 1500);
+    });
+  });
+}
 
 // ── 2FA ──
 
