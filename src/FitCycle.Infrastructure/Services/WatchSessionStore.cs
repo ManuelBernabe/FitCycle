@@ -11,7 +11,8 @@ public record WatchStep(int Ex, int Set, string Name, int SetNo, int TotalSets, 
 /// sequence the phone's Next button would visit (supersets already resolved), so the
 /// server never has to re-implement the navigation rules — a watch "next" is cursor+1.
 /// </summary>
-public record WatchSessionPublish(string SessionKey, int DayNum, int Cursor, List<WatchStep> Steps, int RestSeconds, long BaseRevision);
+public record WatchSessionPublish(string SessionKey, int DayNum, int Cursor, List<WatchStep> Steps, int RestSeconds, long BaseRevision,
+    int RestRemaining = 0);
 
 public record WatchWeightEdit(int Ex, int Set, decimal Weight);
 
@@ -75,7 +76,9 @@ public class WatchSessionStore
 
             var cursor = steps.Count == 0 ? 0 : Math.Clamp(p.Cursor, 0, steps.Count - 1);
             state.Finished = sameSession && state.Finished && cursor == steps.Count - 1;
-            if (!sameSession) state.RestUntil = null;
+            // The phone owns the rest countdown once it has applied everything: what it
+            // reports is what the watch timer should pick up ("status" → remaining rest).
+            state.RestUntil = p.RestRemaining > 0 ? now.AddSeconds(Math.Min(p.RestRemaining, 3600)) : null;
             state.SessionKey = p.SessionKey ?? string.Empty;
             state.DayNum = p.DayNum;
             state.Steps = steps;
@@ -143,6 +146,14 @@ public class WatchSessionStore
                     rest = act == "next" && !done.LastOfExercise ? state.RestSeconds : 0;
                     state.RestUntil = rest > 0 ? now.AddSeconds(rest) : null;
                     prefix = rest > 0 ? string.Format(L.Rest, FormatSeconds(rest)) : L.Done;
+                    changed = true;
+                    break;
+
+                case "rest":
+                    // Manual rest without advancing (like Start on the phone).
+                    rest = state.RestSeconds;
+                    state.RestUntil = rest > 0 ? now.AddSeconds(rest) : null;
+                    if (rest > 0) prefix = string.Format(L.Rest, FormatSeconds(rest));
                     changed = true;
                     break;
 

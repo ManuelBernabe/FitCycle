@@ -127,6 +127,39 @@ public class WatchControlE2ETests : IClassFixture<FitCycleApiFactory>
             Assert.True(doc.RootElement.GetProperty("hasSession").GetBoolean());
         }
 
+        // Manual rest from the watch (no advance) → JSON carries the seconds for the watch timer
+        json = await watch.GetStringAsync($"/watch/cmd/rest?k={token}&format=json");
+        using (var doc = JsonDocument.Parse(json))
+        {
+            Assert.Equal(90, doc.RootElement.GetProperty("rest").GetInt32());
+            Assert.Equal("Remo", doc.RootElement.GetProperty("exercise").GetString());
+        }
+        view = await GetView(phone);
+        Assert.True(view.GetProperty("restRemaining").GetInt32() > 80);
+
+        // Rest started on the PHONE is reported by its publish → "status" hands the
+        // remaining seconds to the watch timer
+        revision = view.GetProperty("revision").GetInt64();
+        var withRest = await phone.PutAsJsonAsync("/watch/session", new
+        {
+            sessionKey = "s1", dayNum = 1, cursor = 2, restSeconds = 90, baseRevision = revision, restRemaining = 45,
+            steps = new object[]
+            {
+                new { ex = 0, set = 0, name = "Press banca", setNo = 1, totalSets = 2, reps = 10, weight = 62.5m, lastOfExercise = false },
+                new { ex = 0, set = 1, name = "Press banca", setNo = 2, totalSets = 2, reps = 8, weight = 60m, lastOfExercise = true },
+                new { ex = 1, set = 0, name = "Remo", setNo = 1, totalSets = 1, reps = 12, weight = 40m, lastOfExercise = true },
+            },
+        });
+        using (var doc = JsonDocument.Parse(await withRest.Content.ReadAsStringAsync()))
+            Assert.True(doc.RootElement.GetProperty("accepted").GetBoolean());
+        json = await watch.GetStringAsync($"/watch/cmd/status?k={token}&format=json");
+        using (var doc = JsonDocument.Parse(json))
+        {
+            var rest = doc.RootElement.GetProperty("rest").GetInt32();
+            Assert.InRange(rest, 40, 45);
+            Assert.Contains("Descansa 0:4", doc.RootElement.GetProperty("text").GetString());
+        }
+
         // Finishing on the phone ends the session
         await phone.DeleteAsync("/watch/session");
         text = await watch.GetStringAsync($"/watch/cmd/status?k={token}");

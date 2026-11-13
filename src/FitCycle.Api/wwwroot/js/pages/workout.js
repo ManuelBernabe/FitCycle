@@ -1033,6 +1033,7 @@ async function watchPublish(isRetry = false) {
     const res = await api.put('/watch/session', {
       sessionKey: watchSessionKey(), dayNum, cursor, steps,
       restSeconds: getPickerTotalSeconds(), baseRevision: watchRevision,
+      restRemaining: restOverlayEndsAt > Date.now() ? Math.ceil((restOverlayEndsAt - Date.now()) / 1000) : 0,
     });
     if (res?.view) {
       if (res.accepted) watchRevision = res.view.revision;
@@ -1070,9 +1071,13 @@ function applyWatchView(v) {
   stopTimer();
   saveProgress();
   renderExercise();
-  if (moved) {
-    window.scrollTo(0, 0);
-    if (v.restRemaining > 0) showRestOverlay(v.restRemaining); else closeRestOverlay();
+  if (moved) window.scrollTo(0, 0);
+  // Rest started from the watch ("Set done" or "Rest") → same countdown on the phone.
+  // A rest already running here is left alone (a weight tweak mustn't restart it).
+  if (v.restRemaining > 0) {
+    if (moved || !document.getElementById('rest-overlay')) showRestOverlay(v.restRemaining);
+  } else if (moved) {
+    closeRestOverlay();
   }
   haptic('success');
   showWatchToast(v.finished ? t('WatchFinishedHint') : t('WatchMovedToast'));
@@ -1348,9 +1353,13 @@ function playRestEndSound() {
 // Full-screen circular countdown shown after each completed set. It cannot be dismissed:
 // the next set only unlocks when the ring reaches 0 (then it beeps + vibrates and closes).
 let restOverlayInterval = null;
+// Wall-clock end of the visible rest (0 = none). Published to the watch so its
+// "What's next?" shortcut can start a native watch timer for the remaining rest.
+let restOverlayEndsAt = 0;
 
 function closeRestOverlay() {
   if (restOverlayInterval) { clearInterval(restOverlayInterval); restOverlayInterval = null; }
+  if (restOverlayEndsAt) { restOverlayEndsAt = 0; scheduleWatchPublish(); }
   document.getElementById('rest-overlay')?.remove();
   // The set starts now — give the user the full idle window before the privacy guard
   // may release the wake lock (long sets shouldn't end with a dimmed screen).
@@ -1571,6 +1580,8 @@ function showRestOverlay(totalSeconds) {
   startRestKeepalive();
 
   const endsAt = Date.now() + totalSeconds * 1000;
+  restOverlayEndsAt = endsAt;
+  scheduleWatchPublish();
   const numEl = overlay.querySelector('#rest-count');
   const ringEl = overlay.querySelector('#rest-ring');
   let lastShown = totalSeconds;

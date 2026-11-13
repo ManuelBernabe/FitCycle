@@ -321,16 +321,19 @@ async function createWatchToken() {
 function showWatchLinksModal(token) {
   const lang = currentLanguage();
   const base = `${location.origin}/watch/cmd`;
+  // Timer actions answer JSON so the shortcut can read "rest" and start the watch's own
+  // timer; quick actions answer plain text (just "Show Result").
   const actions = [
-    { key: 'next', label: t('WatchActNext') },
+    { key: 'next', label: t('WatchActNext'), timer: true },
+    { key: 'rest', label: t('WatchActRest'), timer: true },
+    { key: 'status', label: t('WatchActStatus'), timer: true },
     { key: 'skip', label: t('WatchActSkip') },
     { key: 'prev', label: t('WatchActPrev') },
     { key: 'plus', label: t('WatchActPlus') },
     { key: 'minus', label: t('WatchActMinus') },
-    { key: 'status', label: t('WatchActStatus') },
-  ].map(a => ({ ...a, url: `${base}/${a.key}?k=${encodeURIComponent(token)}&lang=${encodeURIComponent(lang)}` }));
+  ].map(a => ({ ...a, url: `${base}/${a.key}?k=${encodeURIComponent(token)}&lang=${encodeURIComponent(lang)}${a.timer ? '&format=json' : ''}` }));
 
-  const rows = actions.map((a, i) => `
+  const row = (a, i) => `
     <div style="margin-bottom:10px;">
       <div style="font-size:13px;font-weight:600;margin-bottom:4px;">${escapeHtml(a.label)}</div>
       <div style="display:flex;gap:6px;align-items:stretch;">
@@ -338,7 +341,15 @@ function showWatchLinksModal(token) {
           style="flex:1;min-width:0;font-family:monospace;font-size:11px;padding:6px 8px;">
         <button class="btn btn-outline btn-sm" data-watch-copy="${i}" style="flex:0 0 auto;font-size:12px;padding:6px 10px;">${t('WatchCopy')}</button>
       </div>
-    </div>`).join('');
+    </div>`;
+  const timerRows = actions.map((a, i) => a.timer ? row(a, i) : '').join('');
+  const quickRows = actions.map((a, i) => a.timer ? '' : row(a, i)).join('');
+  const groupTitle = txt => `<div style="font-size:14px;font-weight:700;margin:4px 0 8px;">${txt}</div>`;
+  const howTo = steps => `
+      <div style="font-size:13px;font-weight:600;margin:4px 0 4px;">${t('WatchHowTo')}</div>
+      <ol style="font-size:13px;line-height:1.5;padding-left:20px;margin:0 0 10px;color:var(--text);">
+        ${steps.map(s => `<li>${s}</li>`).join('')}
+      </ol>`;
 
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay modal-centered';
@@ -349,15 +360,16 @@ function showWatchLinksModal(token) {
         <button class="modal-close" id="modal-close">&times;</button>
       </div>
       <p style="font-size:13px;color:var(--danger);line-height:1.5;margin:0 0 12px;font-weight:500;">${t('WatchLinksOnce')}</p>
-      ${rows}
+      ${groupTitle(t('WatchTimerGroup'))}
+      <p style="font-size:12px;color:var(--text-light);line-height:1.5;margin:0 0 10px;">${t('WatchTimerIntro')}</p>
+      ${timerRows}
+      ${howTo([t('WatchStep1'), t('WatchTimerStep2'), t('WatchTimerStep3'), t('WatchTimerStep4'), t('WatchStep3')])}
       <div class="divider" style="margin:14px 0;"></div>
-      <div style="font-size:14px;font-weight:700;margin-bottom:6px;">${t('WatchHowTo')}</div>
-      <ol style="font-size:13px;line-height:1.5;padding-left:20px;margin:0 0 10px;color:var(--text);">
-        <li>${t('WatchStep1')}</li>
-        <li>${t('WatchStep2')}</li>
-        <li>${t('WatchStep3')}</li>
-        <li>${t('WatchStep4')}</li>
-      </ol>
+      ${groupTitle(t('WatchQuickGroup'))}
+      ${quickRows}
+      ${howTo([t('WatchStep1'), t('WatchStep2'), t('WatchStep3')])}
+      <div class="divider" style="margin:14px 0;"></div>
+      <p style="font-size:12px;color:var(--text-light);line-height:1.5;margin:0 0 8px;">${t('WatchStep4')}</p>
       <p style="font-size:12px;color:var(--text-light);line-height:1.5;margin:0 0 12px;">${t('WatchStepNote')}</p>
       <button id="watch-links-done" class="btn btn-primary btn-block">${t('OK')}</button>
     </div>
